@@ -1019,7 +1019,12 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
                 .append('\n');
         builder.append("系统定位开关：")
                 .append(WifiConnector.getInstance(requireContext()).isLocationEnabled()
-                        ? "已开启" : "未开启");
+                        ? "已开启" : "未开启")
+                .append('\n')
+                .append("网络状态权限：")
+                .append(ContextCompat.checkSelfPermission(requireContext(),
+                        Manifest.permission.CHANGE_NETWORK_STATE)
+                        == PackageManager.PERMISSION_GRANTED ? "已授权" : "未授权");
         return builder.toString();
     }
 

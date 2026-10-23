@@ -193,6 +193,9 @@ public class WifiConnector {
                 || !hasPermission(Manifest.permission.ACCESS_WIFI_STATE)) {
             return "缺少 WiFi 状态权限，请重新安装或在设置中检查应用权限";
         }
+        if (!hasPermission(Manifest.permission.CHANGE_NETWORK_STATE)) {
+            return "缺少 CHANGE_NETWORK_STATE 权限，请安装最新版本 APK";
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && !hasPermission(Manifest.permission.NEARBY_WIFI_DEVICES)) {
             return "缺少“附近设备”权限，请在设置中允许访问附近 WiFi";
