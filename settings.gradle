@@ -1,0 +1,32 @@
+/**
+ * Gradle 设置文件
+ * 
+ * 纯 Java 项目配置
+ * 
+ * 项目结构:
+ * - app: 主应用模块 (纯 Java 实现)
+ */
+pluginManagement {
+    // 插件仓库配置
+    repositories {
+        google()           // Google Maven 仓库 (Android 工具)
+        mavenCentral()     // Maven Central 仓库
+        gradlePluginPortal() // Gradle 插件门户
+    }
+}
+
+dependencyResolutionManagement {
+    // 禁止模块级别定义仓库，统一在此管理
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()           // Google Maven 仓库 (AndroidX, Material 等)
+        mavenCentral()     // Maven Central 仓库
+        maven { url 'https://jitpack.io' }  // JitPack 仓库 (GitHub 项目依赖)
+    }
+}
+
+// 项目名称
+rootProject.name = "网络工具箱"
+
+// 仅包含 app 模块 (纯 Java 实现)
+include ':app'

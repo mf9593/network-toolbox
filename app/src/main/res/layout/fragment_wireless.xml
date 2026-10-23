@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiFi：当前连接、扫描、频段/标准下拉筛选与网络列表 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/currentWifiCard"
+        style="@style/Widget.NetworkTool.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/page_margin"
+        android:layout_marginTop="@dimen/space_3"
+        android:layout_marginEnd="@dimen/page_margin"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="@dimen/card_padding">
+
+            <ImageView
+                android:id="@+id/currentSignalIcon"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:contentDescription="当前 WiFi 信号"
+                android:src="@drawable/ic_signal_wifi_outline_0" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_3"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/currentSsid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="未连接 WiFi"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+                <TextView
+                    android:id="@+id/currentIp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="点击前往系统设置连接网络"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+                <TextView
+                    android:id="@+id/currentMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="--"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/scanEntryButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="扫一扫"
+                android:minWidth="48dp"
+                android:padding="12dp"
+                app:icon="@drawable/ic_scan_qr"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/openWifiSettingsButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:paddingStart="@dimen/space_2"
+                android:paddingEnd="@dimen/space_2"
+                android:text="设置" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_3"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/page_margin"
+        android:paddingEnd="@dimen/space_1">
+
+        <TextView
+            android:id="@+id/wifiSummary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="正在扫描…"
+            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/frequencyFilterButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:contentDescription="筛选频段"
+            android:minWidth="0dp"
+            android:paddingStart="@dimen/space_2"
+            android:paddingEnd="@dimen/space_2"
+            android:text="频段"
+            android:textSize="12sp"
+            app:icon="@drawable/ic_filter"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/standardFilterButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:contentDescription="筛选标准"
+            android:minWidth="0dp"
+            android:paddingStart="@dimen/space_2"
+            android:paddingEnd="@dimen/space_2"
+            android:text="标准"
+            android:textSize="12sp"
+            app:icon="@drawable/ic_tune"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/scanButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="0dp"
+            android:paddingStart="@dimen/space_2"
+            android:paddingEnd="@dimen/space_2"
+            android:text="扫描"
+            app:icon="@drawable/ic_refresh"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp" />
+
+    </LinearLayout>
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/scanProgress"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginStart="@dimen/page_margin"
+        android:layout_marginEnd="@dimen/page_margin"
+        android:indeterminate="true"
+        android:visibility="gone"
+        app:indicatorColor="?attr/colorPrimary"
+        app:trackColor="?attr/colorSurfaceVariant" />
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/refreshLayout"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/space_2"
+                android:paddingTop="@dimen/space_1"
+                android:paddingEnd="@dimen/space_2"
+                android:paddingBottom="@dimen/space_4" />
+
+            <LinearLayout
+                android:id="@+id/emptyView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="@dimen/space_6"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/emptyIcon"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="未发现 WiFi"
+                    android:src="@drawable/ic_empty"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/emptyText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_3"
+                    android:gravity="center"
+                    android:text="未发现 WiFi 网络"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+                <TextView
+                    android:id="@+id/emptyHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_1"
+                    android:gravity="center"
+                    android:text="请确认 WiFi 已开启并授予附近设备权限"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/emptyAction"
+                    style="@style/Widget.NetworkTool.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_2"
+                    android:text="重新扫描" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+</LinearLayout>

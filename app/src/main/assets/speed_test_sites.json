@@ -1,0 +1,11 @@
+{
+  "sites": [
+    {"name": "广东电信测速", "url": "https://10000.gd.cn/html5-speedtest/"},
+    {"name": "南京航空航天大学", "url": "http://speed.nuaa.edu.cn/"},
+    {"name": "南京大学测速站", "url": "https://test.nju.edu.cn/"},
+    {"name": "快点网速测试", "url": "https://speedtest.quickso.cn/"},
+    {"name": "中国科学技术大学测速网站", "url": "https://test.ustc.edu.cn/"},
+    {"name": "一键测速网", "url": "http://speedtest.im/"},
+    {"name": "测速网", "url": "https://m.speedtest.cn/"}
+  ]
+}

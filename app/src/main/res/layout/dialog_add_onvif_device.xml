@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 手动添加Onvif设备对话框布局 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/ipEdit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="IP地址"
+        android:inputType="textNoSuggestions"
+        android:singleLine="true" />
+
+    <EditText
+        android:id="@+id/portEdit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="端口"
+        android:inputType="number"
+        android:singleLine="true" />
+
+    <EditText
+        android:id="@+id/nameEdit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="设备名称（可选）"
+        android:inputType="text"
+        android:singleLine="true" />
+
+</LinearLayout>

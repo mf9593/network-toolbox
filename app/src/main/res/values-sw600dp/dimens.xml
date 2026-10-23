@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 大屏/平板尺寸微调 -->
+<resources>
+    <dimen name="page_margin">24dp</dimen>
+    <dimen name="card_padding">20dp</dimen>
+    <dimen name="card_corner">20dp</dimen>
+    <dimen name="card_corner_small">16dp</dimen>
+    <dimen name="metric_height">80dp</dimen>
+</resources>

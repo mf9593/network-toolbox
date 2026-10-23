@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络工具箱颜色资源
+    默认使用经典绿主题 (#00DAC5)，页面强调色由 ThemeManager 动态应用。
+-->
+<resources>
+    <!-- 品牌色 -->
+    <color name="colorPrimary">#00DAC5</color>
+    <color name="colorPrimaryDark">#00B5A1</color>
+    <color name="colorAccent">#00DAC5</color>
+    <color name="colorOnPrimary">#00201C</color>
+    <color name="colorPrimaryContainer">#B8FFF7</color>
+    <color name="colorOnPrimaryContainer">#00201C</color>
+
+    <!-- 基础色 -->
+    <color name="colorBackground">#F6F8FA</color>
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorSurfaceContainer">#EEF2F5</color>
+    <color name="colorSurfaceContainerLow">#F8FAFC</color>
+    <color name="colorSurfaceContainerHigh">#E6EBF0</color>
+    <color name="colorOnSurface">#171A1C</color>
+    <color name="colorOnBackground">#171A1C</color>
+
+    <!-- 文字颜色 -->
+    <color name="textPrimary">#171A1C</color>
+    <color name="textSecondary">#5B6470</color>
+    <color name="textHint">#8A94A0</color>
+
+    <!-- 边框/分割线 -->
+    <color name="colorOutline">#8A94A0</color>
+    <color name="colorOutlineVariant">#D8DEE5</color>
+
+    <!-- ZXing 扫码器颜色 -->
+    <color name="zxing_custom_possible_result_points">#903190ED</color>
+    <color name="zxing_custom_result_view">#B0000000</color>
+    <color name="zxing_custom_viewfinder_mask">#60000000</color>
+
+    <!-- 日志查看器颜色 -->
+    <color name="log_viewer_background">#F5F7F9</color>
+    <color name="log_viewer_text">#212121</color>
+
+    <!-- 扫一扫相机界面 -->
+    <color name="scan_white">#FFFFFFFF</color>
+    <color name="scan_scrim">#B3000000</color>
+    <color name="scan_action_bg">#66000000</color>
+</resources>

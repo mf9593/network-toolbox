@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络工具箱 AndroidManifest.xml
+    
+    纯 Java 实现，入口 Activity 为 MainActivity。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 查看 WLAN 状态 -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Android 13+ 扫描/连接附近 WiFi；应用不根据 WiFi 信息推断位置 -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- 查看网络连接 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 完全的网络访问权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 修改或删除 SD 卡中的内容 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!-- 读取存储卡中的内容 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+    <!-- 应用内文件选择器需要浏览共享存储中的配置/备份文件（Android 11+） -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- 定位权限 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- 安装App -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 摄像头和手电筒 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
+
+    <!-- 振动权限 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- 通知权限（Android 13+ 必需） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name="com.networktool.app.NetworkToolApplication"
+        android:resizeableActivity="true"
+        android:supportsPictureInPicture="true"
+        android:icon="@drawable/icon"
+        android:label="@string/app_name"
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
+        android:theme="@style/Theme.NetworkTool">
+
+        <meta-data
+            android:name="android.max_aspect"
+            android:value="4"/>
+
+        <!-- 主入口 Activity -->
+        <activity
+            android:name="com.networktool.app.activity.MainActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustPan"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Tool Activities -->
+        <activity
+            android:name="com.networktool.app.activity.tool.PingActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.PortScanActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.DnsActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.IpScanActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.MacActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.WebViewActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:windowSoftInputMode="adjustPan" />
+
+        <!-- New Tool Activities -->
+        <activity
+            android:name="com.networktool.app.activity.tool.WifiImportActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.WifiFilePickerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.tool.WifiImportActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.WifiExportActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.WifiDatabaseActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.SavedNetworkActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.SpeedTestActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.HttpDebugActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.WebDebugActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.AppManagerActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.OnvifActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.OnvifConsoleActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.tool.OnvifActivity"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.OnvifVideoConfigActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.tool.OnvifConsoleActivity"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        
+        <activity
+            android:name="com.networktool.app.activity.tool.RtspPreviewActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.tool.OnvifActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.RtspPlayerActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.SadpActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- 局域网聊天 -->
+        <activity
+            android:name="com.networktool.app.activity.tool.LanChatActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.LanChatRoomActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.tool.LanChatActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name="com.networktool.app.activity.tool.TracerouteActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- 域名查询工具 -->
+        <activity
+            android:name="com.networktool.app.activity.tool.DomainWhoisActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- DNS反查工具 -->
+        <activity
+            android:name="com.networktool.app.activity.tool.DnsReverseActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- IP计算器工具 -->
+        <activity
+            android:name="com.networktool.app.activity.tool.IpCalculatorActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- 图标转换工具 -->
+        <activity
+            android:name="com.networktool.app.activity.tool.IconConverterActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- Settings Activities -->
+        <activity
+            android:name="com.networktool.app.activity.settings.HelpActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.ScanActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.ScanHistoryActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.ThemeActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.DeviceInfoActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.UpdateLogActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.PrivacyPolicyActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.UserAgreementActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.ClearBrowserCacheActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.AboutActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+
+        <activity
+            android:name="com.networktool.app.activity.settings.PermissionManagerActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <!-- FileProvider for file sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

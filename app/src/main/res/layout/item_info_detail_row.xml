@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 网络详情行 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/detailRow"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:paddingVertical="7dp">
+
+    <TextView
+        android:id="@+id/labelText"
+        android:layout_width="96dp"
+        android:layout_height="wrap_content"
+        android:text="标签"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+    <TextView
+        android:id="@+id/valueText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="--"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <ImageView
+        android:id="@+id/copyIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="@dimen/space_2"
+        android:contentDescription="复制"
+        android:padding="4dp"
+        android:src="@drawable/ic_copy"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+</LinearLayout>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 横屏尺寸微调 -->
+<resources>
+    <dimen name="web_home_top_padding">24dp</dimen>
+    <dimen name="page_margin">20dp</dimen>
+    <dimen name="card_padding">14dp</dimen>
+    <dimen name="bottom_nav_min_height">64dp</dimen>
+</resources>

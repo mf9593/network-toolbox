@@ -1,0 +1,27 @@
+/**
+ * 项目根目录构建配置
+ * 
+ * 网络工具箱 - 纯 Java Android 项目。
+ * 
+ * 构建命令:
+ * - gradle clean          清理构建产物
+ * - gradle assembleDebug  构建调试版本 APK
+ * 
+ * 技术栈:
+ * - Gradle 8.13
+ * - Android Gradle Plugin 8.7.3
+ * - JDK 21
+ */
+plugins {
+    // Android Gradle Plugin 8.7.3
+    // apply false 表示不应用到根项目，只声明版本供子模块使用
+    id 'com.android.application' version '8.7.3' apply false
+}
+
+/**
+ * 清理任务 - 删除构建目录
+ * 执行: gradle clean
+ */
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

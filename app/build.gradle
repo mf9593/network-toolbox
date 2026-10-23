@@ -1,0 +1,139 @@
+/**
+ * 网络工具箱主应用模块构建配置
+ * 
+ * 纯 Java 实现的 Android 网络工具应用。
+ * 
+ * 功能模块:
+ * - 信息: 网络信息查询
+ * - 设备: 设备信息管理
+ * - 无线: WiFi 相关工具
+ * - 工具: 网络调试工具集 (Ping, 端口扫描, DNS查询等)
+ * - 设置: 应用设置
+ * 
+ * 构建命令:
+ * - gradle clean          清理构建产物
+ * - gradle assembleDebug  构建调试版本 APK
+ */
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    // 命名空间，用于生成 R 类和 BuildConfig
+    namespace 'com.networktool.app'
+    
+    // 编译 SDK 版本 (Android 14)
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.networktool.app"
+        // 最低支持 Android 5.0 (API 21)
+        minSdk 21
+        // 目标 SDK 版本 (Android 14)
+        targetSdk 34
+        versionCode 210
+        versionName "2.1.0"
+
+        // GitHub 仓库配置：发布前在 gradle.properties 填写 owner，或直接修改这里
+        def githubOwner = project.findProperty('github.owner') ?: ''
+        def githubRepo = project.findProperty('github.repo') ?: 'network-toolbox'
+        buildConfigField "String", "GITHUB_OWNER", "\"${githubOwner}\""
+        buildConfigField "String", "GITHUB_REPO", "\"${githubRepo}\""
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
+        // 只打包arm64-v8a和armeabi-v7a架构的so库
+        // arm64-v8a: 2019年后的手机，性能更好
+        // armeabi-v7a: 兼容旧手机
+        // 排除armeabi（已被v7a覆盖）、x86/x86_64（仅模拟器使用）
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    // Java 编译选项 - 使用 JDK 21
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+        coreLibraryDesugaringEnabled true
+    }
+
+    // 启用 ViewBinding 用于类型安全的视图访问
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+
+    // Lint 配置
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // ==================== AndroidX 核心库 ====================
+    // Core library desugaring - 支持Java 8+ API
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+
+    // AppCompat - 兼容性支持库
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // Core - AndroidX 核心库
+    implementation 'androidx.core:core:1.12.0'
+    // ConstraintLayout - 约束布局
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    // RecyclerView - 列表视图
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    // ViewPager2 - 页面切换
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    // SwipeRefreshLayout - 下拉刷新
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    // CoordinatorLayout - 协调布局
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+
+    // ==================== Material Design ====================
+    // Material Design 组件库
+    implementation 'com.google.android.material:material:1.11.0'
+
+    // ==================== 网络库 ====================
+    // OkHttp HTTP 客户端 - 用于网络请求
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // ==================== 解析库 ====================
+    // Jsoup HTML 解析器 - 1.15.3 兼容 Android 7+
+    implementation 'org.jsoup:jsoup:1.15.3'
+    // AndroidSVG - SVG 解析与渲染
+    implementation 'com.caverock:androidsvg-aar:1.4'
+    // Gson JSON 解析器 - 用于 JSON 序列化/反序列化
+    implementation 'com.google.code.gson:gson:2.10.1'
+    // Jaxen XPath 引擎 - 用于 XPath 解析
+    implementation 'jaxen:jaxen:2.0.0'
+
+    // ==================== ONVIF 库 ====================
+    // ONVIF库暂不可用（JitPack上无构建版本），使用项目内置的OnvifUtil替代
+    // implementation 'de.fpompermaier:onvif:1.3.0'
+
+    // ==================== QR Code 扫描 ====================
+    // ZXing 二维码扫描库
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    implementation 'com.google.zxing:core:3.5.2'
+
+    // ==================== RTSP播放器 ====================
+    // NodePlayer - RTSP/RTMP视频播放器 (2.x版本)
+    implementation 'com.github.NodeMedia:NodeMediaClient-Android:2.9.20'
+
+    // ==================== 测试库 ====================
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 网络工具箱深色主题 -->
+<resources>
+    <style name="Theme.NetworkTool" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- 主色调 -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+
+        <!-- 背景与表面 -->
+        <item name="android:colorBackground">@color/colorBackground</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
+        <item name="colorOnBackground">@color/colorOnBackground</item>
+        <item name="colorSurfaceVariant">@color/colorSurfaceContainer</item>
+        <item name="colorOnSurfaceVariant">@color/textSecondary</item>
+
+        <!-- 边框/分割线 -->
+        <item name="colorOutline">@color/colorOutline</item>
+        <item name="colorOutlineVariant">@color/colorOutlineVariant</item>
+
+        <!-- 文字颜色 -->
+        <item name="android:textColorPrimary">@color/textPrimary</item>
+        <item name="android:textColorSecondary">@color/textSecondary</item>
+
+        <!-- 系统栏 -->
+        <item name="android:statusBarColor">@color/colorBackground</item>
+        <item name="android:navigationBarColor">@color/colorSurface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@color/colorBackground</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+
+        <!-- Action Bar 样式 -->
+        <item name="toolbarStyle">@style/Widget.NetworkTool.Toolbar</item>
+        <item name="materialButtonStyle">@style/Widget.NetworkTool.Button</item>
+    </style>
+</resources>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络工具箱深色模式颜色资源
+    强调色保持品牌绿，具体页面强调色仍由 ThemeManager 动态覆盖。
+-->
+<resources>
+    <color name="colorPrimary">#00DAC5</color>
+    <color name="colorPrimaryDark">#00B5A1</color>
+    <color name="colorAccent">#00DAC5</color>
+    <color name="colorOnPrimary">#00201C</color>
+    <color name="colorPrimaryContainer">#003731</color>
+    <color name="colorOnPrimaryContainer">#B8FFF7</color>
+
+    <!-- 基础色 - 深色模式 -->
+    <color name="colorBackground">#101315</color>
+    <color name="colorSurface">#181C1F</color>
+    <color name="colorSurfaceContainer">#20262A</color>
+    <color name="colorSurfaceContainerLow">#161A1D</color>
+    <color name="colorSurfaceContainerHigh">#2A3034</color>
+    <color name="colorOnSurface">#E6E9EC</color>
+    <color name="colorOnBackground">#E6E9EC</color>
+
+    <!-- 文字颜色 -->
+    <color name="textPrimary">#E6E9EC</color>
+    <color name="textSecondary">#AAB4BE</color>
+    <color name="textHint">#8A949E</color>
+
+    <!-- 边框/分割线 -->
+    <color name="colorOutline">#8A949E</color>
+    <color name="colorOutlineVariant">#3A4248</color>
+
+    <!-- ZXing 扫码器颜色 -->
+    <color name="zxing_custom_possible_result_points">#903190ED</color>
+    <color name="zxing_custom_result_view">#B0000000</color>
+    <color name="zxing_custom_viewfinder_mask">#60000000</color>
+
+    <!-- 日志查看器颜色 -->
+    <color name="log_viewer_background">#121212</color>
+    <color name="log_viewer_text">#E0E0E0</color>
+</resources>

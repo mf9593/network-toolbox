@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络工具箱主题样式
+    基于 Material 3，支持浅色/深色模式和运行时主题色。
+-->
+<resources>
+    <!-- 浅色主题 -->
+    <style name="Theme.NetworkTool" parent="Theme.Material3.Light.NoActionBar">
+        <!-- 主色调 -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+
+        <!-- 背景与表面 -->
+        <item name="android:colorBackground">@color/colorBackground</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
+        <item name="colorOnBackground">@color/colorOnBackground</item>
+        <item name="colorSurfaceVariant">@color/colorSurfaceContainer</item>
+        <item name="colorOnSurfaceVariant">@color/textSecondary</item>
+
+        <!-- 边框/分割线 -->
+        <item name="colorOutline">@color/colorOutline</item>
+        <item name="colorOutlineVariant">@color/colorOutlineVariant</item>
+
+        <!-- 文字颜色 -->
+        <item name="android:textColorPrimary">@color/textPrimary</item>
+        <item name="android:textColorSecondary">@color/textSecondary</item>
+
+        <!-- 系统栏 -->
+        <item name="android:statusBarColor">@color/colorBackground</item>
+        <item name="android:navigationBarColor">@color/colorSurface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@color/colorBackground</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+
+        <!-- Action Bar 样式 -->
+        <item name="toolbarStyle">@style/Widget.NetworkTool.Toolbar</item>
+        <item name="materialButtonStyle">@style/Widget.NetworkTool.Button</item>
+    </style>
+
+    <!-- Toolbar 样式 -->
+    <style name="Widget.NetworkTool.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:elevation">0dp</item>
+        <item name="titleTextColor">?attr/colorOnSurface</item>
+        <item name="titleTextAppearance">@style/TextAppearance.NetworkTool.ToolbarTitle</item>
+        <item name="subtitleTextColor">?attr/colorOnSurfaceVariant</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- CardView 样式 -->
+    <style name="Widget.NetworkTool.LegacyCard" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/colorSurface</item>
+        <item name="cardCornerRadius">@dimen/card_corner</item>
+        <item name="cardElevation">0dp</item>
+    </style>
+
+    <!-- 底部导航栏文字样式 -->
+    <style name="BottomNavTextAppearance" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">11sp</item>
+    </style>
+</resources>

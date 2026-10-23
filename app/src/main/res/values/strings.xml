@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络工具箱字符串资源
+-->
+<resources>
+    <string name="app_name">网络工具箱</string>
+    <string name="settings">设置</string>
+    <string name="about">关于</string>
+    
+    <!-- HTTP调试 -->
+    <string name="http_debug_example">GET请求：填写URL后点击发送\nPOST请求：填写URL、发送数据、请求头后点击发送\n\n请求头示例：\n{"Content-Type":"application/json"}\n\n请求体示例：\n{"key1":"value1","key2":"value2"}</string>
+    
+    <!-- 网页调试 -->
+    <string name="web_debug_help">【使用说明】\n1. 输入完整网页地址\n2. 输入匹配规则\n3. 选择匹配方法\n4. 点击“解析”按钮\n\n【匹配方法】\n\n• match：正则匹配第一个结果\n  示例：&lt;title&gt;(.*?)&lt;/title&gt;\n  作用：提取网页标题\n  示例：href=&quot;(.*?)&quot;\n  作用：提取第一个链接\n\n• gmatch：正则匹配全部结果\n  示例：&lt;img.*?src=&quot;(.*?)&quot;\n  作用：提取全部图片地址\n  示例：href=&quot;(.*?)&quot;\n  作用：提取全部链接\n\n• Jsoup：CSS 选择器\n  示例：a[href]\n  作用：选择全部链接\n  示例：img[src]\n  作用：选择全部图片\n  示例：.class-name\n  作用：选择指定 class 的元素\n\n• XPath：XML 路径\n  示例：//title/text()\n  作用：提取网页标题\n  示例：//a/@href\n  作用：提取全部链接\n  示例：//img/@src\n  作用：提取全部图片地址\n\n【提示】\n规则区分大小写；请求前请确认链接可以正常访问。</string>
+    
+
+    
+    <!-- 图标转换 -->
+    <string name="sample_vector_icon">&lt;?xml version=\"1.0\" encoding=\"utf-8\"?&gt;\n&lt;vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    android:width=\"24dp\"\n    android:height=\"24dp\"\n    android:viewportWidth=\"24\"\n    android:viewportHeight=\"24\"&gt;\n  &lt;path\n      android:fillColor=\"#FF2196F3\"\n      android:pathData=\"M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10S17.52,2,12,2zM10,17l-5-5l1.41-1.41L10,14.17l7.59-7.59L19,8L10,17z\"/&gt;\n&lt;/vector&gt;</string>
+
+    <!-- 扫一扫 -->
+    <string name="scan_title">扫一扫</string>
+    <string name="scan_hint">将二维码/条码放入框内，即可自动扫描</string>
+    <string name="scan_hint_sub">支持二维码、条形码和 WiFi 二维码</string>
+    <string name="scan_from_gallery">从相册选择</string>
+    <string name="scan_torch_on">关闭手电筒</string>
+    <string name="scan_torch_off">打开手电筒</string>
+    <string name="scan_history">扫描历史</string>
+    <string name="scan_decode_failed">未识别到二维码或条形码</string>
+    <string name="scan_decode_loading">正在识别图片…</string>
+</resources>

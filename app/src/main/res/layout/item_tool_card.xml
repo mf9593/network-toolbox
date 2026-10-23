@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 工具卡片：两列纵向布局，避免长标题被截断 -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardView"
+    style="@style/Widget.NetworkTool.Card.Small"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="126dp"
+        android:orientation="vertical"
+        android:padding="@dimen/space_3">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/iconContainer"
+                style="@style/Widget.NetworkTool.Card.Small"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                app:cardCornerRadius="12dp">
+
+                <ImageView
+                    android:id="@+id/iconImage"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="工具图标"
+                    android:src="@drawable/ic_tools" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageView
+                android:id="@+id/favoriteIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="已收藏"
+                android:src="@drawable/ic_bookmark"
+                android:visibility="gone"
+                app:tint="?attr/colorPrimary" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_2"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="工具名称"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/descText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="工具说明"
+            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

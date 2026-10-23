@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- QQ风格聊天消息项布局 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <!-- 时间标签（居中显示） -->
+    <TextView
+        android:id="@+id/timeLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:text="12:30"
+        android:textSize="11sp"
+        android:textColor="?android:textColorTertiary"
+        android:background="@drawable/bg_chat_time"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone" />
+
+    <!-- 消息容器 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <!-- 左侧头像（接收消息时显示） -->
+        <ImageView
+            android:id="@+id/senderAvatar"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_avatar_default"
+            android:padding="2dp"
+            android:visibility="gone" />
+
+        <!-- 消息内容区域（FrameLayout 支持气泡靠右） -->
+        <FrameLayout
+            android:id="@+id/messageContentArea"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/messageContentWrapper"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- 发送者名称（仅群聊显示） -->
+                <TextView
+                    android:id="@+id/senderName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="发送者"
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="2dp"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone" />
+
+                <!-- 发送者 IP（可选显示） -->
+                <TextView
+                    android:id="@+id/senderIp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="192.168.1.100:8080"
+                    android:textSize="10sp"
+                    android:textColor="?android:textColorTertiary"
+                    android:layout_marginBottom="4dp"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone" />
+
+                <!-- 消息气泡 -->
+                <TextView
+                    android:id="@+id/messageBubble"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="260dp"
+                    android:text="这是一条消息"
+                    android:textSize="15sp"
+                    android:textColor="?android:textColorPrimary"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="10dp"
+                    android:lineSpacingMultiplier="1.2"
+                    android:visibility="gone" />
+
+                <!-- 图片消息 -->
+                <ImageView
+                    android:id="@+id/imagePreview"
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:scaleType="centerCrop"
+                    android:adjustViewBounds="true"
+                    android:visibility="gone"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp" />
+
+                <!-- 文件消息容器 -->
+                <LinearLayout
+                    android:id="@+id/fileContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="@drawable/bg_chat_bubble_received"
+                    android:padding="12dp"
+                    android:visibility="gone"
+                    android:gravity="center_vertical"
+                    android:minWidth="200dp">
+
+                    <ImageView
+                        android:id="@+id/fileIcon"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:src="@drawable/ic_file"
+                        android:contentDescription="文件图标"
+                        app:tint="?attr/colorAccent" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="12dp">
+
+                        <TextView
+                            android:id="@+id/fileName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="文件名.txt"
+                            android:textSize="14sp"
+                            android:textColor="?android:textColorPrimary"
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                        <TextView
+                            android:id="@+id/fileSize"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1.2 MB"
+                            android:textSize="12sp"
+                            android:textColor="?android:textColorTertiary"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/downloadButton"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_download"
+                        android:contentDescription="下载"
+                        app:tint="?attr/colorAccent"
+                        android:padding="4dp"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <!-- 右侧头像（发送消息时显示） -->
+        <ImageView
+            android:id="@+id/myAvatar"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_avatar_default"
+            android:padding="2dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+</LinearLayout>

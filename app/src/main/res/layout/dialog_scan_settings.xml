@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="扫描设置"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:background="?attr/colorOutline" />
+
+    <!-- 扫描速度 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="扫描速度"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface" />
+
+    <RadioGroup
+        android:id="@+id/speedGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp">
+
+        <RadioButton
+            android:id="@+id/speedFast"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="快速 - 高并发快速扫描（适合日常使用）"
+            android:buttonTint="?attr/colorPrimary" />
+
+        <RadioButton
+            android:id="@+id/speedStandard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="标准 - 均衡速度和负载"
+            android:buttonTint="?attr/colorPrimary" />
+
+        <RadioButton
+            android:id="@+id/speedSlow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="慢速 - 低负载慢速扫描（适合老旧设备）"
+            android:buttonTint="?attr/colorPrimary" />
+
+    </RadioGroup>
+
+    <!-- 扫描模式 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="扫描模式"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface" />
+
+    <RadioGroup
+        android:id="@+id/modeGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp">
+
+        <RadioButton
+            android:id="@+id/modeActive"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="主动扫描 - 高检测率（Ping + HTTP探测 + 多播发现 + NetBIOS）"
+            android:buttonTint="?attr/colorPrimary" />
+
+        <RadioButton
+            android:id="@+id/modePassive"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="被动扫描 - 低检测率（仅监听多播和读取邻居表）"
+            android:buttonTint="?attr/colorPrimary" />
+
+        <RadioButton
+            android:id="@+id/modeQuiet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="安静扫描 - 平均检测率（无HTTP/NetBIOS探测）"
+            android:buttonTint="?attr/colorPrimary" />
+
+    </RadioGroup>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSave"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="20dp"
+        android:text="保存设置"
+        app:cornerRadius="8dp" />
+
+</LinearLayout>

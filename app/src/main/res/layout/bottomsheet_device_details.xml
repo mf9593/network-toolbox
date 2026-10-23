@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 设备详情底部弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_5"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/space_5"
+    android:paddingBottom="@dimen/space_5">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="?attr/colorOutlineVariant" />
+
+    <TextView
+        android:id="@+id/detailTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="设备名称"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+
+    <TextView
+        android:id="@+id/detailIp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="192.168.1.1"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <TextView
+        android:id="@+id/detailMac"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="MAC: --"
+        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+    <TextView
+        android:id="@+id/detailDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="设备描述"
+        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        android:text="发现协议"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+    <TextView
+        android:id="@+id/detailProtocols"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="--"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/openHttpButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:text="打开 HTTP 页面"
+        app:icon="@drawable/ic_browser" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/pingButton"
+            style="@style/Widget.NetworkTool.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Ping 测试"
+            app:icon="@drawable/ic_ping" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/portScanButton"
+            style="@style/Widget.NetworkTool.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_2"
+            android:layout_weight="1"
+            android:text="端口扫描"
+            app:icon="@drawable/ic_port_scan" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/copyIpButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="复制 IP"
+            app:icon="@drawable/ic_copy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/macQueryButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="MAC 查询"
+            app:icon="@drawable/ic_search" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/shareButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="分享"
+            app:icon="@drawable/ic_send" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="Ping 会直接开始测试；端口扫描会使用常用端口自动开始"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+</LinearLayout>

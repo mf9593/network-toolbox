@@ -1,0 +1,24 @@
+{
+  "routers": [
+    {"brand": "移动路由", "link": "cmcc.wifi"},
+    {"brand": "电信路由", "link": "router.ctc"},
+    {"brand": "TP-Link", "link": "tplogin.cn"},
+    {"brand": "水星路由", "link": "melogin.cn"},
+    {"brand": "FAST迅捷", "link": "falogin.cn"},
+    {"brand": "荣耀路由", "link": "wowifi.smartont.net"},
+    {"brand": "华为路由", "link": "router.ctc"},
+    {"brand": "ZTE中兴", "link": "zte.home"},
+    {"brand": "Tenda腾达", "link": "tendawifi.com"},
+    {"brand": "ASUS华硕", "link": "router.asus.com"},
+    {"brand": "Ruijie睿易", "link": "ruiyi.cn"},
+    {"brand": "小米路由", "link": "miwifi.com"},
+    {"brand": "360路由", "link": "luyou.360.cn"},
+    {"brand": "飞邑路由", "link": "feiyiwifi.com"},
+    {"brand": "H3C华三", "link": "moshujia.cn"},
+    {"brand": "斐讯路由", "link": "p.to"},
+    {"brand": "海康路由", "link": "hikvisionwifi.local"},
+    {"brand": "蒲公英路由", "link": "oraybox.com"},
+    {"brand": "极路由", "link": "hiwifi.com"},
+    {"brand": "优酷路由", "link": "wifi.youku.com"}
+  ]
+}

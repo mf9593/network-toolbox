@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiFi 详情底部弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_5"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/space_5"
+    android:paddingBottom="@dimen/space_5">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="?attr/colorOutlineVariant" />
+
+    <TextView
+        android:id="@+id/ssidText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="WiFi 名称"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/bssidText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="BSSID --"
+            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/queryBssidButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="0dp"
+            android:paddingStart="@dimen/space_2"
+            android:paddingEnd="@dimen/space_2"
+            android:text="厂商查询"
+            android:textSize="12sp"
+            app:icon="@drawable/ic_search"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/levelText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_3"
+        android:text="信号强度 --"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <TextView
+        android:id="@+id/frequencyText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="频率 --"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <TextView
+        android:id="@+id/standardText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="标准 --"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <TextView
+        android:id="@+id/capabilitiesText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:maxLines="3"
+        android:text="加密 --"
+        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+    <LinearLayout
+        android:id="@+id/passwordSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/passwordInfoText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="已保存密码"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/copyPasswordButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:minWidth="0dp"
+                android:paddingStart="@dimen/space_2"
+                android:paddingEnd="@dimen/space_2"
+                android:text="全部复制"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/passwordScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_1"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/passwordListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/openWifiSettingsButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        android:text="打开系统 WiFi 设置"
+        app:icon="@drawable/ic_wifi" />
+
+</LinearLayout>

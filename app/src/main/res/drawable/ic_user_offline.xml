@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 用户头像 - 带离线状态（灰色） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- 背景圆形 -->
+    <path
+        android:fillColor="?attr/colorPrimary"
+        android:pathData="M24,24m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0" />
+
+    <!-- 头部 -->
+    <path
+        android:fillColor="?attr/colorOnPrimary"
+        android:pathData="M24,14m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+
+    <!-- 身体 -->
+    <path
+        android:fillColor="?attr/colorOnPrimary"
+        android:pathData="M24,22c-6,0 -10,4 -10,8v4h20v-4c0,-4 -4,-8 -10,-8z" />
+
+    <!-- 离线状态灰色圆点 -->
+    <path
+        android:fillColor="#9E9E9E"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M38,38m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+
+</vector>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 手机设备图标 - 智能手机 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7,2h10c1.1,0 2,0.9 2,2v16c0,1.1 -0.9,2 -2,2H7c-1.1,0 -2,-0.9 -2,-2V4C5,2.9 5.9,2 7,2z" />
+
+    <!-- 屏幕 -->
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8,5h8v12H8z" />
+
+    <!-- Home 键 -->
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,19a0.8,0.8 0 1,0 0,-1.6 0.8,0.8 0 0,0 0,1.6z" />
+</vector>

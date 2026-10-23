@@ -1,0 +1,87 @@
+# 构建产物（不上传）
+*.class
+*.log
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# 构建目录（不上传）
+build/
+*/build/
+*/*/build/
+
+# IDE 配置文件（不上传）
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.vscode/
+.settings/
+
+# 本地配置（不上传）
+local.properties
+*.jks
+*.keystore
+
+# Gradle 缓存（不上传）
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+
+# libs 目录下的第三方 jar（不上传 - 使用 Gradle 依赖管理）
+app/libs/*.jar
+!app/libs/README.md
+
+# Android Studio 导航文件（不上传）
+.navigation/
+
+# 操作系统文件（不上传）
+.DS_Store
+Thumbs.db
+
+# 签名文件（不上传 - 敏感信息）
+*.jks
+*.keystore
+release/
+
+# APK 输出目录（不上传）
+app/build/outputs/
+
+# Android Studio 额外配置
+.externalNativeBuild
+.cxx
+/captures
+
+
+# 私有网络样本与用户数据（不上传）
+wifi/
+*/wifi/
+*.bak
+*.zip
+*.tar
+*.gz
+*.7z
+*.json.gz
+
+# 密钥与环境配置（不上传）
+*.pem
+*.p12
+*.key
+*.env
+.env.*
+secrets.properties
+local.properties
+google-services.json
+app/google-services.json
+
+# 内部文档与自动生成报告（不参与应用打包，不建议提交）
+AGENTS.md
+UI_UX_审查报告_*.md
+
+# Android 生成文件
+app/release/
+app/debug/
+app/build/
+.gradle/

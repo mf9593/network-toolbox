@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 协议筛选底部弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_5"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/space_5"
+    android:paddingBottom="@dimen/space_5">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="?attr/colorOutlineVariant" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:text="筛选协议"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="只显示通过指定协议发现的设备"
+        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/protocolChipGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        app:checkedChip="@id/protoAll"
+        app:chipSpacingHorizontal="@dimen/space_2"
+        app:chipSpacingVertical="@dimen/space_1"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoAll"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="全部协议" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoOnvif"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ONVIF" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoSadp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SADP" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoRouter"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="路由器" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoSsdp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SSDP" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoMdns"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="mDNS" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoNetbios"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NetBIOS" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoArp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ARP 表" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoUdp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="UDP 广播" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoHttp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="HTTP" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoPing"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ping" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoIpv6"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="IPv6" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoService"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="端口探测" />
+
+    </com.google.android.material.chip.ChipGroup>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/clearFilterButton"
+        style="@style/Widget.NetworkTool.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_3"
+        android:text="清除筛选" />
+
+</LinearLayout>

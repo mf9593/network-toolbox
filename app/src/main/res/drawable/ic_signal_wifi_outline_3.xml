@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiFi 信号图标 - 3格（强信号） -->
+<!-- 显示顶点、三层弧线 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 最外层弧线 -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M2.76,11.49C5.29,9.47 8.46,8.25 12,8.25c3.54,0 6.71,1.22 9.24,3.24" />
+    <!-- 第二层弧线 -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5.64,14.37C7.42,12.95 9.63,12.1 12,12.1c2.37,0 4.58,0.85 6.36,2.27" />
+    <!-- 第三层弧线 -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8.53,17.25C9.63,16.37 10.79,15.93 12,15.93c1.21,0 2.37,0.44 3.47,1.32" />
+    <!-- 顶点 -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,20.5a0.8,0.8 0 1,0 0,-1.6 0.8,0.8 0 0,0 0,1.6z" />
+</vector>

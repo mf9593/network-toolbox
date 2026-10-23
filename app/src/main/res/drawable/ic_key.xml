@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 万能钥匙图标 - 表示有保存的密码 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorAccent">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12.65,10C11.83,7.67 9.61,6 7,6C3.69,6 1,8.69 1,12C1,15.31 3.69,18 7,18C9.61,18 11.83,16.33 12.65,14H17V18H21V14H23V10H12.65M7,14C5.34,14 4,12.66 4,11C4,9.34 5.34,8 7,8C8.66,8 10,9.34 10,11C10,12.66 8.66,14 7,14Z"/>
+</vector>

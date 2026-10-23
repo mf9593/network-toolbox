@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 聊天房间页面布局 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?attr/colorSurface"
+    android:fitsSystemWindows="true">
+
+    <!-- 标题栏 -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@android:color/transparent"
+        android:minHeight="?attr/actionBarSize"
+        android:elevation="0dp"
+        app:titleTextColor="?attr/colorOnSurface"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="?attr/colorOnSurface">
+
+        <!-- 邀请好友按钮（房间模式） -->
+        <ImageButton
+            android:id="@+id/onlineFriendsButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_add"
+            android:tint="?attr/colorOnSurface"
+            android:contentDescription="邀请好友"
+            android:visibility="gone" />
+
+        <!-- 房间成员列表按钮（房间模式） -->
+        <ImageButton
+            android:id="@+id/roomMembersButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_group"
+            android:tint="?attr/colorOnSurface"
+            android:contentDescription="房间成员"
+            android:visibility="gone" />
+
+    </com.google.android.material.appbar.MaterialToolbar>
+
+    <!-- 房间信息条（仅房间聊天模式显示） -->
+    <TextView
+        android:id="@+id/roomInfoBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="8dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:visibility="gone"
+        android:background="?attr/colorSurfaceVariant"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textStyle="bold" />
+
+    <!-- 聊天消息列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messageRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:clipToPadding="false" />
+
+    <!-- 消息输入区域（仿微信布局） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="?attr/colorSurface">
+
+        <!-- 顶部细分割线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0.5dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- 表情面板容器（默认隐藏） -->
+        <FrameLayout
+            android:id="@+id/emojiPanelContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:background="?attr/colorSurface"
+            android:elevation="0dp" />
+
+        <!-- 输入行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingVertical="6dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:gravity="center_vertical">
+
+            <!-- 输入框 + 表情按钮容器 -->
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/messageInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="输入消息..."
+                    android:background="@drawable/bg_message_input"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="46dp"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp"
+                    android:maxLines="1"
+                    android:inputType="text"
+                    android:imeOptions="actionSend|flagNoExtractUi" />
+
+                <!-- 表情按钮（位于输入框内部右侧） -->
+                <ImageButton
+                    android:id="@+id/emojiButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="4dp"
+                    android:src="@drawable/ic_emoji"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:tint="?attr/colorOnSurfaceVariant"
+                    android:contentDescription="表情" />
+
+            </FrameLayout>
+
+            <!-- 加号按钮 -->
+            <ImageButton
+                android:id="@+id/plusButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/ic_add"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="?attr/colorOnSurfaceVariant"
+                android:contentDescription="更多" />
+
+            <!-- 发送按钮（默认隐藏，输入文字后显示） -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sendButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="发送"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnPrimary"
+                android:visibility="gone"
+                android:layout_marginStart="6dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                app:backgroundTint="?attr/colorPrimary"
+                app:cornerRadius="18dp" />
+
+        </LinearLayout>
+
+        <!-- 加号菜单容器（默认隐藏，网格布局） -->
+        <LinearLayout
+            android:id="@+id/plusMenuContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="16dp"
+            android:paddingBottom="20dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="?attr/colorSurface"
+            android:visibility="gone"
+            android:elevation="0dp">
+
+            <!-- 发送图片 -->
+            <LinearLayout
+                android:id="@+id/sendImageButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground">
+
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/bg_chip">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_image"
+                        android:contentDescription="发送图片"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="图片"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+            <!-- 拍摄 -->
+            <LinearLayout
+                android:id="@+id/sendCameraButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground">
+
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/bg_chip">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_camera"
+                        android:contentDescription="拍摄"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="拍摄"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+            <!-- 发送文件 -->
+            <LinearLayout
+                android:id="@+id/sendFileButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground">
+
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/bg_chip">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_file"
+                        android:contentDescription="发送文件"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="文件"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+            <!-- WiFi备份 -->
+            <LinearLayout
+                android:id="@+id/sendWifiBackupButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground">
+
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="@drawable/bg_chip">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_wifi"
+                        android:contentDescription="WiFi备份"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="WiFi"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

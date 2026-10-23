@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 录像机图标 - NVR/DVR -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 录像机主体 -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M3,8h18c1.1,0 2,0.9 2,2v6c0,1.1 -0.9,2 -2,2H3c-1.1,0 -2,-0.9 -2,-2v-6C1,8.9 1.9,8 3,8z" />
+
+    <!-- 硬盘/磁盘 -->
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7,11h3v3H7z" />
+
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,11h3v3h-3z" />
+
+    <!-- 指示灯 -->
+    <path
+        android:fillColor="?attr/colorAccent"
+        android:pathData="M17,12.5a0.6,0.6 0 1,0 0,-1.2 0.6,0.6 0 0,0 0,1.2z" />
+
+    <!-- 摄像头图标（表示监控） -->
+    <path
+        android:strokeWidth="1.5"
+        android:strokeColor="?attr/colorAccent"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,5V3M14,5V3" />
+</vector>
