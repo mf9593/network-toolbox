@@ -14,7 +14,7 @@
         android:layout_height="match_parent"
         android:background="#000000">
 
-        <!-- NodePlayerView将在这里动态添加 -->
+        <!-- Media3 PlayerView 将在这里动态添加 -->
 
         <!-- 顶部标题栏（默认隐藏，点击显示） -->
         <LinearLayout

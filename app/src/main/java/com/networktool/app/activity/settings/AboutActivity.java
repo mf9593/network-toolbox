@@ -84,7 +84,7 @@ public class AboutActivity extends AppCompatActivity {
 
         // 开源工具引用 - 点击跳转内置浏览器
         TextView openSourceToolsText = findViewById(R.id.openSourceToolsText);
-        openSourceToolsText.setText("GNU GPL v3.0\nAndroidX · Material Components · OkHttp · Jsoup · Gson · ZXing · NodeMedia");
+        openSourceToolsText.setText("Apache License 2.0\nAndroidX · Material Components · Media3 · OkHttp · Jsoup · Gson · ZXing");
         openSourceToolsText.setOnClickListener(v -> showOpenSourceInfoDialog());
 
         TextView sponsorListText = findViewById(R.id.sponsorListText);
@@ -98,7 +98,7 @@ public class AboutActivity extends AppCompatActivity {
     private void showOpenSourceInfoDialog() {
         new MaterialAlertDialogBuilder(this)
                 .setTitle("开源组件与协议")
-                .setMessage("应用协议：GNU General Public License v3.0（GPL-3.0）\n\n"
+                .setMessage("应用协议：Apache License 2.0\n\n"
                         + "主要开源组件：\n"
                         + "• AndroidX / Material Components（Apache-2.0）\n"
                         + "• OkHttp（Apache-2.0）\n"
@@ -107,7 +107,7 @@ public class AboutActivity extends AppCompatActivity {
                         + "• ZXing（Apache-2.0）\n"
                         + "• AndroidSVG（Apache-2.0）\n"
                         + "• Jaxen（BSD 风格）\n"
-                        + "• NodeMediaClient（遵循其上游许可）\n\n"
+                        + "• Media3 ExoPlayer RTSP（Apache-2.0）\n\n"
                         + "完整许可见项目根目录 LICENSE 和 THIRD_PARTY_NOTICES.md。")
                 .setPositiveButton("知道了", null)
                 .show();

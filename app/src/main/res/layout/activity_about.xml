@@ -416,7 +416,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="8dp"
-                android:text="GNU GPL v3.0 · 开源协议"
+                android:text="Apache License 2.0 · 开源协议"
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:gravity="center" />

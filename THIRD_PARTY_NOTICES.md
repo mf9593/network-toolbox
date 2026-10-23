@@ -1,6 +1,6 @@
 # 第三方组件与许可
 
-本项目的应用代码使用 GNU General Public License v3.0（GPL-3.0）。以下第三方组件分别遵循其上游许可，具体版本和完整条款以其官方发布为准。
+本项目的应用代码使用 Apache License 2.0。以下第三方组件分别遵循其上游许可，具体版本和完整条款以其官方发布为准。
 
 | 组件 | 用途 | 许可 |
 |------|------|------|
@@ -12,20 +12,20 @@
 | AndroidSVG | SVG 解析与渲染 | Apache License 2.0 |
 | Jaxen | XPath 引擎 | BSD 风格许可 |
 | ZXing Core / ZXing Android Embedded | 二维码扫描 | Apache License 2.0 |
-| NodeMediaClient-Android | RTSP/RTMP 播放 | 遵循 NodeMedia 上游许可 |
+| Media3 ExoPlayer / media3-exoplayer-rtsp | RTSP/RTP 播放 | Apache License 2.0 |
 | JUnit / AndroidX Test | 测试 | Eclipse Public License 1.0 / Apache License 2.0 |
 
 AndroidX、Material、OkHttp、Gson 等组件的许可文本可在其 Maven 坐标对应的源码仓库中获取。分发本项目时，请保留本文件以及各依赖自带的 NOTICE / LICENSE 信息。
 
 如果某个组件的上游许可与本说明不一致，以该组件官方发布内容为准。
 
-> 注意：NodeMediaClient 的上游项目页面提示商业使用可能需要单独授权。公开发布 APK 前请确认其许可条款；如与 GPL-3.0 分发不兼容，请替换为许可兼容的 RTSP 播放组件。
+> RTSP 播放使用 Media3 ExoPlayer。标准 RTSP/RTP（TCP、UDP 单播）可播放；部分厂商的私有封装、RTSP over HTTP、加密流或特殊编码可能不受支持，需以实际设备为准。项目当前不包含 NodeMediaClient；其上游要求商业授权，重新引入前需确认。
 
 ## 应用许可
 
 ```text
-GNU General Public License v3.0
-Copyright (C) 2026 mf9593 (Network Toolbox)
+Apache License 2.0
+Copyright 2026 mf9593 (Network Toolbox)
 ```
 
 完整文本见项目根目录 `LICENSE` 和 `NOTICE`。

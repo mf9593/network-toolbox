@@ -27,12 +27,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.networktool.app.R;
+import com.networktool.app.player.RtspPlayer;
+import com.networktool.app.player.RtspPlayerView;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.ThemeManager;
 
-import cn.nodemedia.NodePlayer;
-import cn.nodemedia.NodePlayerDelegate;
-import cn.nodemedia.NodePlayerView;
 
 /**
  * RTSP流预览Activity - 支持全屏播放
@@ -40,7 +39,7 @@ import cn.nodemedia.NodePlayerView;
  * 功能说明：
  * - 支持手动输入RTSP地址进行预览
  * - 支持从Onvif设备直接跳转播放
- * - 使用NodePlayer 2.x播放RTSP视频流
+ * - 使用 Media3 ExoPlayer 播放 RTSP 视频流
  * - 进入播放后自动横屏全屏
  * - 点击显示/隐藏控制栏
  * - 播放控制（暂停/播放、退出全屏）
@@ -57,7 +56,7 @@ public class RtspPlayerActivity extends AppCompatActivity {
 
     // 播放界面
     private FrameLayout playerContainer;
-    private NodePlayerView videoView;
+    private RtspPlayerView videoView;
     private View topBar;
     private View bottomBar;
     private TextView titleText;
@@ -69,8 +68,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private TextView channelNameText;  // 新增：通道名称显示
     private ProgressBar loadingProgress;
 
-    // NodePlayer
-    private NodePlayer nodePlayer;
+    // RtspPlayer
+    private RtspPlayer nodePlayer;
 
     // 流地址
     private String streamUrl;
@@ -269,7 +268,7 @@ public class RtspPlayerActivity extends AppCompatActivity {
         try {
             // 如果videoView是null，需要动态创建
             if (videoView == null) {
-                videoView = new NodePlayerView(this);
+                videoView = new RtspPlayerView(this);
                 videoView.setId(View.generateViewId());
                 FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -279,12 +278,12 @@ public class RtspPlayerActivity extends AppCompatActivity {
             }
 
             // 设置渲染类型
-            videoView.setRenderType(NodePlayerView.RenderType.SURFACEVIEW);
+            videoView.setRenderType(RtspPlayerView.RenderType.SURFACEVIEW);
             // 设置视频画面缩放模式：保持比例居中显示，不拉伸
-            videoView.setUIViewContentMode(NodePlayerView.UIViewContentMode.ScaleAspectFit);
+            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleAspectFit);
 
-            // 创建NodePlayer
-            nodePlayer = new NodePlayer(this);
+            // 创建RtspPlayer
+            nodePlayer = new RtspPlayer(this);
             nodePlayer.setPlayerView(videoView);
 
             // 设置传输协议
@@ -310,9 +309,9 @@ public class RtspPlayerActivity extends AppCompatActivity {
             nodePlayer.setVolume(100);
 
             // 设置回调
-            nodePlayer.setNodePlayerDelegate(new NodePlayerDelegate() {
+            nodePlayer.setDelegate(new RtspPlayer.Delegate() {
                 @Override
-                public void onEventCallback(NodePlayer player, int event, String msg) {
+                public void onEventCallback(RtspPlayer player, int event, String msg) {
                     runOnUiThread(() -> handlePlayerEvent(event, msg));
                 }
             });
@@ -387,16 +386,16 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private void applyTransportProtocol(String protocol) {
         switch (protocol) {
             case "tcp":
-                nodePlayer.setRtspTransport(NodePlayer.RTSP_TRANSPORT_TCP);
+                nodePlayer.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_TCP);
                 break;
             case "udp":
-                nodePlayer.setRtspTransport(NodePlayer.RTSP_TRANSPORT_UDP);
+                nodePlayer.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_UDP);
                 break;
             case "udp_multicast":
-                nodePlayer.setRtspTransport(NodePlayer.RTSP_TRANSPORT_UDP_MULTICAST);
+                nodePlayer.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_UDP_MULTICAST);
                 break;
             case "http":
-                nodePlayer.setRtspTransport(NodePlayer.RTSP_TRANSPORT_HTTP);
+                nodePlayer.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_HTTP);
                 break;
             case "auto":
             default:

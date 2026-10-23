@@ -76,7 +76,7 @@ https://api.github.com/repos/<owner>/<repo>/releases/latest
 
 ## 开源协议
 
-项目使用 **GNU General Public License v3.0 (GPL-3.0)** 开源协议。
+项目使用 **Apache License 2.0** 开源协议。
 
 完整协议见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。第三方组件许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
@@ -98,7 +98,8 @@ git push -u origin main
 
 ### 发布前注意
 
-- NodeMediaClient 的上游许可可能要求商业授权。公开发布二进制或商业分发前，请确认其许可与 GPL-3.0 的兼容性；如不兼容，可替换为 Apache-2.0 的 Media3/ExoPlayer RTSP 实现。
+- RTSP 播放使用 Apache-2.0 的 Media3 ExoPlayer RTSP，当前未包含 NodeMediaClient。标准 RTSP/RTP（TCP、UDP 单播）可以播放；私有封装、RTSP over HTTP、加密流或设备专有编码可能不支持。
+- NodeMediaClient-Android 的上游明确要求商业授权。若没有可再分发的商业许可证，不建议将它的二进制重新加入公开发布的 APK。
 - 不要提交 `wifi/`、`.bak`、备份 `.zip`、聊天数据库、签名文件或真实网络数据。
 
 ## 免责声明

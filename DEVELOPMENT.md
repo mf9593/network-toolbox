@@ -17,6 +17,7 @@
 | 最低支持 | Android 5.0 (API 21) |
 | UI 框架 | Material Design 3 |
 | 网络库 | OkHttp 4.12.0 |
+| RTSP 播放 | Media3 ExoPlayer 1.4.1 |
 | HTML 解析 | Jsoup 1.15.3 |
 | JSON 解析 | Gson 2.10.1 |
 | 构建工具 | Gradle 8.13 |
@@ -26,7 +27,7 @@
 
 - **包名**：`com.networktool.app`
 - **架构**：arm64-v8a, armeabi-v7a
-- **License**：GNU General Public License v3.0（GPL-3.0）
+- **License**：Apache License 2.0
 
 ---
 

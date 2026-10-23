@@ -22,18 +22,17 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.button.MaterialButton;
 import com.networktool.app.R;
+import com.networktool.app.player.RtspPlayer;
+import com.networktool.app.player.RtspPlayerView;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.ThemeManager;
 
-import cn.nodemedia.NodePlayer;
-import cn.nodemedia.NodePlayerDelegate;
-import cn.nodemedia.NodePlayerView;
 
 /**
  * RTSP流预览Activity - 视频播放器风格
  * 
  * 功能说明：
- * - 使用NodePlayer 2.x播放RTSP视频流
+ * - 使用 Media3 ExoPlayer 播放 RTSP 视频流
  * - 支持主码流/子码流切换（清晰度选择）
  * - 支持横竖屏切换
  * - 竖屏按比例显示视频（居中，不拉伸）
@@ -41,7 +40,7 @@ import cn.nodemedia.NodePlayerView;
  * - 播放控制（暂停/播放、全屏）
  * - TCP传输模式
  * 
- * 使用NodePlayer 2.x API
+ * 使用Media3 ExoPlayer API
  */
 public class RtspPreviewActivity extends AppCompatActivity {
     private static final String TAG = "RtspPreviewActivity";
@@ -66,9 +65,9 @@ public class RtspPreviewActivity extends AppCompatActivity {
     private TextView statusText;
     private TextView channelNameText;
 
-    // NodePlayer 2.x
-    private NodePlayer nodePlayer;
-    private NodePlayerView videoView;
+    // Media3 ExoPlayer
+    private RtspPlayer nodePlayer;
+    private RtspPlayerView videoView;
 
     // 流地址
     private String mainStreamUrl;
@@ -229,9 +228,9 @@ public class RtspPreviewActivity extends AppCompatActivity {
     }
 
     /**
-     * 初始化NodePlayer (2.x API)
+     * 初始化RtspPlayer (2.x API)
      *
-     * 创建并配置NodePlayer实例，设置以下参数：
+     * 创建并配置RtspPlayer实例，设置以下参数：
      * - 渲染类型为SURFACEVIEW
      * - RTSP传输模式为TCP
      * - 缓冲时间500ms，最大缓冲3000ms
@@ -240,12 +239,12 @@ public class RtspPreviewActivity extends AppCompatActivity {
      */
     private void initPlayer() {
         try {
-            // 创建NodePlayerView
-            videoView = new NodePlayerView(this);
+            // 创建RtspPlayerView
+            videoView = new RtspPlayerView(this);
             // 设置渲染类型为SURFACEVIEW
-            videoView.setRenderType(NodePlayerView.RenderType.SURFACEVIEW);
+            videoView.setRenderType(RtspPlayerView.RenderType.SURFACEVIEW);
             // 设置视频画面缩放模式为填充
-            videoView.setUIViewContentMode(NodePlayerView.UIViewContentMode.ScaleToFill);
+            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleToFill);
 
             // 将videoView添加到videoContainer
             // 先确保videoContainer中没有子view
@@ -257,8 +256,8 @@ public class RtspPreviewActivity extends AppCompatActivity {
             );
             videoContainer.addView(videoView, layoutParams);
 
-            // 创建NodePlayer实例 (2.x版本只需要Context)
-            nodePlayer = new NodePlayer(this);
+            // 创建RtspPlayer实例 (2.x版本只需要Context)
+            nodePlayer = new RtspPlayer(this);
 
             // 按照参数顺序设置播放器配置
             
@@ -266,7 +265,7 @@ public class RtspPreviewActivity extends AppCompatActivity {
             nodePlayer.setPlayerView(videoView);
 
             // 步骤2: 设置RTSP流使用TCP传输（避免UDP丢包问题）
-            nodePlayer.setRtspTransport(NodePlayer.RTSP_TRANSPORT_TCP);
+            nodePlayer.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_TCP);
 
             // 步骤3: 设置URL（如果有）
             if (currentStreamUrl != null && !currentStreamUrl.isEmpty()) {
@@ -290,17 +289,17 @@ public class RtspPreviewActivity extends AppCompatActivity {
             }
 
             // 设置事件回调（在 start() 之后）
-            nodePlayer.setNodePlayerDelegate(new NodePlayerDelegate() {
+            nodePlayer.setDelegate(new RtspPlayer.Delegate() {
                 @Override
-                public void onEventCallback(NodePlayer player, int event, String msg) {
-                    Log.d(TAG, "NodePlayer事件: " + event + ", 消息: " + msg);
+                public void onEventCallback(RtspPlayer player, int event, String msg) {
+                    Log.d(TAG, "RtspPlayer事件: " + event + ", 消息: " + msg);
                     // 在UI线程处理事件
                     runOnUiThread(() -> handlePlayerEvent(event, msg));
                 }
             });
 
         } catch (Exception e) {
-            Log.e(TAG, "初始化NodePlayer失败: " + e.getMessage(), e);
+            Log.e(TAG, "初始化RtspPlayer失败: " + e.getMessage(), e);
             handlePlayerError(e.getMessage());
         }
     }
@@ -308,7 +307,7 @@ public class RtspPreviewActivity extends AppCompatActivity {
     /**
      * 处理播放器事件
      *
-     * 根据NodePlayer返回的事件码处理不同的播放状态：
+     * 根据RtspPlayer返回的事件码处理不同的播放状态：
      * - 1001: 连接中
      * - 1101: 已连接
      * - 1104: 开始播放
@@ -370,9 +369,9 @@ public class RtspPreviewActivity extends AppCompatActivity {
      */
     private void handlePlayerError(String errorMsg) {
         if (errorMsg != null && errorMsg.toLowerCase().contains("unauthorized")) {
-            statusText.setText("NodePlayer未授权\n\n提示：\n1. RTSP地址已复制到剪贴板\n2. 可使用VLC等外部播放器打开");
+            statusText.setText("RtspPlayer未授权\n\n提示：\n1. RTSP地址已复制到剪贴板\n2. 可使用VLC等外部播放器打开");
             copyToClipboard(currentStreamUrl);
-            Toast.makeText(this, "NodePlayer需要授权，RTSP地址已复制", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "RtspPlayer需要授权，RTSP地址已复制", Toast.LENGTH_LONG).show();
         } else {
             statusText.setText("播放器初始化失败: " + errorMsg);
             Toast.makeText(this, "播放器初始化失败: " + errorMsg, Toast.LENGTH_SHORT).show();
@@ -750,11 +749,10 @@ public class RtspPreviewActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        // 停止并释放播放器
+        // onStop 只停止播放，保留播放器以便返回前台后恢复；真正释放放在 onDestroy。
         if (nodePlayer != null) {
             try {
                 nodePlayer.stop();
-                nodePlayer.release();
             } catch (Exception e) {
                 Log.e(TAG, "停止播放失败: " + e.getMessage(), e);
             }
@@ -779,7 +777,7 @@ public class RtspPreviewActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // 停止并释放NodePlayer资源
+        // 停止并释放RtspPlayer资源
         if (nodePlayer != null) {
             try {
                 nodePlayer.stop();

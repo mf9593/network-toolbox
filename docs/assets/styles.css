@@ -480,7 +480,7 @@ img { max-width: 100%; display: block; }
 .repo-box a .icon { width: 14px; height: 14px; }
 .open-source-actions { display: flex; gap: 9px; margin-top: 20px; }
 .license-card { position: relative; overflow: hidden; background: linear-gradient(160deg, rgba(82, 229, 194, .09), var(--surface-solid) 60%); }
-.license-card::after { content: "GPL"; position: absolute; right: -16px; bottom: -36px; color: rgba(255,255,255,.035); font-size: 150px; font-weight: 900; line-height: 1; pointer-events: none; }
+.license-card::after { content: "Apache"; position: absolute; right: -16px; bottom: -36px; color: rgba(255,255,255,.035); font-size: 150px; font-weight: 900; line-height: 1; pointer-events: none; }
 .license-badge { display: inline-block; padding: 5px 9px; border-radius: 6px; background: rgba(82, 229, 194, .12); color: var(--brand); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
 .license-card h3 { font-size: 26px; line-height: 1.25; margin: 17px 0 12px; }
 .license-card p { color: var(--muted); font-size: 13px; line-height: 1.8; }

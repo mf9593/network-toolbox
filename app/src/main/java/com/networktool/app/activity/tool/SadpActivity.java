@@ -34,6 +34,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.textfield.TextInputEditText;
 import com.networktool.app.R;
+import com.networktool.app.player.RtspPlayer;
+import com.networktool.app.player.RtspPlayerView;
 import com.networktool.app.adapter.SadpDeviceAdapter;
 import com.networktool.app.model.SadpDevice;
 import com.networktool.app.util.AppErrorLogger;
@@ -61,9 +63,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import cn.nodemedia.NodePlayer;
-import cn.nodemedia.NodePlayerDelegate;
-import cn.nodemedia.NodePlayerView;
 
 /**
  * SADP调试Activity
@@ -104,7 +103,7 @@ public class SadpActivity extends AppCompatActivity {
     private TextView rtspStatusText;
 
     // 播放器
-    private NodePlayer nodePlayer;
+    private RtspPlayer nodePlayer;
     private String currentTransportProtocol = "TCP";
     private boolean isPlaying = false;
 
@@ -1313,10 +1312,10 @@ public class SadpActivity extends AppCompatActivity {
         }
 
         try {
-            // 创建NodePlayerView
-            NodePlayerView videoView = new NodePlayerView(this);
-            videoView.setRenderType(NodePlayerView.RenderType.SURFACEVIEW);
-            videoView.setUIViewContentMode(NodePlayerView.UIViewContentMode.ScaleToFill);
+            // 创建RtspPlayerView
+            RtspPlayerView videoView = new RtspPlayerView(this);
+            videoView.setRenderType(RtspPlayerView.RenderType.SURFACEVIEW);
+            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleToFill);
 
             // 清除旧视图并添加新视图
             videoViewContainer.removeAllViews();
@@ -1326,8 +1325,8 @@ public class SadpActivity extends AppCompatActivity {
             );
             videoViewContainer.addView(videoView, 0, layoutParams);
 
-            // 创建NodePlayer实例
-            nodePlayer = new NodePlayer(this);
+            // 创建RtspPlayer实例
+            nodePlayer = new RtspPlayer(this);
             nodePlayer.setPlayerView(videoView);
 
             // 设置传输协议
@@ -1340,9 +1339,9 @@ public class SadpActivity extends AppCompatActivity {
             nodePlayer.setVolume(100);
 
             // 设置事件回调
-            nodePlayer.setNodePlayerDelegate(new NodePlayerDelegate() {
+            nodePlayer.setDelegate(new RtspPlayer.Delegate() {
                 @Override
-                public void onEventCallback(NodePlayer player, int event, String msg) {
+                public void onEventCallback(RtspPlayer player, int event, String msg) {
                     runOnUiThread(() -> handleRtspPlayerEvent(event, msg));
                 }
             });
@@ -1364,22 +1363,22 @@ public class SadpActivity extends AppCompatActivity {
     /**
      * 设置传输协议
      */
-    private void setTransportProtocol(NodePlayer player) {
+    private void setTransportProtocol(RtspPlayer player) {
         switch (currentTransportProtocol) {
             case "TCP":
-                player.setRtspTransport(NodePlayer.RTSP_TRANSPORT_TCP);
+                player.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_TCP);
                 break;
             case "UDP":
-                player.setRtspTransport(NodePlayer.RTSP_TRANSPORT_UDP);
+                player.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_UDP);
                 break;
             case "UDP_MULTICAST":
-                player.setRtspTransport(NodePlayer.RTSP_TRANSPORT_UDP_MULTICAST);
+                player.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_UDP_MULTICAST);
                 break;
             case "HTTP":
-                player.setRtspTransport(NodePlayer.RTSP_TRANSPORT_HTTP);
+                player.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_HTTP);
                 break;
             default:
-                player.setRtspTransport(NodePlayer.RTSP_TRANSPORT_TCP);
+                player.setRtspTransport(RtspPlayer.RTSP_TRANSPORT_TCP);
                 break;
         }
     }

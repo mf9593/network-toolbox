@@ -129,8 +129,10 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.2'
 
     // ==================== RTSP播放器 ====================
-    // NodePlayer - RTSP/RTMP视频播放器 (2.x版本)
-    implementation 'com.github.NodeMedia:NodeMediaClient-Android:2.9.20'
+    // Media3 ExoPlayer RTSP：标准 RTSP / RTP，支持 TCP 与 UDP 单播
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-rtsp:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
 
     // ==================== 测试库 ====================
     testImplementation 'junit:junit:4.13.2'
