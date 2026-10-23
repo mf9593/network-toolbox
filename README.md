@@ -84,6 +84,23 @@ https://api.github.com/repos/<owner>/<repo>/releases/latest
 
 宣传页：<https://mf9593.github.io/network-toolbox/>
 
+### 首次发布
+
+1. 在 GitHub 创建空的公开仓库 `network-toolbox`（不要勾选自动生成 README）。
+2. 推送本地代码：
+
+```bash
+git push -u origin main
+```
+
+3. 在仓库 Settings → Pages 中选择 GitHub Actions，`pages.yml` 会自动部署 `docs/`。
+4. 创建版本标签并发布 Release，附上 `app-debug.apk` 或签名 APK，检查更新功能即可使用。
+
+### 发布前注意
+
+- NodeMediaClient 的上游许可可能要求商业授权。公开发布二进制或商业分发前，请确认其许可与 GPL-3.0 的兼容性；如不兼容，可替换为 Apache-2.0 的 Media3/ExoPlayer RTSP 实现。
+- 不要提交 `wifi/`、`.bak`、备份 `.zip`、聊天数据库、签名文件或真实网络数据。
+
 ## 免责声明
 
 本工具仅用于合法的网络学习、维护和自有设备调试。请勿用于未授权的网络扫描、接入或攻击行为。
