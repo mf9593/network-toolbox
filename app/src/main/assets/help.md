@@ -33,11 +33,11 @@ Android 11 及以上首次使用会提示授予“所有文件访问权限”。
 
 - 网络工具箱自己导出的 JSON / TXT
 - 加密的旧版 title/content JSON
-- MIUI、部分安卓手机的 `.bak` 备份
+- MIUI、部分安卓手机的 .bak 备份
 - vivo 设置备份
 - ZIP 压缩包（包括 ZIP64 / MIUI 备份）
 - wpa_supplicant 配置
-- 文本化的 `wifiConfig` 数据库
+- 文本化的 wifiConfig 数据库
 
 选择文件后会显示导入结果。导入数量按 SSID 和密码记录统计，已有相同 SSID 的数据会合并。
 
@@ -57,9 +57,9 @@ Android 11 及以上首次使用会提示授予“所有文件访问权限”。
 
 ### WiFi 连接提示缺少 WiFi 连接权限怎么办？
 
-如果提示中包含 **android.permission.CHANGE_NETWORK_STATE** 或 **android.permission.WRITE_SETTINGS**，说明系统在调用 WiFi 连接 API 时没有找到 `CHANGE_NETWORK_STATE` 声明。这个权限是普通权限，不需要用户在设置里手动点“允许”，但必须由 APK 的 AndroidManifest 声明。
+如果提示中包含 **android.permission.CHANGE_NETWORK_STATE** 或 **android.permission.WRITE_SETTINGS**，说明系统在调用 WiFi 连接 API 时没有找到 CHANGE_NETWORK_STATE 声明。这个权限是普通权限，不需要用户在设置里手动点“允许”，但必须由 APK 的 AndroidManifest 声明。
 
-**旧版 APK 缺少该声明，安装最新版本即可。** 应用并不需要 `WRITE_SETTINGS`，系统提示的是“二者之一”，当前版本使用 `CHANGE_NETWORK_STATE`。
+**旧版 APK 缺少该声明，安装最新版本即可。** 应用并不需要 WRITE_SETTINGS，系统提示的是“二者之一”，当前版本使用 CHANGE_NETWORK_STATE。
 
 安装后如果仍然失败，请检查：
 
@@ -90,7 +90,7 @@ Android 11 及以上首次使用会提示授予“所有文件访问权限”。
 - 设备防火墙禁止 ICMP 或端口探测
 - 设备处于另一个网段
 - Android 系统限制读取 ARP / NDP 表
-- IPv4 当前只完整扫描本机所在 `/24`，跨网段设备不会被自动扫描
+- IPv4 当前只完整扫描本机所在 /24，跨网段设备不会被自动扫描
 
 ### 为什么设备 MAC 显示“未获取”？
 
