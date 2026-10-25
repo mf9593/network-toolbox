@@ -990,17 +990,46 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         if (!isAdded()) return;
         String reason = message == null ? "连接失败" : message;
         if (reason.contains("权限") || reason.contains("定位")) {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("WiFi 连接失败")
-                    .setMessage(reason + "\n\n当前权限状态：\n" + permissionDiagnostics())
-                    .setPositiveButton("打开权限设置", (dialog, which) -> openAppSettings())
-                    .setNeutralButton("系统 WiFi 设置", (dialog, which) -> openWifiSettings())
-                    .setNegativeButton("关闭", null)
-                    .show();
+            // 底部弹窗展示失败原因与权限状态
+            showWifiFailSheet(reason);
         } else {
             showToast(reason);
         }
         updateCurrentConnection();
+    }
+
+    /** 连接失败底部弹窗：展示原因、权限诊断，并提供跳转入口 */
+    private void showWifiFailSheet(String reason) {
+        try {
+            BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+            View view = LayoutInflater.from(requireContext())
+                    .inflate(R.layout.bottomsheet_wifi_fail, null);
+            dialog.setContentView(view);
+
+            TextView reasonText = view.findViewById(R.id.failReason);
+            TextView diagnostics = view.findViewById(R.id.failDiagnostics);
+            MaterialButton openPermission = view.findViewById(R.id.openPermissionButton);
+            MaterialButton openWifiSettings = view.findViewById(R.id.openWifiSettingsButton);
+            MaterialButton closeButton = view.findViewById(R.id.closeButton);
+
+            reasonText.setText(reason);
+            diagnostics.setText("当前权限状态：\n" + permissionDiagnostics());
+
+            openPermission.setOnClickListener(v -> {
+                dialog.dismiss();
+                openAppSettings();
+            });
+            openWifiSettings.setOnClickListener(v -> {
+                dialog.dismiss();
+                openWifiSettings();
+            });
+            closeButton.setOnClickListener(v -> dialog.dismiss());
+
+            dialog.show();
+        } catch (Exception e) {
+            // 兜底：底部弹窗失败时退回 Toast
+            showToast(reason);
+        }
     }
 
     private String permissionDiagnostics() {

@@ -21,6 +21,8 @@ dependencyResolutionManagement {
     repositories {
         google()           // Google Maven 仓库 (AndroidX, Material 等)
         mavenCentral()     // Maven Central 仓库
+        // 阿里云公共仓库：代理 jcenter 等源，加速国内访问
+        maven { url 'https://maven.aliyun.com/repository/public' }
         maven { url 'https://jitpack.io' }  // JitPack 仓库 (GitHub 项目依赖)
     }
 }

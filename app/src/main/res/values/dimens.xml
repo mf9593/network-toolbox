@@ -20,7 +20,7 @@
     <dimen name="list_item_min_height">56dp</dimen>
     <dimen name="toolbar_height">56dp</dimen>
     <dimen name="bottom_nav_height">64dp</dimen>
-    <dimen name="bottom_nav_min_height">80dp</dimen>
+    <dimen name="bottom_nav_min_height">56dp</dimen>
     <dimen name="hero_height_min">132dp</dimen>
     <dimen name="metric_height">72dp</dimen>
     <dimen name="web_home_top_padding">88dp</dimen>

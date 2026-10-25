@@ -27,7 +27,7 @@
 
 ## 第三方
 
-应用使用 AndroidX、Material Components、OkHttp、Jsoup、Gson、ZXing、AndroidSVG、Jaxen、Media3 ExoPlayer 等开源组件。各组件的许可和用途见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+应用使用 AndroidX、Material Components、OkHttp、Jsoup、Gson、ZXing、AndroidSVG、Jaxen、libmpv 等开源组件。各组件的许可和用途见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 联系
 

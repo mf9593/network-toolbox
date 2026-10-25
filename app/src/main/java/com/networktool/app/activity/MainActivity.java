@@ -3,11 +3,19 @@ package com.networktool.app.activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.MenuItem;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -40,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initViews();
+        setupEdgeToEdge();
         setupViewPager();
         setupBottomNavigation();
         applyThemeColors();
@@ -73,6 +82,41 @@ public class MainActivity extends AppCompatActivity {
                     .setNegativeButton("拒绝", null)
                     .show();
         });
+    }
+
+    /**
+     * 底栏沉浸：内容延伸到系统手势区域，底部导航背景覆盖系统导航栏，避免多出一条白色系统栏。
+     */
+    private void setupEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        boolean dark = ThemeManager.isDarkMode(this);
+        controller.setAppearanceLightStatusBars(!dark);
+        controller.setAppearanceLightNavigationBars(!dark);
+
+        View root = findViewById(android.R.id.content);
+        if (root == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
+            Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+            // 顶部给状态栏留出空间；底部导航栏自己延伸到手势区域
+            view.setPadding(0, bars.top, 0, 0);
+            if (bottomNavigationView != null) {
+                // 底部不留边距，让导航栏与系统手势小白条重叠
+                bottomNavigationView.setPadding(
+                        bottomNavigationView.getPaddingLeft(),
+                        bottomNavigationView.getPaddingTop(),
+                        bottomNavigationView.getPaddingRight(),
+                        0);
+            }
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(root);
     }
 
     private void initViews() {

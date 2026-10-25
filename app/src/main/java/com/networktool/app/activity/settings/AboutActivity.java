@@ -1,6 +1,5 @@
 package com.networktool.app.activity.settings;
 
-import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.method.LinkMovementMethod;
@@ -18,8 +17,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.networktool.app.BuildConfig;
 import com.networktool.app.NetworkToolApplication;
 import com.networktool.app.R;
-import com.networktool.app.activity.tool.WebViewActivity;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.UrlOpenHelper;
 import com.networktool.app.util.UpdateChecker;
 
 public class AboutActivity extends AppCompatActivity {
@@ -84,7 +83,7 @@ public class AboutActivity extends AppCompatActivity {
 
         // 开源工具引用 - 点击跳转内置浏览器
         TextView openSourceToolsText = findViewById(R.id.openSourceToolsText);
-        openSourceToolsText.setText("Apache License 2.0\nAndroidX · Material Components · Media3 · OkHttp · Jsoup · Gson · ZXing");
+        openSourceToolsText.setText("Apache License 2.0\nAndroidX · Material Components · ExoPlayer · OkHttp · Jsoup · Gson · ZXing");
         openSourceToolsText.setOnClickListener(v -> showOpenSourceInfoDialog());
 
         TextView sponsorListText = findViewById(R.id.sponsorListText);
@@ -107,7 +106,9 @@ public class AboutActivity extends AppCompatActivity {
                         + "• ZXing（Apache-2.0）\n"
                         + "• AndroidSVG（Apache-2.0）\n"
                         + "• Jaxen（BSD 风格）\n"
-                        + "• Media3 ExoPlayer RTSP（Apache-2.0）\n\n"
+                        + "• ExoPlayer 播放内核（Apache-2.0）\n"
+                        + "• ExoPlayer UI 组件（Apache-2.0）\n\n"
+                        + "注意：ExoPlayer 采用 Apache-2.0 许可，与项目方向一致。\n"
                         + "完整许可见项目根目录 LICENSE 和 THIRD_PARTY_NOTICES.md。")
                 .setPositiveButton("知道了", null)
                 .show();
@@ -118,10 +119,8 @@ public class AboutActivity extends AppCompatActivity {
             if (!url.startsWith("http://") && !url.startsWith("https://")) {
                 url = "https://" + url;
             }
-            Intent intent = new Intent(this, WebViewActivity.class);
-            intent.putExtra(WebViewActivity.EXTRA_URL, url);
-            intent.putExtra(WebViewActivity.EXTRA_TITLE, title);
-            startActivity(intent);
+            // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+            UrlOpenHelper.open(this, url, title);
         } catch (Exception e) {
             Toast.makeText(this, "无法打开链接", Toast.LENGTH_SHORT).show();
         }

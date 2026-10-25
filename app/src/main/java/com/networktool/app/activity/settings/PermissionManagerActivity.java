@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.view.MenuItem;
 import android.view.View;
@@ -35,6 +36,9 @@ import java.util.List;
 public class PermissionManagerActivity extends AppCompatActivity {
 
     private static final int REQUEST_PERMISSION_CODE = 100;
+    /** 所有文件访问权限（Android 11+ 的 MANAGE_EXTERNAL_STORAGE，只能跳系统页手动开） */
+    private static final String ALL_FILES_ACCESS = "android.permission.MANAGE_EXTERNAL_STORAGE";
+    private static final int REQUEST_ALL_FILES_CODE = 102;
     private static final int REQUEST_INSTALL_CODE = 101;
 
     private RecyclerView recyclerView;
@@ -110,6 +114,15 @@ public class PermissionManagerActivity extends AppCompatActivity {
 
     private List<PermissionItem> buildPermissionList() {
         List<PermissionItem> list = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            list.add(new PermissionItem(
+                    "所有文件访问权限",
+                    "读取整机存储（含根目录 /storage/emulated/0），导入直播源 / WiFi 配置需要",
+                    "无法读取根目录下的列表文件、无法导出/导入到任意目录",
+                    ALL_FILES_ACCESS,
+                    R.drawable.ic_archive
+            ));
+        }
         list.add(new PermissionItem(
                 "存储",
                 "读取和写入设备存储空间",
@@ -187,6 +200,11 @@ public class PermissionManagerActivity extends AppCompatActivity {
                 item.isGranted = true;
                 continue;
             }
+            if (ALL_FILES_ACCESS.equals(item.manifestPermission)) {
+                item.isGranted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        && Environment.isExternalStorageManager();
+                continue;
+            }
             if (Manifest.permission.REQUEST_INSTALL_PACKAGES.equals(item.manifestPermission)) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     item.isGranted = getPackageManager().canRequestPackageInstalls();
@@ -209,6 +227,11 @@ public class PermissionManagerActivity extends AppCompatActivity {
         String perm = item.manifestPermission;
         if (perm == null) return;
 
+        if (ALL_FILES_ACCESS.equals(perm)) {
+            openAllFilesAccessPage();
+            return;
+        }
+
         if (Manifest.permission.REQUEST_INSTALL_PACKAGES.equals(perm)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (getPackageManager().canRequestPackageInstalls()) {
@@ -224,6 +247,23 @@ public class PermissionManagerActivity extends AppCompatActivity {
         }
 
         ActivityCompat.requestPermissions(this, new String[]{perm}, REQUEST_PERMISSION_CODE);
+    }
+
+    /** 跳到系统「所有文件访问权限」页面，用户手动点开关 */
+    private void openAllFilesAccessPage() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            openPermissionSettings();
+            return;
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivityForResult(intent, REQUEST_ALL_FILES_CODE);
+            Toast.makeText(this, "请打开「允许访问所有文件」", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            // 部分机型没有这个页面，退回到应用详情页
+            openPermissionSettings();
+        }
     }
 
     private void openPermissionSettings() {
@@ -245,7 +285,7 @@ public class PermissionManagerActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_INSTALL_CODE) {
+        if (requestCode == REQUEST_INSTALL_CODE || requestCode == REQUEST_ALL_FILES_CODE) {
             refreshGrantStatus(adapter.items);
             adapter.notifyDataSetChanged();
         }
@@ -312,6 +352,16 @@ public class PermissionManagerActivity extends AppCompatActivity {
             holder.tvStatus.setTextColor(statusColor);
             holder.tvStatus.setText(item.isGranted ? "已授权" : "未授权");
 
+            if (ALL_FILES_ACCESS.equals(item.manifestPermission)) {
+                // 系统页开关式权限：无论有没有授权，都跳系统设置页让用户自己点
+                holder.btnAction.setText("去设置");
+                holder.btnAction.setTextColor(accentColor);
+                holder.btnAction.setBackgroundTintList(
+                        android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT));
+                holder.btnAction.setEnabled(true);
+                holder.btnAction.setOnClickListener(v -> openAllFilesAccessPage());
+                return;
+            }
             if (item.isGranted) {
                 holder.btnAction.setText("权限设置");
                 holder.btnAction.setTextColor(accentColor);

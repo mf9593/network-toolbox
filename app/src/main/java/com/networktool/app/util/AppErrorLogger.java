@@ -10,6 +10,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
@@ -371,6 +372,118 @@ public class AppErrorLogger {
         } catch (Exception e) {
             Log.e(TAG, "清除错误日志失败", e);
         }
+    }
+
+    /**
+     * 获取崩溃日志目录（files/crashes）
+     */
+    private static File getCrashLogDir() {
+        Context context = NetworkToolApplication.getInstance();
+        if (context == null) return null;
+        return new File(context.getFilesDir(), "crashes");
+    }
+
+    /**
+     * 读取全部持久化崩溃日志内容（新的在前）
+     *
+     * @return 崩溃日志拼接文本；无记录时返回提示语
+     */
+    public static String getCrashLogs() {
+        try {
+            File crashDir = getCrashLogDir();
+            StringBuilder sb = new StringBuilder();
+
+            // 优先展示播放器操作面包屑（native 崩溃回溯用）
+            if (crashDir != null && crashDir.exists()) {
+                File bread = new File(crashDir, "ijk_breadcrumb.log");
+                if (bread.isFile() && bread.length() > 0) {
+                    sb.append("【播放器操作面包屑 ijk_breadcrumb.log】\n");
+                    sb.append("（native 崩溃回溯用：最后一条即崩溃前最后执行的步骤）\n");
+                    sb.append("------------------------------------------------\n");
+                    sb.append(readFileText(bread)).append("\n\n");
+                }
+            }
+
+            if (crashDir == null || !crashDir.exists()) {
+                if (sb.length() == 0) return "暂无崩溃日志记录。";
+                return sb.toString();
+            }
+            File[] files = crashDir.listFiles((dir, name) ->
+                    name != null && name.startsWith("crash_") && name.endsWith(".log"));
+            if (files == null || files.length == 0) {
+                if (sb.length() == 0) return "暂无崩溃日志记录。";
+                return sb.toString();
+            }
+            // 按文件名倒序（文件名含时间戳，倒序即最新的在前）
+            java.util.Arrays.sort(files, (a, b) -> b.getName().compareTo(a.getName()));
+
+            for (int i = 0; i < files.length; i++) {
+                sb.append("【崩溃记录 ").append(i + 1).append(" / ").append(files.length)
+                  .append("】文件: ").append(files[i].getName()).append("\n");
+                sb.append("------------------------------------------------\n");
+                sb.append(readFileText(files[i])).append("\n\n");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "读取崩溃日志失败", e);
+            return "读取崩溃日志失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 崩溃记录条数
+     */
+    public static int getCrashLogCount() {
+        try {
+            File crashDir = getCrashLogDir();
+            if (crashDir == null || !crashDir.exists()) return 0;
+            File[] files = crashDir.listFiles((dir, name) ->
+                    name != null && name.startsWith("crash_") && name.endsWith(".log"));
+            return files == null ? 0 : files.length;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 清除全部崩溃日志
+     *
+     * @return 清除的文件数
+     */
+    public static int clearCrashLogs() {
+        try {
+            File crashDir = getCrashLogDir();
+            if (crashDir == null || !crashDir.exists()) return 0;
+            // 删除崩溃记录和播放器面包屑
+            File[] files = crashDir.listFiles((dir, name) ->
+                    name != null && name.endsWith(".log"));
+            if (files == null) return 0;
+            int removed = 0;
+            for (File f : files) {
+                if (f.delete()) removed++;
+            }
+            Log.i(TAG, "已清除崩溃日志 " + removed + " 条");
+            return removed;
+        } catch (Exception e) {
+            Log.e(TAG, "清除崩溃日志失败", e);
+            return 0;
+        }
+    }
+
+    /**
+     * 读取文本文件内容
+     */
+    private static String readFileText(File file) {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+        } catch (IOException e) {
+            sb.append("(读取失败: ").append(e.getMessage()).append(")");
+        }
+        return sb.toString();
     }
 
     /**

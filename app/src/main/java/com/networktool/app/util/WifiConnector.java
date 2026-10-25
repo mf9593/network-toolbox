@@ -2,7 +2,10 @@ package com.networktool.app.util;
 
 import android.annotation.SuppressLint;
 import android.Manifest;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
@@ -12,7 +15,7 @@ import android.net.NetworkRequest;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.net.wifi.WifiNetworkSpecifier;
+import android.net.wifi.WifiNetworkSuggestion;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,8 +29,13 @@ import java.util.Locale;
 /**
  * WiFi 连接器
  *
- * Android 10+ 使用系统 WifiNetworkSpecifier + ConnectivityManager.requestNetwork，
- * 会弹出系统连接确认窗口；Android 9 及以下使用 WifiManager 旧 API。
+ * Android 10+ 使用 WifiNetworkSuggestion —— 把网络交给系统真正连接，
+ * 可正常上网、获取 IP、成为默认网络（状态栏显示已连接 WiFi）。
+ * 不使用 WifiNetworkSpecifier：它只建立「临时/点对点」网络，系统会提示
+ * 「临时 WLAN 网络」，且无公网路由、不成为默认网络。
+ *
+ * 首次连接系统会弹通知/弹窗，需用户点「连接」确认；之后系统自动连接。
+ * Android 9 及以下使用 WifiManager 旧 API。
  */
 public class WifiConnector {
 
@@ -54,14 +62,20 @@ public class WifiConnector {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private ConnectivityManager.NetworkCallback activeCallback;
+    private BroadcastReceiver postConnectionReceiver;
+    private Runnable connectionPollRunnable;
     private Callback callback;
     private String connectingSsid;
     private boolean connecting;
     private boolean connected;
 
+    /** Suggestion 连接由系统驱动、非即时，等待时间放宽到 30 秒 */
+    private static final long CONNECT_TIMEOUT_MS = 30000;
+
     private final Runnable timeoutRunnable = () -> {
         if (connecting) {
-            fail("连接超时，请检查密码或稍后重试");
+            fail("连接超时，可能是密码错误或系统未弹出确认。请到系统 WiFi 设置中手动连接，"
+                    + "或检查「Wi-Fi 控制」权限是否已开启");
         }
     };
 
@@ -266,62 +280,189 @@ public class WifiConnector {
         }
     }
 
+    /**
+     * Android 10+ 连接：使用 WifiNetworkSuggestion。
+     *
+     * 说明：不能用 WifiNetworkSpecifier——它只会建立一个「临时/点对点」本地网络，系统会提示
+     * 「临时 WLAN 网络」，且默认不带互联网路由、拿不到路由器分配的 IP、也不会成为默认网络
+     *（导致仍在用移动数据、状态栏不显示已连接）。
+     *
+     * WifiNetworkSuggestion 把网络交给系统真正连接：可正常上网、获取 IP、成为默认网络，
+     * 状态栏会显示已连接 WiFi。首次连接系统会弹通知/弹窗，需用户点「连接」确认；
+     * 之后系统会在该网络在范围时自动连接。
+     *
+     * 连接成功的判定：监听默认网络回调，确认默认网络是 WiFi 且 SSID 匹配。
+     */
     @RequiresApi(Build.VERSION_CODES.Q)
     private void connectModern(String ssid, int type, String password) {
         try {
-            WifiNetworkSpecifier.Builder builder = new WifiNetworkSpecifier.Builder().setSsid(ssid);
+            if (wifiManager == null) {
+                fail("当前设备不支持 WiFi 管理");
+                return;
+            }
+            if (connectivityManager == null) {
+                fail("当前设备不支持网络连接管理");
+                return;
+            }
+
+            // ① 添加建议（先删后加，处理 DUPLICATE）
+            int status = persistSuggestion(ssid, type, password);
+            if (status != WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
+                fail("系统拒绝添加 WiFi 建议（状态码 " + status + "）。"
+                        + "部分机型需在「设置→应用→特殊权限→Wi-Fi 控制」中允许本应用");
+                return;
+            }
+
+            // ② 若当前已连上目标 SSID（如系统已自动连接），直接判定成功
+            if (isCurrentlyConnectedTo(ssid)) {
+                connecting = false;
+                connected = true;
+                mainHandler.removeCallbacks(timeoutRunnable);
+                notifyConnected(ssid);
+                return;
+            }
+
+            // ③ POST_CONNECTION：系统连到建议网络时的广播，作为快速确认
+            registerPostConnectionReceiver(ssid);
+
+            // ④ 轮询 getConnectionInfo().getSSID() 判定真连上。
+            //    不能用 registerDefaultNetworkCallback——Suggestion 连的 WiFi 未通过互联网
+            //    校验前不会成为默认网络，回调不触发会导致误报超时。
+            final long deadline = System.currentTimeMillis() + CONNECT_TIMEOUT_MS;
+            connectionPollRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!connecting) return;
+                    if (isCurrentlyConnectedTo(ssid)) {
+                        connecting = false;
+                        connected = true;
+                        notifyConnected(ssid);
+                        return;
+                    }
+                    if (System.currentTimeMillis() >= deadline) {
+                        fail("连接超时。系统已保存该网络，可能需要你在通知栏点「连接」确认，"
+                                + "或到系统 WiFi 设置中手动连接。若一直失败，请检查"
+                                + "「设置→应用→特殊权限→Wi-Fi 控制」是否允许本应用");
+                        return;
+                    }
+                    mainHandler.postDelayed(this, 1000);
+                }
+            };
+            mainHandler.postDelayed(connectionPollRunnable, 1000);
+            mainHandler.removeCallbacks(timeoutRunnable);
+            mainHandler.postDelayed(timeoutRunnable, CONNECT_TIMEOUT_MS);
+        } catch (SecurityException e) {
+            fail("缺少 WiFi 连接权限：" + safeMessage(e)
+                    + "。请检查「附近设备/位置信息」权限和定位开关");
+        } catch (Exception e) {
+            fail("发起连接失败：" + safeMessage(e));
+        }
+    }
+
+    /**
+     * 读取当前 WiFi 连接的 SSID，判断是否已连到目标网络。
+     * 这是最可靠的「是否真连上」信号，比默认网络回调准确。
+     */
+    @SuppressLint("MissingPermission")
+    private boolean isCurrentlyConnectedTo(String ssid) {
+        if (wifiManager == null || ssid == null) return false;
+        try {
+            WifiInfo info = wifiManager.getConnectionInfo();
+            if (info == null) return false;
+            String current = info.getSSID();
+            if (current != null && current.startsWith("\"") && current.endsWith("\"")
+                    && current.length() >= 2) {
+                current = current.substring(1, current.length() - 1);
+            }
+            return ssid.equals(current);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 连接成功统一回调 */
+    private void notifyConnected(String ssid) {
+        mainHandler.removeCallbacks(timeoutRunnable);
+        if (connectionPollRunnable != null) {
+            mainHandler.removeCallbacks(connectionPollRunnable);
+            connectionPollRunnable = null;
+        }
+        Callback cb = callback;
+        if (cb != null) {
+            mainHandler.post(() -> cb.onConnected(ssid));
+        }
+    }
+
+    /**
+     * 把网络以 WifiNetworkSuggestion 形式「存底」，交给系统记住并择机自动连接。
+     * 改过密码需先 remove 再 add，否则返回 DUPLICATE 不会更新。
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private int persistSuggestion(String ssid, int type, String password) {
+        try {
+            WifiNetworkSuggestion.Builder builder = new WifiNetworkSuggestion.Builder()
+                    .setSsid(ssid)
+                    .setIsAppInteractionRequired(false);
             if (type == SECURITY_WPA3) {
                 builder.setWpa3Passphrase(password);
             } else if (type == SECURITY_WPA2) {
                 builder.setWpa2Passphrase(password);
             }
+            WifiNetworkSuggestion suggestion = builder.build();
 
-            NetworkRequest request = new NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .setNetworkSpecifier(builder.build())
-                    .build();
+            // 先移除该 App 的全部旧建议，避免叠加/过期配置
+            List<WifiNetworkSuggestion> existing = wifiManager.getNetworkSuggestions();
+            if (existing != null && !existing.isEmpty()) {
+                wifiManager.removeNetworkSuggestions(existing);
+            }
 
-            activeCallback = new ConnectivityManager.NetworkCallback() {
+            java.util.List<WifiNetworkSuggestion> single =
+                    java.util.Collections.singletonList(suggestion);
+            int status = wifiManager.addNetworkSuggestions(single);
+            if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE) {
+                wifiManager.removeNetworkSuggestions(single);
+                status = wifiManager.addNetworkSuggestions(single);
+            }
+            return status;
+        } catch (SecurityException se) {
+            // 权限被收回（用户在系统里拒绝过），返回非 0 表示失败
+            return -1;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 监听系统「已连到建议网络」的广播，作为连接成功的二次确认。
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private void registerPostConnectionReceiver(String ssid) {
+        try {
+            if (postConnectionReceiver != null) return;
+            final String target = ssid;
+            postConnectionReceiver = new BroadcastReceiver() {
                 @Override
-                public void onAvailable(Network network) {
-                    if (connected) return;
-                    mainHandler.removeCallbacks(timeoutRunnable);
-                    connecting = false;
-                    connected = true;
-                    Callback cb = callback;
-                    if (cb != null) {
-                        mainHandler.post(() -> cb.onConnected(ssid));
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) return;
+                    WifiInfo info = intent.getParcelableExtra(
+                            WifiManager.EXTRA_WIFI_INFO);
+                    String connectedSsid = info != null ? info.getSSID() : null;
+                    if (connectedSsid != null && connectedSsid.startsWith("\"")
+                            && connectedSsid.endsWith("\"") && connectedSsid.length() >= 2) {
+                        connectedSsid = connectedSsid.substring(1, connectedSsid.length() - 1);
                     }
-                }
-
-                @Override
-                public void onUnavailable() {
-                    mainHandler.post(() -> fail("连接失败或已取消，请检查密码"));
-                }
-
-                @Override
-                public void onLost(Network network) {
-                    if (connecting) {
-                        mainHandler.post(() -> fail("连接失败，网络不可用"));
-                    } else if (connected) {
-                        connected = false;
-                        releaseActiveRequest();
+                    if (target.equals(connectedSsid)) {
+                        Callback cb = callback;
+                        if (cb != null) {
+                            mainHandler.post(() -> cb.onConnected(target));
+                        }
                     }
                 }
             };
-
-            if (connectivityManager == null) {
-                fail("当前设备不支持网络连接管理");
-                return;
-            }
-            connectivityManager.requestNetwork(request, activeCallback);
-            mainHandler.removeCallbacks(timeoutRunnable);
-            mainHandler.postDelayed(timeoutRunnable, 60000);
-        } catch (SecurityException e) {
-            fail("缺少 WiFi 连接权限：" + safeMessage(e)
-                    + "。请检查“附近设备/位置信息”权限和定位开关");
-        } catch (Exception e) {
-            fail("发起连接失败：" + safeMessage(e));
+            IntentFilter filter = new IntentFilter(
+                    WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION);
+            appContext.registerReceiver(postConnectionReceiver, filter);
+        } catch (Exception ignored) {
         }
     }
 
@@ -445,6 +586,10 @@ public class WifiConnector {
 
     private void releaseActiveRequest() {
         mainHandler.removeCallbacks(timeoutRunnable);
+        if (connectionPollRunnable != null) {
+            mainHandler.removeCallbacks(connectionPollRunnable);
+            connectionPollRunnable = null;
+        }
         if (activeCallback != null && connectivityManager != null) {
             try {
                 connectivityManager.unregisterNetworkCallback(activeCallback);
@@ -452,6 +597,23 @@ public class WifiConnector {
             }
         }
         activeCallback = null;
+
+        // 解绑进程网络，避免断开后 App 流量仍被钉在已失效的 WiFi 上
+        if (connectivityManager != null) {
+            try {
+                connectivityManager.bindProcessToNetwork(null);
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 注销建议连接广播
+        if (postConnectionReceiver != null) {
+            try {
+                appContext.unregisterReceiver(postConnectionReceiver);
+            } catch (Exception ignored) {
+            }
+            postConnectionReceiver = null;
+        }
     }
 
     private String safeMessage(Exception e) {

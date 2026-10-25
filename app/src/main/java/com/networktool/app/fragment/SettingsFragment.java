@@ -22,16 +22,17 @@ import com.networktool.app.activity.settings.DeviceInfoActivity;
 import com.networktool.app.activity.settings.HelpActivity;
 import com.networktool.app.activity.settings.PermissionManagerActivity;
 import com.networktool.app.activity.settings.PrivacyPolicyActivity;
+import com.networktool.app.activity.settings.RuntimeLogActivity;
 import com.networktool.app.activity.settings.ThemeActivity;
 import com.networktool.app.activity.settings.UpdateLogActivity;
 import com.networktool.app.activity.settings.UserAgreementActivity;
-import com.networktool.app.activity.tool.WebViewActivity;
 import com.networktool.app.adapter.SettingAdapter;
 import com.networktool.app.BuildConfig;
 import com.networktool.app.model.SettingItem;
 import com.networktool.app.model.SettingSection;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.UpdateChecker;
+import com.networktool.app.util.UrlOpenHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -83,6 +84,12 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
         sections.add(new SettingSection("外观", appearanceItems));
 
         List<SettingItem> systemItems = new ArrayList<>();
+        systemItems.add(new SettingItem("网址跳转方式",
+                UrlOpenHelper.MODE_INTERNAL.equals(UrlOpenHelper.getMode(requireContext()))
+                        ? "使用内置浏览器打开链接" : "使用系统默认浏览器打开链接",
+                R.drawable.ic_browser, R.drawable.ic_arrow_forward, this::onUrlOpenMode));
+        systemItems.add(new SettingItem("运行日志", "查看崩溃日志与本次运行报文",
+                R.drawable.ic_update_log, R.drawable.ic_arrow_forward, this::onRuntimeLog));
         systemItems.add(new SettingItem("设备信息", "型号、系统、版本与硬件信息",
                 R.drawable.ic_device_info, R.drawable.ic_arrow_forward, this::onDeviceInfo));
         systemItems.add(new SettingItem("清理浏览器缓存", "释放内置浏览器占用空间",
@@ -122,6 +129,31 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
 
     private void onClearBrowserCache(SettingItem setting) {
         startActivity(new Intent(requireContext(), ClearBrowserCacheActivity.class));
+    }
+
+    /** 网址跳转方式：内置浏览器 / 系统默认浏览器 */
+    private void onUrlOpenMode(SettingItem setting) {
+        if (!isAdded()) return;
+        String current = UrlOpenHelper.getMode(requireContext());
+        String[] labels = {"内置浏览器", "默认浏览器"};
+        String[] values = {UrlOpenHelper.MODE_INTERNAL, UrlOpenHelper.MODE_EXTERNAL};
+        int checked = UrlOpenHelper.MODE_EXTERNAL.equals(current) ? 1 : 0;
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("网址跳转方式")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    UrlOpenHelper.setMode(requireContext(), values[which]);
+                    dialog.dismiss();
+                    // 刷新副标题
+                    setupSettings();
+                    Toast.makeText(requireContext(), "已切换为" + labels[which], Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 运行日志：崩溃日志（持久化）+ 本次运行报文（内存） */
+    private void onRuntimeLog(SettingItem setting) {
+        startActivity(new Intent(requireContext(), RuntimeLogActivity.class));
     }
 
     private void onTheme(SettingItem setting) {
@@ -203,10 +235,8 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
     private void openInWebView(String url, String title) {
         try {
             if (url == null || url.isEmpty()) return;
-            Intent intent = new Intent(requireContext(), WebViewActivity.class);
-            intent.putExtra(WebViewActivity.EXTRA_URL, url);
-            intent.putExtra(WebViewActivity.EXTRA_TITLE, title);
-            startActivity(intent);
+            // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+            UrlOpenHelper.open(requireContext(), url, title);
         } catch (Exception e) {
             showToast("无法打开链接");
         }

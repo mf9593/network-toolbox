@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiFi 连接失败底部弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_5"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/space_5"
+    android:paddingBottom="@dimen/space_5">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="?attr/colorOutlineVariant" />
+
+    <TextView
+        android:id="@+id/failTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:text="WiFi 连接失败"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+
+    <TextView
+        android:id="@+id/failReason"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="--"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
+
+    <TextView
+        android:id="@+id/failDiagnostics"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        android:fontFamily="monospace"
+        android:text="当前权限状态："
+        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/openPermissionButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_5"
+        android:text="打开权限设置"
+        app:icon="@drawable/ic_lock" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/openWifiSettingsButton"
+        style="@style/Widget.NetworkTool.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="系统 WiFi 设置"
+        app:icon="@drawable/ic_wifi" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/closeButton"
+        style="@style/Widget.NetworkTool.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="关闭" />
+
+</LinearLayout>

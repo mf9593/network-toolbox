@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 喇叭 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,9L4,9L4,15L3,15L3,9Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4,9L7,9L12,4.5L12,19.5L7,15L4,15Z" />
+    <!-- 静音叉 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20.6,8.5L19.5,7.4L16.9,10L14.3,7.4L13.2,8.5L15.8,11.1L13.2,13.7L14.3,14.8L16.9,12.2L19.5,14.8L20.6,13.7L18,11.1Z" />
+</vector>

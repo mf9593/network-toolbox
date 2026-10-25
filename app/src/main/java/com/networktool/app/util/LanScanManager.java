@@ -64,20 +64,22 @@ public class LanScanManager {
     public static final long DISCOVERY_TIME_STANDARD = 5;
     public static final long DISCOVERY_TIME_SLOW = 10;
     
-    // 设备名称优先级（数字越小优先级越高）
-    // ONVIF/SADP > 路由器 > SSDP > mDNS/NetBIOS/ARP/UDP广播 > HTTP/Ping
-    public static final int PRIORITY_ONVIF = 1;
-    public static final int PRIORITY_SADP = 2;
+    // 设备名称与排序优先级（数字越小优先级越高，越靠前显示）
+    // mDNS > NetBIOS > 路由器 > SADP > SSDP > ARP/UDP广播 > HTTP/Ping > ONVIF
+    // 说明：mDNS 由设备自身广播、名称最准确，故置顶；
+    //      ONVIF 通常返回「【ONVIF】摄像头」这类占位标题，故置底，仅作兜底。
+    public static final int PRIORITY_MDNS = 1;
+    public static final int PRIORITY_NETBIOS = 2;
     public static final int PRIORITY_ROUTER = 3;
-    public static final int PRIORITY_SSDP = 4;
-    public static final int PRIORITY_MDNS = 5;
-    public static final int PRIORITY_NETBIOS = 6;
-    public static final int PRIORITY_ARP = 7;
-    public static final int PRIORITY_UDP = 8;
-    public static final int PRIORITY_HTTP = 9;
-    public static final int PRIORITY_PING = 10;
-    public static final int PRIORITY_IPV6 = 11;
-    public static final int PRIORITY_SERVICE = 12;
+    public static final int PRIORITY_SADP = 4;
+    public static final int PRIORITY_SSDP = 5;
+    public static final int PRIORITY_ARP = 6;
+    public static final int PRIORITY_UDP = 7;
+    public static final int PRIORITY_HTTP = 8;
+    public static final int PRIORITY_PING = 9;
+    public static final int PRIORITY_IPV6 = 10;
+    public static final int PRIORITY_SERVICE = 11;
+    public static final int PRIORITY_ONVIF = 12;
 
     private static final java.util.Map<Integer, String> PROTOCOL_LABELS = new java.util.HashMap<>();
     static {
@@ -504,7 +506,9 @@ public class LanScanManager {
                     String label = (title != null && !title.isEmpty())
                             ? title + " on port " + port
                             : "HTTP服务 (端口 " + port + ")";
-                    addDeviceWithPriority(ip, label, DeviceInfo.ICON_HTTP, PRIORITY_HTTP);
+                    // 记录发现该标题所用的 HTTP 端口，供列表展示
+                    addDeviceWithPriority(ip, label, null,
+                            DeviceInfo.ICON_HTTP, PRIORITY_HTTP, null, port);
                     break;
                 }
             }
@@ -535,7 +539,9 @@ public class LanScanManager {
         for (int i = 0; i < ports.length; i++) {
             if (!isScanning) return;
             if (isPortOpen(ip, ports[i], 250)) {
-                addDeviceWithPriority(ip, labels[i], icons[i], PRIORITY_SERVICE);
+                // 记录发现的开放端口，供列表展示
+                addDeviceWithPriority(ip, labels[i], null,
+                        icons[i], PRIORITY_SERVICE, null, ports[i]);
             }
         }
     }
@@ -588,6 +594,15 @@ public class LanScanManager {
                 Document doc = Jsoup.parse(content);
                 String title = doc.title();
                 String server = response.header("Server");
+                // 记录原始 HTML 与解析出的标题，便于核对标题截取是否正确
+                StringBuilder raw = new StringBuilder();
+                raw.append("HTTP ").append(response.code()).append(" ")
+                   .append(response.message()).append("\n");
+                if (server != null) raw.append("Server: ").append(server).append("\n");
+                raw.append("解析出的标题: [").append(title == null ? "" : title).append("]\n");
+                raw.append("响应体(前2000字符):\n")
+                   .append(content.length() > 2000 ? content.substring(0, 2000) : content);
+                DebugLogger.logBroadcast("HTTP", ip + ":" + port, raw.toString());
                 if (title != null && !title.isEmpty()) {
                     return new String[]{title, server};
                 }
@@ -971,8 +986,12 @@ public class LanScanManager {
 
                     // 检查响应中是否包含 ONVIF 设备标识
                     if (responseStr.contains("NetworkVideo") || responseStr.contains("XAddrs")) {
-                        addDeviceWithPriority(senderIp, "【ONVIF】摄像头",
-                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF);
+                        String title = extractOnvifTitle(responseStr);
+                        if (title == null) title = "【ONVIF】摄像头";
+                        // 从 XAddrs 提取 ONVIF 服务端口
+                        Integer onvifPort = extractOnvifPort(responseStr);
+                        addDeviceWithPriority(senderIp, title, null,
+                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF, null, onvifPort);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -1057,8 +1076,11 @@ public class LanScanManager {
                     DebugLogger.logBroadcast("ONVIF_IPv6", senderIp, responseStr);
 
                     if (responseStr.contains("NetworkVideo") || responseStr.contains("XAddrs")) {
-                        addDeviceWithPriority(senderIp, "【ONVIF】摄像头(IPv6)",
-                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF);
+                        String title = extractOnvifTitle(responseStr);
+                        if (title == null) title = "【ONVIF】摄像头(IPv6)";
+                        Integer onvifPort = extractOnvifPort(responseStr);
+                        addDeviceWithPriority(senderIp, title, null,
+                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF, null, onvifPort);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -1357,15 +1379,75 @@ public class LanScanManager {
 
                     String server = extractHeaderValue(responseStr, "Server");
                     String name = server != null ? server : "SSDP设备";
-                    
-                    if (responseStr.contains("Windows")) {
-                        name = "【电脑】Windows设备";
-                    } else if (responseStr.contains("DLNA")) {
-                        name = "【投屏】DLNA设备";
+                    Integer ssdpPort = null;
+                    String upnpSerial = null;
+                    String upnpMac = null;
+
+                    // 抓取 UPnP 设备描述，取友好名/型号/序列号/MAC/端口
+                    String[] desc = fetchUpnpDescription(location);
+                    if (desc != null) {
+                        String friendly = desc[0];
+                        String model = desc[1];
+                        String manufacturer = desc[2];
+                        upnpSerial = desc[3];
+                        upnpMac = desc[4];
+                        try { ssdpPort = Integer.parseInt(desc[5]); } catch (Exception ignored) {}
+
+                        StringBuilder sb = new StringBuilder();
+                        if (friendly != null) sb.append(friendly);
+                        if (model != null && (friendly == null || !friendly.contains(model))) {
+                            if (sb.length() > 0) sb.append(" · ");
+                            sb.append(model);
+                        }
+                        if (sb.length() > 0) {
+                            name = sb.toString();
+                        } else if (manufacturer != null) {
+                            name = manufacturer;
+                        }
                     }
-                    
-                    addDeviceWithPriority(deviceIp != null ? deviceIp : senderIp, name, 
-                        DeviceInfo.ICON_SSDP, PRIORITY_SSDP);
+
+                    if (name.equals(server) || name.equals("SSDP设备")) {
+                        // 描述抓取失败时退回用 Server 头分类
+                        if (responseStr.contains("Windows")) {
+                            name = "【电脑】Windows设备";
+                        } else if (responseStr.contains("DLNA")) {
+                            name = "【投屏】DLNA设备";
+                        } else if (server != null) {
+                            // Server 形如 "Linux/5.0 UPnP/1.0 Product/1.0"，取产品段
+                            String[] parts = server.split("[/]");
+                            name = parts.length >= 3 ? parts[parts.length - 1].trim() : server;
+                        }
+                    }
+
+                    // 从 LOCATION 提取端口作为 HTTP 端口
+                    if (ssdpPort == null) {
+                        try {
+                            int p = location != null ? new java.net.URL(location).getPort() : -1;
+                            ssdpPort = p > 0 ? p : 80;
+                        } catch (Exception ignored) {}
+                    }
+
+                    addDeviceWithPriority(deviceIp != null ? deviceIp : senderIp, name,
+                        null, DeviceInfo.ICON_SSDP, PRIORITY_SSDP, upnpMac, ssdpPort);
+
+                    // 序列号写入描述，方便查看详情
+                    final String serialFinal = upnpSerial;
+                    if (serialFinal != null) {
+                        mainHandler.post(() -> {
+                            for (DeviceInfo d : deviceList) {
+                                if (d.getIp() != null && d.getIp().equals(displayIp)) {
+                                    String old = d.getDescription();
+                                    String serialLine = "序列号: " + serialFinal;
+                                    if (old == null || old.isEmpty()) {
+                                        d.setDescription(serialLine);
+                                    } else if (!old.contains(serialFinal)) {
+                                        d.setDescription(old + "\n" + serialLine);
+                                    }
+                                    break;
+                                }
+                            }
+                        });
+                    }
                 } catch (SocketTimeoutException e) {
                     break;
                 }
@@ -1478,7 +1560,10 @@ public class LanScanManager {
                     String senderIp = response.getAddress().getHostAddress();
                     String hostname = parseMdnsHostname(receiveBuffer, response.getLength());
                     DebugLogger.logDiscovery("mDNS_IPv6", "收到响应", senderIp + " | 主机名=" + (hostname != null ? hostname : "null"));
-                    DebugLogger.logBroadcast("mDNS_IPv6", senderIp, hostname != null ? hostname : "(无主机名)");
+                    DebugLogger.logBroadcast("mDNS_IPv6", senderIp,
+                            "主机名=" + (hostname != null ? hostname : "(无)") + "\n原始报文(长度="
+                                    + response.getLength() + "):\n"
+                                    + RuntimeLogStore.bytesToDisplay(receiveBuffer, response.getLength()));
                     if (hostname != null) {
                         addDeviceWithPriority(senderIp, hostname + "(IPv6)",
                             DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS);
@@ -1532,11 +1617,18 @@ public class LanScanManager {
                     String senderIp = response.getAddress().getHostAddress();
 
                     String hostname = parseMdnsHostname(receiveBuffer, response.getLength());
-                    DebugLogger.logDiscovery("mDNS", "收到响应", senderIp + " | 主机名=" + (hostname != null ? hostname : "null"));
-                    DebugLogger.logBroadcast("mDNS", senderIp, hostname != null ? hostname : "(无主机名)");
+                    Integer mdnsPort = parseMdnsSrvPort(receiveBuffer, response.getLength());
+                    DebugLogger.logDiscovery("mDNS", "收到响应", senderIp + " | 主机名=" + (hostname != null ? hostname : "null")
+                            + (mdnsPort != null ? " | 端口=" + mdnsPort : ""));
+                    // 记录原始 mDNS 报文（十六进制+ASCII），供运行日志核对解析结果
+                    DebugLogger.logBroadcast("mDNS", senderIp,
+                            "主机名=" + (hostname != null ? hostname : "(无)")
+                                    + (mdnsPort != null ? " | 服务端口=" + mdnsPort : "")
+                                    + "\n原始报文(长度=" + response.getLength() + "):\n"
+                                    + RuntimeLogStore.bytesToDisplay(receiveBuffer, response.getLength()));
                     if (hostname != null) {
-                        addDeviceWithPriority(senderIp, hostname,
-                            DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS);
+                        addDeviceWithPriority(senderIp, hostname, null,
+                            DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS, null, mdnsPort);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -1578,6 +1670,59 @@ public class LanScanManager {
     /**
      * 从mDNS响应中提取主机名
      */
+    /**
+     * 从 mDNS 响应中解析 SRV 记录的端口号（type=33）。
+     *
+     * mDNS 服务实例（如 _http._tcp.local）通过 SRV 记录通告监听端口。
+     * 这里遍历所有 answer，找到 SRV 记录后取出端口（RDATA 中第 5-6 字节）。
+     *
+     * @return 端口号；未找到 SRV 记录时返回 null
+     */
+    private Integer parseMdnsSrvPort(byte[] data, int length) {
+        if (length < 12) return null;
+        try {
+            int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
+            if (ancount == 0) return null;
+
+            // 跳过 header + question section
+            int offset = 12;
+            for (int q = 0; q < qdcount && offset < length; q++) {
+                while (offset < length && data[offset] != 0) {
+                    offset += (data[offset] & 0xFF) + 1;
+                }
+                offset += 1 + 4; // 终止符 + QTYPE(2) + QCLASS(2)
+            }
+
+            for (int a = 0; a < ancount && offset < length; a++) {
+                // NAME（可能是压缩指针）
+                if ((data[offset] & 0xC0) == 0xC0) {
+                    offset += 2;
+                } else {
+                    while (offset < length && data[offset] != 0) {
+                        offset += (data[offset] & 0xFF) + 1;
+                    }
+                    offset++;
+                }
+                if (offset + 10 > length) break;
+                int type = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+                offset += 8; // TYPE(2) + CLASS(2) + TTL(4)
+                int rdlength = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+                offset += 2;
+
+                if (type == 33 && rdlength >= 6 && offset + rdlength <= length) {
+                    // SRV RDATA: Priority(2) Weight(2) Port(2) Target(...)
+                    int port = ((data[offset + 4] & 0xFF) << 8) | (data[offset + 5] & 0xFF);
+                    if (port > 0 && port <= 65535) return port;
+                }
+                offset += rdlength;
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String parseMdnsHostname(byte[] data, int length) {
         if (length < 12) return null;
         try {
@@ -1782,20 +1927,30 @@ public class LanScanManager {
      * 添加设备（带优先级控制）
      */
     private void addDeviceWithPriority(String ip, String title, int iconType, int priority) {
-        addDeviceWithPriority(ip, title, null, iconType, priority, null);
+        addDeviceWithPriority(ip, title, null, iconType, priority, null, null);
     }
 
     private void addDeviceWithPriority(String ip, String title, int iconType,
                                        int priority, String mac) {
-        addDeviceWithPriority(ip, title, null, iconType, priority, mac);
+        addDeviceWithPriority(ip, title, null, iconType, priority, mac, null);
     }
 
     private void addDeviceWithPriority(String ip, String title, String description, int iconType, int priority) {
-        addDeviceWithPriority(ip, title, description, iconType, priority, null);
+        addDeviceWithPriority(ip, title, description, iconType, priority, null, null);
     }
 
     private void addDeviceWithPriority(String ip, String title, String description,
                                        int iconType, int priority, String mac) {
+        addDeviceWithPriority(ip, title, description, iconType, priority, mac, null);
+    }
+
+    /**
+     * 带端口的设备登记：记录标题、MAC、描述与发现的服务端口。
+     *
+     * @param port 发现的服务端口（如 HTTP 80、RTSP 554）；可为 null
+     */
+    private void addDeviceWithPriority(String ip, String title, String description,
+                                       int iconType, int priority, String mac, Integer port) {
         if (ip == null || ip.isEmpty()) return;
         
         final String finalIp = ip;
@@ -1804,6 +1959,7 @@ public class LanScanManager {
         final int finalIconType = iconType;
         final int finalPriority = priority;
         final String finalMac = mac;
+        final Integer finalPort = port;
         final String protocolLabel = PROTOCOL_LABELS.getOrDefault(priority, "未知协议");
         
         mainHandler.post(() -> {
@@ -1811,8 +1967,12 @@ public class LanScanManager {
             for (DeviceInfo device : deviceList) {
                 if (device.getIp().equals(finalIp)) {
                     device.addProtocolName(protocolLabel, finalTitle);
+                    device.setDiscoveryPriority(finalPriority);
                     if (finalMac != null && !finalMac.isEmpty()) {
                         device.setMacAddress(finalMac);
+                    }
+                    if (finalPort != null) {
+                        device.addPort(finalPort);
                     }
                     Integer currentPriority = devicePriorities.get(finalIp);
                     boolean betterName = currentPriority == null || finalPriority <= currentPriority
@@ -1838,9 +1998,13 @@ public class LanScanManager {
             device.setIp(finalIp);
             device.setTitle(finalTitle);
             device.setIconType(finalIconType);
+            device.setDiscoveryPriority(finalPriority);
             if (finalDesc != null) device.setDescription(finalDesc);
             if (finalMac != null && !finalMac.isEmpty()) {
                 device.setMacAddress(finalMac);
+            }
+            if (finalPort != null) {
+                device.addPort(finalPort);
             }
             device.addProtocolName(protocolLabel, finalTitle);
             
@@ -1889,6 +2053,87 @@ public class LanScanManager {
         }
     }
 
+    /**
+     * 从 LOCATION 指向的 UPnP 设备描述 XML 中提取友好名、型号、序列号、MAC 与端口。
+     *
+     * SSDP 的 M-SEARCH 响应本身只有 Server/ST 头，设备真名在描述文档里，
+     * 因此需要再请求一次 LOCATION。解析失败时各字段为 null，不影响主流程。
+     */
+    private String[] fetchUpnpDescription(String location) {
+        if (location == null || location.isEmpty()) return null;
+        OkHttpClient client = null;
+        try {
+            client = new OkHttpClient.Builder()
+                    .connectTimeout(1, TimeUnit.SECONDS)
+                    .readTimeout(1, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .build();
+            Request request = new Request.Builder().url(location).build();
+            try (Response response = client.newCall(request).execute()) {
+                if (response.body() == null) return null;
+                String xml = response.body().string();
+                if (xml == null || xml.isEmpty()) return null;
+
+                String friendly = extractXmlValueAnyCase(xml, "friendlyName");
+                String model = extractXmlValueAnyCase(xml, "modelName");
+                String manufacturer = extractXmlValueAnyCase(xml, "manufacturer");
+                String serial = extractXmlValueAnyCase(xml, "serialNumber");
+
+                // MAC 可能在 serialNumber / UDN / 专门的 MACAddress 元素里
+                String mac = extractMacFromText(serial);
+                if (mac == null) mac = extractMacFromText(extractXmlValueAnyCase(xml, "UDN"));
+                if (mac == null) mac = extractMacFromText(extractXmlValueAnyCase(xml, "MACAddress"));
+                if (mac == null) mac = extractMacFromText(serial);
+
+                int port = 80;
+                try {
+                    int p = new java.net.URL(location).getPort();
+                    if (p > 0) port = p;
+                } catch (Exception ignored) {}
+
+                return new String[]{friendly, model, manufacturer, serial, mac, String.valueOf(port)};
+            }
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (client != null) {
+                client.dispatcher().executorService().shutdown();
+                client.connectionPool().evictAll();
+            }
+        }
+    }
+
+    /** 大小写无关地提取 XML 标签内容 */
+    private String extractXmlValueAnyCase(String content, String tag) {
+        if (content == null || tag == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<\\s*" + java.util.regex.Pattern.quote(tag) + "[^>]*>(.*?)</\\s*"
+                        + java.util.regex.Pattern.quote(tag) + "\\s*>",
+                        java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL)
+                .matcher(content);
+        if (m.find()) {
+            String v = m.group(1).trim();
+            return v.isEmpty() ? null : v;
+        }
+        return null;
+    }
+
+    /** 从任意文本中提取 MAC 地址（支持冒号/连字符/12位十六进制） */
+    private String extractMacFromText(String text) {
+        if (text == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?i)([0-9A-F]{2}(?:[:-][0-9A-F]{2}){5})")
+                .matcher(text);
+        if (m.find()) return m.group(1).toUpperCase(java.util.Locale.US);
+        // 尝试 12 位连续十六进制（排除已是 UUID 的情况）
+        m = java.util.regex.Pattern.compile("(?i)\\b([0-9A-F]{12})\\b").matcher(text);
+        if (m.find()) {
+            String h = m.group(1).toUpperCase(java.util.Locale.US);
+            return h.replaceAll("(..)(?!$)", "$1:");
+        }
+        return null;
+    }
+
     private String extractXmlValue(String content, String tagName) {
         if (content == null || tagName == null) return null;
         String startTag = "<" + tagName + ">";
@@ -1899,6 +2144,93 @@ public class LanScanManager {
         int endIndex = content.indexOf(endTag, startIndex);
         if (endIndex == -1) return null;
         return content.substring(startIndex, endIndex).trim();
+    }
+
+    /**
+     * 从 ONVIF WS-Discovery 响应的 Scopes 中提取设备标题。
+     *
+     * Scopes 形如：
+     *   onvif://www.onvif.org/name/ONVIF_IPNC
+     *   onvif://www.onvif.org/Hardware/DM36X_IPNC
+     *   onvif://www.onvif.org/name/HD%20IPC   （需 URL 解码）
+     * 其中 name/hardware 的大小写在不同厂商间不统一，这里做大小写无关匹配。
+     *
+     * @return 形如 "ONVIF_IPNC (DM36X_IPNC)" 的标题；提取不到时返回 null
+     */
+    private String extractOnvifTitle(String responseStr) {
+        if (responseStr == null) return null;
+        // 定位 <...Scopes ...> 与对应的 </...Scopes>
+        int openTag = responseStr.indexOf("Scopes");
+        if (openTag == -1) return null;
+        int tagEnd = responseStr.indexOf('>', openTag);
+        if (tagEnd == -1) return null;
+        int contentStart = tagEnd + 1;
+        int closeTag = responseStr.indexOf("</", contentStart);
+        if (closeTag == -1) return null;
+
+        String scopes = responseStr.substring(contentStart, closeTag);
+        String name = null;
+        String hardware = null;
+        for (String token : scopes.trim().split("\\s+")) {
+            if (token.isEmpty()) continue;
+            String lower = token.toLowerCase(java.util.Locale.US);
+            int nameIdx = lower.indexOf("/name/");
+            int hwIdx = lower.indexOf("/hardware/");
+            if (nameIdx >= 0 && name == null) {
+                name = token.substring(nameIdx + 6);
+            } else if (hwIdx >= 0 && hardware == null) {
+                hardware = token.substring(hwIdx + 10);
+            }
+        }
+        name = decodeScopeValue(name);
+        hardware = decodeScopeValue(hardware);
+
+        if (name == null && hardware == null) return null;
+        if (name == null) return hardware;
+        if (hardware == null || hardware.equalsIgnoreCase(name)) return name;
+        return name + " (" + hardware + ")";
+    }
+
+    /** URL 解码 scope 值（如 HD%20IPC → HD IPC） */
+    private String decodeScopeValue(String v) {
+        if (v == null || v.isEmpty()) return null;
+        String decoded;
+        try {
+            decoded = java.net.URLDecoder.decode(v, "UTF-8");
+        } catch (Exception e) {
+            decoded = v;
+        }
+        decoded = decoded.trim();
+        return decoded.isEmpty() ? null : decoded;
+    }
+
+    /**
+     * 从 ONVIF 响应的 XAddrs 中提取服务端口。
+     *
+     * XAddrs 形如 http://192.168.1.10:80/onvif/device_service，
+     * 端口缺省为 80。
+     *
+     * @return 服务端口；解析失败返回 null
+     */
+    private Integer extractOnvifPort(String responseStr) {
+        if (responseStr == null) return null;
+        int idx = responseStr.indexOf("XAddrs");
+        if (idx == -1) return null;
+        int tagEnd = responseStr.indexOf('>', idx);
+        if (tagEnd == -1) return null;
+        int contentEnd = responseStr.indexOf('<', tagEnd + 1);
+        if (contentEnd == -1) return null;
+        String xaddrs = responseStr.substring(tagEnd + 1, contentEnd).trim();
+        if (xaddrs.isEmpty()) return null;
+        // 可能有多个地址，取第一个
+        String first = xaddrs.split("\\s+")[0];
+        try {
+            java.net.URI uri = new java.net.URI(first);
+            int p = uri.getPort();
+            return p > 0 ? p : 80;
+        } catch (Exception e) {
+            return 80;
+        }
     }
     
     private void reportProgress(String status, int progress, int total) {

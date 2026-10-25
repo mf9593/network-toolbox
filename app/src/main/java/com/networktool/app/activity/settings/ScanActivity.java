@@ -42,6 +42,7 @@ import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
 import com.journeyapps.barcodescanner.BarcodeCallback;
 import com.journeyapps.barcodescanner.BarcodeResult;
+import com.networktool.app.util.UrlOpenHelper;
 import com.journeyapps.barcodescanner.CaptureManager;
 import com.journeyapps.barcodescanner.DecoratedBarcodeView;
 import com.networktool.app.R;
@@ -352,7 +353,8 @@ public class ScanActivity extends AppCompatActivity {
                 .setMessage(url)
                 .setPositiveButton("打开", (dialog, which) -> {
                     try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                        // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+                        UrlOpenHelper.open(this, url, "扫描结果");
                     } catch (Exception e) {
                         showToast("无法打开链接");
                     }

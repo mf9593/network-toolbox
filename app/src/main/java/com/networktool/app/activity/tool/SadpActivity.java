@@ -1278,6 +1278,16 @@ public class SadpActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // ExoPlayer 支持多实例，无需特殊处理
+        // 避免与随后打开的 RtspPlayerActivity 争用同一个 native 实例。
+        if (nodePlayer != null) {
+            stopRtspPlayback();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         stopRtspPlayback();

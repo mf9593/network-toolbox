@@ -1,8 +1,6 @@
 package com.networktool.app.adapter;
 
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +12,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.networktool.app.R;
 import com.networktool.app.model.PortScanResult;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.UrlOpenHelper;
 
 import java.util.List;
 
@@ -75,8 +74,8 @@ public class PortScanAdapter extends BaseAdapter {
 
         convertView.setOnClickListener(v -> {
             try {
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(result.getUrl()));
-                context.startActivity(intent);
+                // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+                UrlOpenHelper.open(context, result.getUrl(), result.getDisplayText());
             } catch (Exception e) {
                 Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show();
             }

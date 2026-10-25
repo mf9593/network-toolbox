@@ -1,19 +1,21 @@
 package com.networktool.app.fragment;
 
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
-import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -49,6 +51,7 @@ import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.activity.tool.SpeedTestActivity;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.UrlOpenHelper;
 import com.networktool.app.view.SignalStrengthView;
 
 import java.net.Inet4Address;
@@ -73,6 +76,11 @@ public class InfoFragment extends Fragment {
     private MaterialCardView signalCard;
     private MaterialCardView networkInfoCard;
     private MaterialCardView quickToolsCard;
+    private MaterialCardView batteryCard;
+    private TextView batteryPercent;
+    private TextView batteryVoltage;
+    private TextView batteryPower;
+    private TextView batteryTemperature;
     private View heroContent;
 
     private ImageView wifiLogo;
@@ -167,6 +175,11 @@ public class InfoFragment extends Fragment {
         signalCard = view.findViewById(R.id.signalCard);
         networkInfoCard = view.findViewById(R.id.networkInfoCard);
         quickToolsCard = view.findViewById(R.id.quickToolsCard);
+        batteryCard = view.findViewById(R.id.batteryCard);
+        batteryPercent = view.findViewById(R.id.batteryPercent);
+        batteryVoltage = view.findViewById(R.id.batteryVoltage);
+        batteryPower = view.findViewById(R.id.batteryPower);
+        batteryTemperature = view.findViewById(R.id.batteryTemperature);
         heroContent = view.findViewById(R.id.heroContent);
 
         wifiLogo = view.findViewById(R.id.wifiLogo);
@@ -274,6 +287,9 @@ public class InfoFragment extends Fragment {
         signalCard.setCardBackgroundColor(surfaceColor);
         networkInfoCard.setCardBackgroundColor(surfaceColor);
         quickToolsCard.setCardBackgroundColor(surfaceColor);
+        if (batteryCard != null) {
+            batteryCard.setCardBackgroundColor(surfaceColor);
+        }
 
         gatewayValue.setTextColor(onSurfaceColor);
         dnsValue.setTextColor(onSurfaceColor);
@@ -299,7 +315,75 @@ public class InfoFragment extends Fragment {
         refreshLayout.setProgressBackgroundColorSchemeColor(surfaceColor);
     }
 
+    /**
+     * 读取并显示电池硬件信息：电量百分比、电压、充电功率、温度。
+     *
+     * - 电量通过 BatteryManager 的 BATTERY_PROPERTY_CAPACITY 获取
+     * - 电压/温度/充电电流通过注册 ACTION_BATTERY_CHANGED 广播获取
+     *   （这些字段不在 BatteryManager 属性里，只能从 sticky intent 读）
+     * - 充电功率 = 电压 × 充电电流（仅充电时有意义，放电时显示"—"）
+     */
+    private void updateBatteryInfo() {
+        if (!isAdded() || batteryPercent == null) return;
+        try {
+            Context context = requireContext();
+            android.os.BatteryManager bm = (android.os.BatteryManager)
+                    context.getSystemService(Context.BATTERY_SERVICE);
+
+            // 电量百分比
+            int percent = -1;
+            if (bm != null) {
+                percent = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            }
+            batteryPercent.setText(percent >= 0 ? percent + "%" : "--");
+
+            // 电压、温度、充电电流、状态：从 sticky 广播读取
+            IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            Intent battery = context.registerReceiver(null, filter);
+            if (battery == null) return;
+
+            int voltage = battery.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1); // mV
+            int temp = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1); // 0.1°C
+            int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            int current = Integer.MIN_VALUE;
+            if (bm != null) {
+                current = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW); // µA
+            }
+
+            // 电压
+            if (voltage > 0) {
+                batteryVoltage.setText(String.format(Locale.US, "%.2fV", voltage / 1000f));
+            } else {
+                batteryVoltage.setText("--");
+            }
+
+            // 温度
+            if (temp > 0) {
+                batteryTemperature.setText(String.format(Locale.US, "%.1f°C", temp / 10f));
+            } else {
+                batteryTemperature.setText("--");
+            }
+
+            // 充电功率：仅充电状态下计算（电流取绝对值）
+            boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
+                    || status == BatteryManager.BATTERY_STATUS_FULL;
+            if (charging && voltage > 0 && current != Integer.MIN_VALUE && current != 0) {
+                double amps = Math.abs(current) / 1_000_000.0;
+                double watts = (voltage / 1000.0) * amps;
+                batteryPower.setText(String.format(Locale.US, "%.2fW", watts));
+            } else if (!charging) {
+                batteryPower.setText("未充电");
+            } else {
+                batteryPower.setText("--");
+            }
+        } catch (Exception e) {
+            // 读取失败不影响页面其它内容
+            if (batteryPercent != null) batteryPercent.setText("--");
+        }
+    }
+
     private void refreshInfo() {
+        updateBatteryInfo();
         if (!isAdded() || connectivityManager == null) {
             updateNoNetworkInfo();
             return;
@@ -391,7 +475,11 @@ public class InfoFragment extends Fragment {
         String ipv6 = getIpv6Address();
         if (ipv6 == null || ipv6.isEmpty()) ipv6 = "--";
 
-        String gateway = NetworkUtils.getGateway(requireContext());
+        // 有线优先取「以太网网络」的网关，避免系统活动网络是 WiFi 时显示错网关
+        String gateway = NetworkUtils.getEthernetGateway(requireContext());
+        if (gateway == null || gateway.isEmpty()) {
+            gateway = NetworkUtils.getGateway(requireContext());
+        }
         String dns1 = NetworkUtils.getDns1(requireContext());
         String dns2 = NetworkUtils.getDns2(requireContext());
         String standard = getWifiStandard(wifiInfo);
@@ -712,7 +800,12 @@ public class InfoFragment extends Fragment {
     }
 
     private String getEthernetIpv4Address() {
-        // 当前活动网络就是以太网时，LinkProperties 的地址最准确
+        // 先按「带以太网传输的网络」精确取地址：之前先取活动网络，
+        // 有线只连局域网、活动网络是 WiFi 时会把 WiFi 地址误显示成有线 IP
+        String ethernetIp = NetworkUtils.getEthernetLocalIpv4Address(requireContext());
+        if (ethernetIp != null && !ethernetIp.isEmpty()) {
+            return ethernetIp;
+        }
         String activeIp = NetworkUtils.getActiveLocalIpv4Address(requireContext());
         if (activeIp != null && !activeIp.isEmpty()) {
             return activeIp;
@@ -942,7 +1035,8 @@ public class InfoFragment extends Fragment {
 
     private void openBrowser(String url) {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+            UrlOpenHelper.open(requireContext(), url, "网页");
         } catch (Exception e) {
             showToast("无法打开浏览器");
         }

@@ -74,6 +74,11 @@ import okhttp3.Credentials;
 public class OnvifActivity extends AppCompatActivity {
     private static final String TAG = "OnvifActivity";
 
+    /** 从设备页跳转过来时预填的设备信息（无需重新扫描） */
+    public static final String EXTRA_PREFILL_IP = "prefill_ip";
+    public static final String EXTRA_PREFILL_PORT = "prefill_port";
+    public static final String EXTRA_PREFILL_NAME = "prefill_name";
+
     // Tab相关
     private TabLayout tabLayout;
     private LinearLayout onvifLayout;
@@ -156,6 +161,32 @@ public class OnvifActivity extends AppCompatActivity {
         initViews();
         setupRecyclerView();
         initRtspPlayer();
+        handlePrefillDevice();
+    }
+
+    /**
+     * 处理从设备扫描页跳转过来的预填设备。
+     *
+     * 直接把该设备加入列表并展示，无需重新扫描，
+     * 用户可立即进行连接、取流等进一步操作。
+     */
+    private void handlePrefillDevice() {
+        String ip = getIntent().getStringExtra(EXTRA_PREFILL_IP);
+        if (ip == null || ip.trim().isEmpty()) return;
+        int port = getIntent().getIntExtra(EXTRA_PREFILL_PORT, 80);
+        String name = getIntent().getStringExtra(EXTRA_PREFILL_NAME);
+
+        OnvifDevice device = new OnvifDevice();
+        device.setIpAddress(ip.trim());
+        device.setPort(port > 0 ? port : 80);
+        device.setName(name == null || name.trim().isEmpty() ? ip.trim() : name.trim());
+        device.setUuid("prefill-" + ip.trim());
+
+        adapter.addDevice(device);
+        updateDeviceCount();
+        emptyView.setVisibility(View.GONE);
+        recyclerView.setVisibility(View.VISIBLE);
+        scanStatusText.setText("已加载设备 " + ip.trim() + "，可直接连接调试");
     }
 
     /**
@@ -1080,7 +1111,7 @@ public class OnvifActivity extends AppCompatActivity {
     /**
      * 获取RTSP流地址用于预览
      *
-     * 获取设备的RTSP视频流地址，并跳转到RtspPreviewActivity播放。
+     * 获取设备的RTSP视频流地址，并跳转到RtspPlayerActivity播放。
      * 支持主码流和子码流切换。
      *
      * 实现流程：
@@ -2776,7 +2807,7 @@ public class OnvifActivity extends AppCompatActivity {
      * 显示RTSP地址对话框
      *
      * 显示获取到的RTSP流地址，提供三个操作：
-     * - 预览：跳转到RtspPreviewActivity播放视频
+     * - 预览：跳转到RtspPlayerActivity播放视频
      * - 复制：复制RTSP地址到剪贴板
      * - 关闭：关闭对话框
      *
@@ -3156,6 +3187,16 @@ public class OnvifActivity extends AppCompatActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // ExoPlayer 支持多实例，无需特殊处理
+        // 避免与随后打开的 RtspPlayerActivity 争用同一个 native 实例。
+        if (nodePlayer != null) {
+            stopRtspPlayback();
+        }
     }
 
     @Override

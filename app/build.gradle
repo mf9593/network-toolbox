@@ -53,7 +53,9 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            // R8 代码压缩 + 资源压缩：debug 里没用的库代码（Guava/未用到的 Kotlin 标准库等）会被裁掉
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
@@ -116,8 +118,6 @@ dependencies {
     implementation 'com.caverock:androidsvg-aar:1.4'
     // Gson JSON 解析器 - 用于 JSON 序列化/反序列化
     implementation 'com.google.code.gson:gson:2.10.1'
-    // Jaxen XPath 引擎 - 用于 XPath 解析
-    implementation 'jaxen:jaxen:2.0.0'
 
     // ==================== ONVIF 库 ====================
     // ONVIF库暂不可用（JitPack上无构建版本），使用项目内置的OnvifUtil替代
@@ -128,11 +128,16 @@ dependencies {
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation 'com.google.zxing:core:3.5.2'
 
-    // ==================== RTSP播放器 ====================
-    // Media3 ExoPlayer RTSP：标准 RTSP / RTP，支持 TCP 与 UDP 单播
-    implementation 'androidx.media3:media3-exoplayer:1.4.1'
-    implementation 'androidx.media3:media3-exoplayer-rtsp:1.4.1'
-    implementation 'androidx.media3:media3-ui:1.4.1'
+    // ==================== 视频播放器 ====================
+    // ExoPlayer：用于 RTSP / HTTP 直播流。
+    // 选择依据：jdtech libmpv 0.4.1 的视频输出层在 Android 上有根本性缺陷
+    // （VIDEO_RECONFIG 触发但无法渲染到 Surface），已尝试 5 种配置均无法出画面。
+    // ExoPlayer 是 Google 官方维护的播放器，内置 HTTP/MPEG-TS 提取器和 MediaCodec 解码器，
+    // 无需 FFmpeg，Apache 2.0 许可，与项目方向一致。
+    implementation 'com.google.android.exoplayer:exoplayer-core:2.19.1'
+    implementation 'com.google.android.exoplayer:exoplayer-ui:2.19.1'
+    // RTSP 协议支持（摄像头预览必需，RTSP 在独立模块中）
+    implementation 'com.google.android.exoplayer:exoplayer-rtsp:2.19.1'
 
     // ==================== 测试库 ====================
     testImplementation 'junit:junit:4.13.2'

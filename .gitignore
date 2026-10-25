@@ -85,3 +85,9 @@ app/release/
 app/debug/
 app/build/
 .gradle/
+
+# 私人直播源列表（运行时从设备根目录读取，不打包/不提交）
+/44023.txt
+44023.txt
+*.m3u
+*.m3u8

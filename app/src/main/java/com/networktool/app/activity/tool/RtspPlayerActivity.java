@@ -17,6 +17,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.widget.RadioButton;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.graphics.Color;
@@ -39,7 +40,7 @@ import com.networktool.app.util.ThemeManager;
  * 功能说明：
  * - 支持手动输入RTSP地址进行预览
  * - 支持从Onvif设备直接跳转播放
- * - 使用 Media3 ExoPlayer 播放 RTSP 视频流
+ * - 使用 ExoPlayer 播放 RTSP 视频流
  * - 进入播放后自动横屏全屏
  * - 点击显示/隐藏控制栏
  * - 播放控制（暂停/播放、退出全屏）
@@ -49,9 +50,11 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private static final String TAG = "RtspPlayerActivity";
 
     // 输入界面
-    private LinearLayout inputLayout;
+    private View inputLayout;
     private TextInputEditText rtspUrlEditText;
     private MaterialButton playButton;
+    private MaterialButton pasteUrlBtn;
+    private View inputBackBtn;
     private RadioGroup protocolGroup;
 
     // 播放界面
@@ -67,6 +70,16 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private TextView resolutionText;
     private TextView channelNameText;  // 新增：通道名称显示
     private ProgressBar loadingProgress;
+
+    // 新增控制项：音量、画面比例、实时信息
+    private ImageView muteBtn;
+    private ImageView aspectBtn;
+    private SeekBar volumeSeekBar;
+    private TextView infoText;
+    private int lastVolume = 100;
+    private int aspectModeIndex = 0;
+    private final Handler infoHandler = new Handler(Looper.getMainLooper());
+    private Runnable infoRunnable;
 
     // RtspPlayer
     private RtspPlayer nodePlayer;
@@ -167,6 +180,20 @@ public class RtspPlayerActivity extends AppCompatActivity {
         channelNameText = findViewById(R.id.channelNameText);  // 新增：通道名称显示
         loadingProgress = findViewById(R.id.loadingProgress);
 
+        // 新增控制项
+        muteBtn = findViewById(R.id.muteBtn);
+        aspectBtn = findViewById(R.id.aspectBtn);
+        volumeSeekBar = findViewById(R.id.volumeSeekBar);
+        infoText = findViewById(R.id.infoText);
+        pasteUrlBtn = findViewById(R.id.pasteUrlBtn);
+        inputBackBtn = findViewById(R.id.inputBackBtn);
+
+        setupInputExtras();
+        setupVolumeControls();
+        setupAspectControl();
+        setupProtocolChips();
+        applySystemInsets();
+
         // 设置设备名称
         if (!TextUtils.isEmpty(deviceName)) {
             titleText.setText(deviceName);
@@ -221,6 +248,352 @@ public class RtspPlayerActivity extends AppCompatActivity {
         ThemeManager.applyPrimaryButton(playButton);
     }
 
+    /* ==================== 输入页辅助操作 ==================== */
+
+    /**
+     * 沉浸式（setDecorFitsSystemWindows(false)）下自己吃系统栏内边距，
+     * 否则输入页的返回按钮会顶到状态栏、底部控制条会贴到导航栏。
+     */
+    private void applySystemInsets() {
+        try {
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(
+                    getWindow().getDecorView(), (v, insets) -> {
+                        androidx.core.graphics.Insets bars = insets.getInsets(
+                                androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                                        | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+                        // 沉浸式下 insets 可能为 0（状态栏隐藏），但某些机型状态栏仍会
+                        // 盖住内容，这里按状态栏高度兜底，保证返回按钮不贴顶
+                        int topInset = bars.top;
+                        int bottomInset = bars.bottom;
+                        if (topInset <= 0 && isStatusBarVisible()) {
+                            topInset = getStatusBarHeight();
+                        }
+                        if (inputLayout != null) {
+                            inputLayout.setPadding(bars.left, topInset,
+                                    bars.right, bottomInset);
+                        }
+                        setTopMargin(topBar, dp(12) + topInset);
+                        setBottomMargin(bottomBar, dp(12) + bottomInset);
+                        return insets;
+                    });
+            androidx.core.view.ViewCompat.requestApplyInsets(getWindow().getDecorView());
+        } catch (Throwable e) {
+            AppErrorLogger.logError(TAG, "应用系统栏内边距失败", e);
+        }
+    }
+
+    /** 状态栏是否可见（未被全屏标志隐藏） */
+    private boolean isStatusBarVisible() {
+        try {
+            int flags = getWindow().getDecorView().getWindowSystemUiVisibility();
+            return (flags & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0;
+        } catch (Throwable e) {
+            return true;
+        }
+    }
+
+    /** 状态栏高度（兜底用） */
+    private int getStatusBarHeight() {
+        try {
+            int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (id > 0) return getResources().getDimensionPixelSize(id);
+        } catch (Throwable ignored) {
+        }
+        return dp(24);
+    }
+
+    /** 调整控件上外边距（保留原有值作为基准） */
+    private void setTopMargin(View view, int margin) {
+        if (view == null) return;
+        ViewGroup.LayoutParams raw = view.getLayoutParams();
+        if (raw instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+            if (params.topMargin != margin) {
+                params.topMargin = margin;
+                view.setLayoutParams(params);
+            }
+        }
+    }
+
+    /** 调整控件下外边距 */
+    private void setBottomMargin(View view, int margin) {
+        if (view == null) return;
+        ViewGroup.LayoutParams raw = view.getLayoutParams();
+        if (raw instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+            if (params.bottomMargin != margin) {
+                params.bottomMargin = margin;
+                view.setLayoutParams(params);
+            }
+        }
+    }
+
+    private void setupInputExtras() {
+        if (pasteUrlBtn != null) {
+            pasteUrlBtn.setOnClickListener(v -> {
+                try {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null
+                            && cm.getPrimaryClip().getItemCount() > 0) {
+                        CharSequence text = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+                        if (!TextUtils.isEmpty(text) && rtspUrlEditText != null) {
+                            String value = text.toString().trim();
+                            rtspUrlEditText.setText(value);
+                            rtspUrlEditText.setSelection(value.length());
+                            return;
+                        }
+                    }
+                    Toast.makeText(this, "剪贴板没有可用地址", Toast.LENGTH_SHORT).show();
+                } catch (Throwable t) {
+                    AppErrorLogger.logError(TAG, "粘贴地址失败", t);
+                }
+            });
+        }
+        if (inputBackBtn != null) {
+            inputBackBtn.setOnClickListener(v -> finish());
+        }
+    }
+
+    /* ==================== 音量 / 静音 ==================== */
+
+    private void setupVolumeControls() {
+        if (volumeSeekBar != null) {
+            int accent = ThemeManager.getAccessibleThemeColor(this);
+            android.content.res.ColorStateList csl = android.content.res.ColorStateList.valueOf(accent);
+            volumeSeekBar.setProgressTintList(csl);
+            volumeSeekBar.setThumbTintList(csl);
+            volumeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (!fromUser) return;
+                    setVolume(progress);
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    hideHandler.removeCallbacks(hideRunnable);
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    resetHideTimer();
+                }
+            });
+        }
+        if (muteBtn != null) {
+            muteBtn.setOnClickListener(v -> {
+                if (nodePlayer == null) return;
+                if (nodePlayer.getVolume() > 0) {
+                    lastVolume = nodePlayer.getVolume();
+                    setVolume(0);
+                } else {
+                    setVolume(lastVolume > 0 ? lastVolume : 100);
+                }
+                resetHideTimer();
+            });
+            // 长按喇叭：切换音量增强倍数（源本身音量偏小时用）
+            muteBtn.setOnLongClickListener(v -> {
+                cycleAudioGain();
+                return true;
+            });
+        }
+    }
+
+    /** 音量增强倍数在 100% / 150% / 200% / 300% 之间循环 */
+    private void cycleAudioGain() {
+        android.content.SharedPreferences prefs = getSharedPreferences("live_tv", MODE_PRIVATE);
+        float current = prefs.getFloat("audio_gain", 1f);
+        float next = current < 1.4f ? 1.5f : (current < 1.9f ? 2f : (current < 2.9f ? 3f : 1f));
+        prefs.edit().putFloat("audio_gain", next).apply();
+        if (nodePlayer != null) nodePlayer.setAudioGain(next);
+        Toast.makeText(this, "音量增强：" + Math.round(next * 100) + "%",
+                Toast.LENGTH_SHORT).show();
+        resetHideTimer();
+    }
+
+    private void setVolume(int value) {
+        int target = Math.max(0, Math.min(100, value));
+        if (volumeSeekBar != null && volumeSeekBar.getProgress() != target) {
+            volumeSeekBar.setProgress(target);
+        }
+        if (nodePlayer != null) {
+            nodePlayer.setVolume(target);
+        }
+        updateMuteIcon(target);
+    }
+
+    private void updateMuteIcon(int volume) {
+        if (muteBtn == null) return;
+        boolean muted = volume <= 0;
+        muteBtn.setImageResource(muted ? R.drawable.ic_volume_off : R.drawable.ic_volume_up);
+        muteBtn.setImageTintList(android.content.res.ColorStateList.valueOf(
+                muted ? ThemeManager.getAccessibleThemeColor(this) : Color.WHITE));
+        muteBtn.setContentDescription(muted ? "已静音，点击恢复" : "静音");
+    }
+
+    /* ==================== 传输协议选项样式 ==================== */
+
+    /** 传输协议选项做成卡片式：选中态用主题色方块背景 + 描边，未选中为淡底 */
+    private void setupProtocolChips() {
+        if (protocolGroup == null) return;
+        int accent = ThemeManager.getAccessibleThemeColor(this);
+        int onSurface = ThemeManager.getOnSurfaceColor(this);
+        int outline = ThemeManager.getOutlineVariantColor(this);
+        int surface = ThemeManager.getChipSurfaceColor(this);
+
+        for (int i = 0; i < protocolGroup.getChildCount(); i++) {
+            View child = protocolGroup.getChildAt(i);
+            if (!(child instanceof RadioButton)) continue;
+            RadioButton option = (RadioButton) child;
+
+            android.graphics.drawable.GradientDrawable checkedBg =
+                    new android.graphics.drawable.GradientDrawable();
+            checkedBg.setColor(withAlpha(accent, 0x3D));
+            checkedBg.setCornerRadius(dp(12));
+            checkedBg.setStroke(dp(1), withAlpha(accent, 0xC0));
+
+            android.graphics.drawable.GradientDrawable normalBg =
+                    new android.graphics.drawable.GradientDrawable();
+            normalBg.setColor(surface);
+            normalBg.setCornerRadius(dp(12));
+            normalBg.setStroke(dp(1), withAlpha(outline, 0x66));
+
+            android.graphics.drawable.StateListDrawable background =
+                    new android.graphics.drawable.StateListDrawable();
+            background.addState(new int[]{android.R.attr.state_checked}, checkedBg);
+            background.addState(new int[]{}, normalBg);
+            option.setBackground(background);
+
+            option.setTextColor(new android.content.res.ColorStateList(
+                    new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                    new int[]{accent, onSurface}));
+            option.setTextSize(13);
+            option.setGravity(android.view.Gravity.CENTER);
+            option.setButtonDrawable(null);
+            option.setPadding(dp(4), dp(11), dp(4), dp(11));
+
+            ViewGroup.LayoutParams raw = option.getLayoutParams();
+            if (raw instanceof LinearLayout.LayoutParams) {
+                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) raw;
+                params.setMarginStart(i == 0 ? 0 : dp(6));
+                params.setMarginEnd(0);
+                option.setLayoutParams(params);
+            }
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
+    /* ==================== 画面比例 ==================== */
+
+    private static final RtspPlayerView.UIViewContentMode[] ASPECT_MODES = {
+            RtspPlayerView.UIViewContentMode.ScaleAspectFit,   // 适应（保留黑边）
+            RtspPlayerView.UIViewContentMode.ScaleAspectFill,  // 裁剪（铺满裁边）
+            RtspPlayerView.UIViewContentMode.ScaleToFill       // 拉伸（变形铺满）
+    };
+    private static final String[] ASPECT_NAMES = {"适应（完整显示）", "裁剪（铺满裁边）", "拉伸（变形铺满）"};
+
+    private void setupAspectControl() {
+        if (aspectBtn != null) {
+            aspectBtn.setOnClickListener(v -> showAspectMenu(v));
+        }
+    }
+
+    /** 画面比例：点按钮弹出选项（互斥单选，标出当前项） */
+    private void showAspectMenu(View anchor) {
+        androidx.appcompat.widget.PopupMenu popup =
+                new androidx.appcompat.widget.PopupMenu(this, anchor);
+        popup.getMenu().setGroupCheckable(0, true, true);
+        for (int i = 0; i < ASPECT_NAMES.length; i++) {
+            android.view.MenuItem item = popup.getMenu().add(0, i, i, ASPECT_NAMES[i]);
+            item.setCheckable(true);
+            item.setChecked(i == aspectModeIndex);
+        }
+        popup.setOnMenuItemClickListener(item -> {
+            aspectModeIndex = item.getItemId();
+            applyAspectMode();
+            resetHideTimer();
+            return true;
+        });
+        popup.show();
+        hideHandler.removeCallbacks(hideRunnable);
+    }
+
+    private void applyAspectMode() {
+        if (videoView == null) return;
+        videoView.setUIViewContentMode(ASPECT_MODES[aspectModeIndex]);
+        if (nodePlayer != null) {
+            videoView.setVideoSize(nodePlayer.getVideoWidth(), nodePlayer.getVideoHeight());
+        }
+    }
+
+    /* ==================== 实时信息浮层 ==================== */
+
+    private void startInfoUpdates() {
+        stopInfoUpdates();
+        infoRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateInfoOverlay();
+                infoHandler.postDelayed(this, 1000);
+            }
+        };
+        infoHandler.post(infoRunnable);
+    }
+
+    private void stopInfoUpdates() {
+        if (infoRunnable != null) {
+            infoHandler.removeCallbacks(infoRunnable);
+            infoRunnable = null;
+        }
+    }
+
+    private void updateInfoOverlay() {
+        if (nodePlayer == null) return;
+        int width = 0;
+        int height = 0;
+        float fps = 0f;
+        long bitrate = -1;
+        try {
+            width = nodePlayer.getVideoWidth();
+            height = nodePlayer.getVideoHeight();
+            fps = nodePlayer.getVideoFrameRate();
+            bitrate = nodePlayer.getBitrateEstimate();
+        } catch (Throwable ignored) {}
+        if (videoView != null && width > 0 && height > 0) {
+            videoView.setVideoSize(width, height);
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(width > 0 && height > 0 ? width + "×" + height : "分辨率未知");
+        if (bitrate > 0) {
+            sb.append(" · ").append(formatBitrate(bitrate));
+        }
+        if (fps > 0) {
+            sb.append(" · ").append(Math.round(fps)).append("fps");
+        }
+        if (infoText != null) {
+            infoText.setText(sb.toString());
+        }
+        if (resolutionText != null) {
+            resolutionText.setText(width > 0 && height > 0 ? width + "×" + height : "未知分辨率");
+        }
+    }
+
+    private String formatBitrate(long bitsPerSecond) {
+        double kbps = bitsPerSecond / 1000d;
+        if (kbps >= 1000) {
+            return String.format(java.util.Locale.US, "%.1fMbps", kbps / 1000d);
+        }
+        return String.format(java.util.Locale.US, "%.0fkbps", kbps);
+    }
+
     /**
      * 开始播放
      */
@@ -243,6 +616,9 @@ public class RtspPlayerActivity extends AppCompatActivity {
 
         // 初始化播放器
         initPlayer();
+
+        // 启动实时信息刷新（分辨率/码率/帧率）
+        startInfoUpdates();
 
         // 延迟进入全屏（等待播放成功后进入）
         hideHandler.postDelayed(() -> {
@@ -277,14 +653,24 @@ public class RtspPlayerActivity extends AppCompatActivity {
                 playerContainer.addView(videoView, 0, params);
             }
 
-            // 设置渲染类型
-            videoView.setRenderType(RtspPlayerView.RenderType.SURFACEVIEW);
+            // 设置渲染类型：跟随直播页保存的偏好，默认 TextureView（SurfaceView 在部分设备无画面）
+            android.content.SharedPreferences prefs =
+                    getSharedPreferences("live_tv", MODE_PRIVATE);
+            String savedRender = prefs.getString("render_type", "textureview");
+            videoView.setRenderType("textureview".equals(savedRender)
+                    ? RtspPlayerView.RenderType.TEXTUREVIEW
+                    : RtspPlayerView.RenderType.SURFACEVIEW);
             // 设置视频画面缩放模式：保持比例居中显示，不拉伸
             videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleAspectFit);
+            aspectModeIndex = 0;
 
             // 创建RtspPlayer
             nodePlayer = new RtspPlayer(this);
             nodePlayer.setPlayerView(videoView);
+            nodePlayer.setHwdec(prefs.getString("hwdec_mode", "mediacodec"));
+            nodePlayer.setVolume(volumeSeekBar != null ? volumeSeekBar.getProgress() : 100);
+            // 音量增强倍数跟随电视直播页的设置（共享 live_tv 偏好）
+            nodePlayer.setAudioGain(prefs.getFloat("audio_gain", 1f));
 
             // 设置传输协议
             setTransportProtocol();
@@ -654,6 +1040,7 @@ public class RtspPlayerActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        stopInfoUpdates();
         if (nodePlayer != null && isPlaying) {
             try {
                 nodePlayer.pause();
@@ -687,6 +1074,9 @@ public class RtspPlayerActivity extends AppCompatActivity {
                 Log.e(TAG, "停止失败: " + e.getMessage(), e);
             }
         }
+        // onStop 已停止流；返回前台时由 onResume 重新加载，避免 isPlaying 仍为 true 导致黑屏。
+        isPlaying = false;
+        updatePlayPauseIcon();
     }
 
     @Override
@@ -702,5 +1092,6 @@ public class RtspPlayerActivity extends AppCompatActivity {
             }
         }
         hideHandler.removeCallbacksAndMessages(null);
+        stopInfoUpdates();
     }
 }

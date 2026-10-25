@@ -107,6 +107,17 @@
                 android:textSize="11sp"
                 android:visibility="gone" />
 
+            <TextView
+                android:id="@+id/portsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="端口: 80, 554"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
         </LinearLayout>
 
     </LinearLayout>

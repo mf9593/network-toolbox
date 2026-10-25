@@ -8,7 +8,6 @@ import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -18,6 +17,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.networktool.app.R;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
@@ -48,7 +49,7 @@ public class TracerouteActivity extends AppCompatActivity {
     private EditText timeoutEditText;
     private MaterialButton startButton;
     private TextView resultTextView;
-    private ProgressBar progressBar;
+    private LinearProgressIndicator progressBar;
 
     private ExecutorService executorService;
     private Handler mainHandler;
@@ -114,8 +115,42 @@ public class TracerouteActivity extends AppCompatActivity {
             }
         });
 
+        // 常见目标标签：点击后填入目标并立即开始跟踪
+        setupHostChips();
+
         int themeColor = ThemeManager.getThemeColor();
         ThemeManager.applyPrimaryButton(startButton);
+    }
+
+    /** 常见目标快捷标签：网关 / baidu.com / bing.com */
+    private void setupHostChips() {
+        Chip chipGateway = findViewById(R.id.chipGateway);
+        Chip chipBaidu = findViewById(R.id.chipBaidu);
+        Chip chipBing = findViewById(R.id.chipBing);
+
+        if (chipGateway != null) {
+            chipGateway.setOnClickListener(v -> {
+                String gateway = NetworkUtils.getGateway(this);
+                if (TextUtils.isEmpty(gateway)) {
+                    Toast.makeText(this, "未获取到网关地址", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                ipEditText.setText(gateway);
+                startTraceroute();
+            });
+        }
+        if (chipBaidu != null) {
+            chipBaidu.setOnClickListener(v -> {
+                ipEditText.setText("baidu.com");
+                startTraceroute();
+            });
+        }
+        if (chipBing != null) {
+            chipBing.setOnClickListener(v -> {
+                ipEditText.setText("bing.com");
+                startTraceroute();
+            });
+        }
     }
 
     private void startTraceroute() {
@@ -143,6 +178,10 @@ public class TracerouteActivity extends AppCompatActivity {
         resultTextView.setText("正在跟踪到 " + host + " 的路由...\n（最大 " + maxHops + " 跳，超时 " + timeout + "s）\n\n");
         isRunning = true;
         startButton.setText("停止");
+        // 横向确定进度条：按跳数推进，避免旋转动画
+        progressBar.setIndeterminate(false);
+        progressBar.setMax(maxHops);
+        progressBar.setProgressCompat(0, false);
         progressBar.setVisibility(View.VISIBLE);
 
         final int finalMaxHops = maxHops;
@@ -152,6 +191,8 @@ public class TracerouteActivity extends AppCompatActivity {
             try {
                 for (int ttl = 1; ttl <= finalMaxHops && isRunning; ttl++) {
                     final int currentTtl = ttl;
+                    final int progressValue = ttl;
+                    mainHandler.post(() -> progressBar.setProgressCompat(progressValue, true));
                     // 使用 ping -t 设置 TTL，-c 1 只发一个包，-W 设置超时
                     String command = String.format("ping -c 1 -t %d -W %d %s", ttl, finalTimeout, host);
 

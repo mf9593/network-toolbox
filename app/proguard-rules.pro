@@ -21,3 +21,15 @@
 #-renamesourcefileattribute SourceFile
 -keep class com.baidu.bottom.** { *; }
 -keep class com.baidu.mobstat.** { *; }
+
+# ==================== 本项目规则 ====================
+# 应用自身类全部保留：项目里 Gson 反射、动态类名、泛型较多，避免误删
+-keep class com.networktool.app.** { *; }
+-keep interface com.networktool.app.** { *; }
+-keep enum com.networktool.app.** { *; }
+
+# Gson 用到的泛型签名与注解
+-keepattributes Signature, *Annotation*
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}

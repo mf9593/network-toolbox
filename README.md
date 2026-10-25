@@ -11,6 +11,12 @@
 - 局域网设备发现、IPv4 / IPv6、协议筛选
 - Ping、端口扫描、DNS、路由追踪、IP 扫描
 - SADP / ONVIF 摄像头调试
+- 电视直播：左侧竖排分类 + 右侧频道列表，支持 M3U / M3U8 / TXT(`#genre#`) / JSON(DIYP、TVBox) 直播源
+  - 同一频道多条地址自动合并为多线路，播放页可切换并记忆
+  - 播放超时自动换源（可设 5/8/10/15/30 秒）
+  - GitHub 云同步直播源（支持镜像加速与本地缓存）
+  - 音量增强（PCM 软件增益 100%~300%）、解码方式 / 渲染方式切换
+- 投屏到电视：内置 DLNA / UPnP（SSDP 发现 + SOAP 控制），可投本地图片、视频与直播链接
 - 局域网聊天
 - 内置浏览器、HTTP / 网页调试
 - MAC 厂商查询、图标转换等工具箱
@@ -98,7 +104,9 @@ git push -u origin main
 
 ### 发布前注意
 
-- RTSP 播放使用 Apache-2.0 的 Media3 ExoPlayer RTSP，当前未包含 NodeMediaClient。标准 RTSP/RTP（TCP、UDP 单播）可以播放；私有封装、RTSP over HTTP、加密流或设备专有编码可能不支持。
+- 播放内核使用开源 libmpv（`dev.jdtech.mpv:libmpv` AAR），当前不包含 NodeMediaClient。RTSP、HTTP MPEG-TS、HLS 等能否播放取决于流的封装、编码和设备性能；libmpv 播放需要 Android 8.0 及以上。
+- libmpv 原生库启用了 GPL 特性（GPL-2.0-or-later），与 Apache-2.0 的 APK 分发存在许可冲突。对外发布前需统一采用 GPLv3 等兼容许可并履行义务，或改用 LGPL 构建。
+- 电视直播默认读取内部存储根目录的 `44023.txt`，也可通过页面左上角导入文件或手动输入路径；列表不会打包进 APK。
 - NodeMediaClient-Android 的上游明确要求商业授权。若没有可再分发的商业许可证，不建议将它的二进制重新加入公开发布的 APK。
 - 不要提交 `wifi/`、`.bak`、备份 `.zip`、聊天数据库、签名文件或真实网络数据。
 

@@ -28,6 +28,8 @@ import com.networktool.app.activity.tool.IconConverterActivity;
 import com.networktool.app.activity.tool.IpCalculatorActivity;
 import com.networktool.app.activity.tool.IpScanActivity;
 import com.networktool.app.activity.tool.LanChatActivity;
+import com.networktool.app.activity.tool.CastActivity;
+import com.networktool.app.livetv.LiveTvActivity;
 import com.networktool.app.activity.tool.MacActivity;
 import com.networktool.app.activity.tool.OnvifActivity;
 import com.networktool.app.activity.tool.PingActivity;
@@ -44,6 +46,7 @@ import com.networktool.app.activity.tool.WifiExportActivity;
 import com.networktool.app.activity.tool.WifiImportActivity;
 import com.networktool.app.adapter.ToolAdapter;
 import com.networktool.app.model.ToolItem;
+import com.networktool.app.util.ThemeManager;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -93,6 +96,7 @@ public class ToolsFragment extends Fragment
         recyclerView = view.findViewById(R.id.recyclerView);
         searchEdit = view.findViewById(R.id.searchEdit);
         emptyView = view.findViewById(R.id.emptyView);
+        applySearchTheme(view);
 
         gridLayoutManager = new GridLayoutManager(requireContext(), toolGridSpanCount());
         gridLayoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
@@ -110,6 +114,30 @@ public class ToolsFragment extends Fragment
         adapter = new ToolAdapter(new ArrayList<>(), this);
         adapter.setOnToolLongClickListener(this);
         recyclerView.setAdapter(adapter);
+    }
+
+    /** 让搜索框的描边/提示/图标高亮跟随主题色（XML 的 ?attr 可能不随动态主题更新） */
+    private void applySearchTheme(View view) {
+        try {
+            if (!isAdded()) return;
+            com.google.android.material.textfield.TextInputLayout layout =
+                    view.findViewById(R.id.searchLayout);
+            int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+            if (layout != null) {
+                layout.setBoxStrokeColor(accent);
+                layout.setBoxStrokeColorStateList(
+                        android.content.res.ColorStateList.valueOf(accent));
+                layout.setDefaultHintTextColor(
+                        android.content.res.ColorStateList.valueOf(accent));
+                layout.setStartIconTintList(
+                        android.content.res.ColorStateList.valueOf(accent));
+            }
+            if (searchEdit != null) {
+                searchEdit.setTextColor(ThemeManager.getOnSurfaceColor(requireContext()));
+                searchEdit.setHintTextColor(android.content.res.ColorStateList.valueOf(accent));
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private int toolGridSpanCount() {
@@ -179,6 +207,8 @@ public class ToolsFragment extends Fragment
         camera.add(new ToolItem("ONVIF 调试", R.drawable.ic_webcam, "发现并调试 ONVIF 摄像头", this::onOnvifConsole));
         camera.add(new ToolItem("SADP 调试", R.drawable.ic_cctv, "海康设备发现与配置", this::onSadpDebug));
         camera.add(new ToolItem("RTSP 预览", R.drawable.ic_rtsp, "播放 RTSP 视频流", this::onRtspPlayer));
+        camera.add(new ToolItem("电视直播", R.drawable.ic_live_tv, "加载自定义直播源文件", this::onLiveTv));
+        camera.add(new ToolItem("投屏", R.drawable.ic_cast, "投屏图片/视频/直播源到电视", this::onCast));
         categories.add(new Category("摄像头与流媒体", camera));
 
         List<ToolItem> web = new ArrayList<>();
@@ -393,6 +423,14 @@ public class ToolsFragment extends Fragment
 
     private void onRtspPlayer(ToolItem tool) {
         open(RtspPlayerActivity.class);
+    }
+
+    private void onLiveTv(ToolItem tool) {
+        open(LiveTvActivity.class);
+    }
+
+    private void onCast(ToolItem tool) {
+        open(CastActivity.class);
     }
 
     private void onAppManager(ToolItem tool) {

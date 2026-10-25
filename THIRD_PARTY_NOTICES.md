@@ -12,14 +12,16 @@
 | AndroidSVG | SVG 解析与渲染 | Apache License 2.0 |
 | Jaxen | XPath 引擎 | BSD 风格许可 |
 | ZXing Core / ZXing Android Embedded | 二维码扫描 | Apache License 2.0 |
-| Media3 ExoPlayer / media3-exoplayer-rtsp | RTSP/RTP 播放 | Apache License 2.0 |
+| libmpv（dev.jdtech.mpv:libmpv 0.4.1 AAR） | RTSP / HTTP 直播播放内核 | AAR 封装 MIT；libmpv 原生库 GPL-2.0-or-later |
 | JUnit / AndroidX Test | 测试 | Eclipse Public License 1.0 / Apache License 2.0 |
 
 AndroidX、Material、OkHttp、Gson 等组件的许可文本可在其 Maven 坐标对应的源码仓库中获取。分发本项目时，请保留本文件以及各依赖自带的 NOTICE / LICENSE 信息。
 
 如果某个组件的上游许可与本说明不一致，以该组件官方发布内容为准。
 
-> RTSP 播放使用 Media3 ExoPlayer。标准 RTSP/RTP（TCP、UDP 单播）可播放；部分厂商的私有封装、RTSP over HTTP、加密流或特殊编码可能不受支持，需以实际设备为准。项目当前不包含 NodeMediaClient；其上游要求商业授权，重新引入前需确认。
+> 播放内核使用 libmpv（基于 mpv-android 的 `dev.jdtech.mpv:libmpv` AAR）。支持 RTSP、HTTP MPEG-TS、HLS 等格式；实际能否播放取决于流的封装、编码和设备性能。项目当前不包含 NodeMediaClient；其上游要求商业授权，重新引入前需确认。
+
+> **许可证注意**：AAR 的 Java 封装为 MIT License，但其中打包的 libmpv 原生库启用了 GPL 特性，按 GPL-2.0-or-later 分发。Apache-2.0 与 GPL-2.0-only 不兼容；本 APK 若对外分发，应选择 GPLv3 或其他兼容方式并履行对应源码提供义务。若必须保持纯 Apache-2.0 分发，请改用 LGPL 构建的 libmpv，或移除 libmpv 播放内核。
 
 ## 应用许可
 

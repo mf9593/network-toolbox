@@ -7,6 +7,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 应用最低支持 API 21。
+         ExoPlayer 原生支持 API 21+，无需 overrideLibrary。 -->
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="34" />
+
     <!-- 查看 WLAN 状态 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
@@ -188,16 +194,23 @@
 
         
         <activity
-            android:name="com.networktool.app.activity.tool.RtspPreviewActivity"
-            android:exported="false"
-            android:parentActivityName="com.networktool.app.activity.tool.OnvifActivity"
+            android:name="com.networktool.app.activity.tool.RtspPlayerActivity"
+            android:exported="true"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <activity
-            android:name="com.networktool.app.activity.tool.RtspPlayerActivity"
-            android:exported="false"
+            android:name="com.networktool.app.livetv.LiveTvActivity"
+            android:exported="true"
             android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- 投屏（DLNA / UPnP） -->
+        <activity
+            android:name="com.networktool.app.activity.tool.CastActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
 
         <activity
             android:name="com.networktool.app.activity.tool.SadpActivity"
@@ -293,6 +306,11 @@
 
         <activity
             android:name="com.networktool.app.activity.settings.ClearBrowserCacheActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity" />
+
+        <activity
+            android:name="com.networktool.app.activity.settings.RuntimeLogActivity"
             android:exported="false"
             android:parentActivityName="com.networktool.app.activity.MainActivity" />
 

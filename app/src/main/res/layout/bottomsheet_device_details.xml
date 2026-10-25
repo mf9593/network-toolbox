@@ -54,14 +54,22 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_4"
-        android:text="发现协议"
+        android:text="发现协议（点击查看报文）"
         android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/detailProtocolChips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        app:chipSpacingHorizontal="@dimen/space_2"
+        app:chipSpacingVertical="@dimen/space_1" />
 
     <TextView
         android:id="@+id/detailProtocols"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_1"
+        android:visibility="gone"
         android:text="--"
         android:textAppearance="@style/TextAppearance.NetworkTool.Body" />
 
@@ -72,6 +80,15 @@
         android:layout_marginTop="@dimen/space_5"
         android:text="打开 HTTP 页面"
         app:icon="@drawable/ic_browser" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/onvifDebugButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="ONVIF 调试"
+        android:visibility="gone"
+        app:icon="@drawable/ic_onvif" />
 
     <LinearLayout
         android:layout_width="match_parent"

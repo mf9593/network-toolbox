@@ -11,7 +11,6 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -36,9 +35,12 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.networktool.app.R;
+import com.networktool.app.activity.settings.RuntimeLogActivity;
 import com.networktool.app.activity.tool.MacActivity;
+import com.networktool.app.activity.tool.OnvifActivity;
 import com.networktool.app.activity.tool.PingActivity;
 import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.adapter.DeviceAdapter;
@@ -47,6 +49,7 @@ import com.networktool.app.util.LanScanManager;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ScanSpeedConfig;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.UrlOpenHelper;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -69,6 +72,7 @@ public class DeviceFragment extends Fragment {
     private TextView deviceSubtitle;
     private MaterialButton scanButton;
     private MaterialButton filterButton;
+    private MaterialButton sortButton;
     private MaterialButton settingsButton;
     private ChipGroup ipVersionGroup;
     private LinearProgressIndicator scanProgress;
@@ -83,8 +87,12 @@ public class DeviceFragment extends Fragment {
     private final List<DeviceInfo> deviceList = new ArrayList<>();
     private final List<DeviceInfo> filteredDeviceList = new ArrayList<>();
 
-    private int ipVersionFilter = DeviceInfo.IPV4;
+    private int ipVersionFilter = 0; // 0 = 全部（默认显示所有 IP 版本）
     private String protocolFilter = null;
+    /** 排序方式：按 IP（默认）或按名称 */
+    private static final String SORT_IP = "ip";
+    private static final String SORT_NAME = "name";
+    private String sortBy = SORT_IP;
     private boolean isScanning = false;
     private String scanStatus = "";
     private String scanLocalIp;
@@ -107,6 +115,7 @@ public class DeviceFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         initViews(view);
         initManagers();
+        loadSortPreference();
         setupRecyclerView();
         setupFilterChips();
         setupListeners();
@@ -115,12 +124,35 @@ public class DeviceFragment extends Fragment {
         startScan();
     }
 
+    /** 读取持久化的排序方式（默认按 IP） */
+    private void loadSortPreference() {
+        try {
+            SharedPreferences prefs = requireContext()
+                    .getSharedPreferences("app_settings", Context.MODE_PRIVATE);
+            String saved = prefs.getString("device_sort_by", SORT_IP);
+            sortBy = SORT_NAME.equals(saved) ? SORT_NAME : SORT_IP;
+        } catch (Exception e) {
+            sortBy = SORT_IP;
+        }
+    }
+
+    /** 保存排序方式，一次设置永久生效 */
+    private void saveSortPreference() {
+        try {
+            SharedPreferences prefs = requireContext()
+                    .getSharedPreferences("app_settings", Context.MODE_PRIVATE);
+            prefs.edit().putString("device_sort_by", sortBy).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
     private void initViews(View view) {
         recyclerView = view.findViewById(R.id.recyclerView);
         deviceSummary = view.findViewById(R.id.deviceSummary);
         deviceSubtitle = view.findViewById(R.id.deviceSubtitle);
         scanButton = view.findViewById(R.id.scanButton);
         filterButton = view.findViewById(R.id.filterButton);
+        sortButton = view.findViewById(R.id.sortButton);
         settingsButton = view.findViewById(R.id.settingsButton);
         ipVersionGroup = view.findViewById(R.id.ipVersionGroup);
         scanProgress = view.findViewById(R.id.scanProgress);
@@ -179,6 +211,7 @@ public class DeviceFragment extends Fragment {
             }
         });
         filterButton.setOnClickListener(v -> showProtocolFilterDialog());
+        sortButton.setOnClickListener(v -> showSortDialog());
         settingsButton.setOnClickListener(v -> showScanSettingsDialog());
         refreshLayout.setOnRefreshListener(this::restartScan);
         emptyAction.setOnClickListener(v -> {
@@ -208,6 +241,7 @@ public class DeviceFragment extends Fragment {
         scanButton.setTextColor(accentColor);
         scanButton.setIconTint(ColorStateList.valueOf(accentColor));
         filterButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
+        sortButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
         settingsButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
         emptyAction.setTextColor(accentColor);
         emptyIcon.setColorFilter(onSurfaceVariant);
@@ -252,6 +286,23 @@ public class DeviceFragment extends Fragment {
                 chip.setCheckedIconTint(ColorStateList.valueOf(contrastColor));
             }
         }
+    }
+
+    /** 排序方式弹窗：按 IP / 按名称，选择后持久化保存 */
+    private void showSortDialog() {
+        String[] options = {"按 IP 排序", "按名称排序"};
+        int checked = SORT_NAME.equals(sortBy) ? 1 : 0;
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("排序方式")
+                .setSingleChoiceItems(options, checked, (dialog, which) -> {
+                    sortBy = which == 1 ? SORT_NAME : SORT_IP;
+                    saveSortPreference();
+                    applyFilter();
+                    dialog.dismiss();
+                    showToast(which == 1 ? "已按名称排序" : "已按 IP 排序");
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void showProtocolFilterDialog() {
@@ -487,7 +538,8 @@ public class DeviceFragment extends Fragment {
                 public void onProgress(String status, int progress, int total) {
                     if (!isAdded() || generation != scanGeneration) return;
                     scanStatus = status == null ? "正在扫描…" : status;
-                    if (scanProgress != null) {
+                    // 仅在扫描进行中才显示进度条，避免扫描结束后被晚到的回调重新显示
+                    if (scanProgress != null && isScanning) {
                         scanProgress.setVisibility(View.VISIBLE);
                         if (total > 0) {
                             scanProgress.setIndeterminate(false);
@@ -652,7 +704,7 @@ public class DeviceFragment extends Fragment {
                 filteredDeviceList.add(device);
             }
         }
-        filteredDeviceList.sort(DeviceFragment::compareDeviceIp);
+        filteredDeviceList.sort(this::compareDevices);
         adapter.notifyDataSetChanged();
         updateSummary();
         updateEmptyState();
@@ -745,7 +797,10 @@ public class DeviceFragment extends Fragment {
         TextView mac = view.findViewById(R.id.detailMac);
         TextView description = view.findViewById(R.id.detailDescription);
         TextView protocols = view.findViewById(R.id.detailProtocols);
+        com.google.android.material.chip.ChipGroup protocolChips =
+                view.findViewById(R.id.detailProtocolChips);
         MaterialButton openHttp = view.findViewById(R.id.openHttpButton);
+        MaterialButton onvifDebug = view.findViewById(R.id.onvifDebugButton);
         MaterialButton ping = view.findViewById(R.id.pingButton);
         MaterialButton portScan = view.findViewById(R.id.portScanButton);
         MaterialButton copyIp = view.findViewById(R.id.copyIpButton);
@@ -762,6 +817,8 @@ public class DeviceFragment extends Fragment {
         description.setText(desc == null || desc.isEmpty() ? "未获取到更多设备描述" : desc);
         String protocolText = joinProtocols(device);
         protocols.setText(protocolText.isEmpty() ? "未知" : protocolText);
+        // 生成可点击的协议标签，点击后跳转运行日志查看该协议原始报文
+        populateProtocolChips(protocolChips, device);
 
         int themeColor = ThemeManager.getThemeColor();
         int accentColor = ThemeManager.getAccessibleThemeColor(requireContext());
@@ -782,6 +839,21 @@ public class DeviceFragment extends Fragment {
         macQuery.setIconTint(ColorStateList.valueOf(accentColor));
         share.setTextColor(accentColor);
         share.setIconTint(ColorStateList.valueOf(accentColor));
+
+        // ONVIF 调试入口：仅当设备含 ONVIF 协议时显示，点击直接带设备跳转（无需重扫）
+        if (isOnvifDevice(device)) {
+            onvifDebug.setVisibility(View.VISIBLE);
+            // 背景跟随主题色，与「打开 HTTP 页面」按钮一致
+            onvifDebug.setBackgroundTintList(ColorStateList.valueOf(themeColor));
+            onvifDebug.setTextColor(contrastColor);
+            onvifDebug.setIconTint(ColorStateList.valueOf(contrastColor));
+            onvifDebug.setOnClickListener(v -> {
+                openOnvifDebug(device);
+                dialog.dismiss();
+            });
+        } else {
+            onvifDebug.setVisibility(View.GONE);
+        }
 
         openHttp.setOnClickListener(v -> {
             openHttp(device);
@@ -851,6 +923,74 @@ public class DeviceFragment extends Fragment {
         return builder.toString();
     }
 
+    /** 判断设备是否被 ONVIF 协议发现（图标或协议名任一匹配） */
+    private boolean isOnvifDevice(DeviceInfo device) {
+        if (device == null) return false;
+        if (device.getIconType() == DeviceInfo.ICON_ONVIF) return true;
+        for (String p : device.getProtocolNames().keySet()) {
+            if (p != null && p.toUpperCase().contains("ONVIF")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 跳转 ONVIF 调试页，并把已发现的设备带过去直接展示，
+     * 避免在调试页重复扫描。
+     */
+    private void openOnvifDebug(DeviceInfo device) {
+        String ip = device.getIp();
+        if (ip == null || ip.trim().isEmpty()) {
+            showToast("设备没有可用的 IP 地址");
+            return;
+        }
+        try {
+            Intent intent = new Intent(requireContext(), OnvifActivity.class);
+            intent.putExtra(OnvifActivity.EXTRA_PREFILL_IP, ip.trim());
+            intent.putExtra(OnvifActivity.EXTRA_PREFILL_PORT, 80);
+            intent.putExtra(OnvifActivity.EXTRA_PREFILL_NAME, device.getTitle());
+            startActivity(intent);
+        } catch (Exception e) {
+            showToast("无法打开 ONVIF 调试");
+        }
+    }
+
+    /**
+     * 为设备详情生成可点击的协议标签，点击后打开「运行日志」并按该协议过滤，
+     * 方便核对原始报文（例如标题截取是否正确）。
+     */
+    private void populateProtocolChips(
+            com.google.android.material.chip.ChipGroup group, DeviceInfo device) {
+        if (group == null || device == null) return;
+        group.removeAllViews();
+        java.util.Set<String> protocols = device.getProtocolNames().keySet();
+        if (protocols.isEmpty()) return;
+        int accentColor = ThemeManager.getAccessibleThemeColor(requireContext());
+        for (String protocol : protocols) {
+            com.google.android.material.chip.Chip chip =
+                    new com.google.android.material.chip.Chip(requireContext());
+            chip.setText(protocol);
+            chip.setClickable(true);
+            chip.setFocusable(true);
+            chip.setTextColor(accentColor);
+            chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(accentColor));
+            chip.setChipStrokeWidth(dpToPx(1));
+            chip.setCloseIconVisible(false);
+            chip.setOnClickListener(v -> openProtocolLogs(protocol));
+            group.addView(chip);
+        }
+    }
+
+    /** 打开运行日志页并按协议过滤 */
+    private void openProtocolLogs(String protocol) {
+        try {
+            Intent intent = new Intent(requireContext(), RuntimeLogActivity.class);
+            intent.putExtra(RuntimeLogActivity.EXTRA_PROTOCOL, protocol);
+            startActivity(intent);
+        } catch (Exception e) {
+            showToast("无法打开运行日志");
+        }
+    }
+
     private void openHttp(DeviceInfo device) {
         String ip = device.getIp();
         if (ip == null || ip.isEmpty()) {
@@ -859,7 +999,8 @@ public class DeviceFragment extends Fragment {
         }
         String url = ip.contains(":") ? "http://[" + ip + "]" : "http://" + ip;
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            // 按用户设置的跳转方式打开（内置浏览器或默认浏览器）
+            UrlOpenHelper.open(requireContext(), url, device.getTitle());
         } catch (Exception e) {
             showToast("无法打开设备页面");
         }
@@ -1010,10 +1151,28 @@ public class DeviceFragment extends Fragment {
         }
     }
 
-    private static int compareDeviceIp(DeviceInfo a, DeviceInfo b) {
-        int vA = a.getIpVersion();
-        int vB = b.getIpVersion();
-        if (vA != vB) return Integer.compare(vA, vB);
+    /**
+     * 设备列表排序：按用户选择的方式（IP 或 名称）。
+     * 同名/同 IP 时再用发现优先级和 IP 版本兜底，保证顺序稳定。
+     */
+    private int compareDevices(DeviceInfo a, DeviceInfo b) {
+        if (SORT_NAME.equals(sortBy)) {
+            String na = a.getTitle() == null ? "" : a.getTitle().trim();
+            String nb = b.getTitle() == null ? "" : b.getTitle().trim();
+            int cmp = na.compareToIgnoreCase(nb);
+            if (cmp != 0) return cmp;
+        } else {
+            // 按 IP 排序：先分 IPv4/IPv6，再按 IP 数值比较
+            int vA = a.getIpVersion();
+            int vB = b.getIpVersion();
+            if (vA != vB) return Integer.compare(vA, vB);
+            int cmp = NetworkUtils.compareIp(a.getIp(), b.getIp());
+            if (cmp != 0) return cmp;
+        }
+        // 兜底：按发现优先级（数字小的靠前，如 mDNS 在 ONVIF 之前）
+        int pA = a.getDiscoveryPriority();
+        int pB = b.getDiscoveryPriority();
+        if (pA != pB) return Integer.compare(pA, pB);
         return NetworkUtils.compareIp(a.getIp(), b.getIp());
     }
 

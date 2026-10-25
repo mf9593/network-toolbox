@@ -58,6 +58,18 @@
             app:iconPadding="4dp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/sortButton"
+            style="@style/Widget.NetworkTool.Button.TextButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="排序方式"
+            android:minWidth="48dp"
+            android:padding="12dp"
+            app:icon="@drawable/ic_sort"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/filterButton"
             style="@style/Widget.NetworkTool.Button.TextButton"
             android:layout_width="48dp"
@@ -107,17 +119,24 @@
                 android:id="@+id/ipVersionGroup"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:checkedChip="@id/chipIpv4"
+                app:checkedChip="@id/chipAll"
                 app:chipSpacingHorizontal="@dimen/space_2"
                 app:selectionRequired="true"
                 app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAll"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="全部" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipIpv4"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
                     android:text="IPv4" />
 
                 <com.google.android.material.chip.Chip
@@ -126,13 +145,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="IPv6" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipAll"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="全部" />
 
             </com.google.android.material.chip.ChipGroup>
 
@@ -143,14 +155,16 @@
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/scanProgress"
         android:layout_width="match_parent"
-        android:layout_height="3dp"
+        android:layout_height="4dp"
         android:layout_marginStart="@dimen/page_margin"
         android:layout_marginTop="@dimen/space_1"
         android:layout_marginEnd="@dimen/page_margin"
         android:indeterminate="true"
         android:visibility="gone"
         app:indicatorColor="?attr/colorPrimary"
-        app:trackColor="?attr/colorSurfaceVariant" />
+        app:trackColor="?attr/colorSurfaceVariant"
+        app:trackCornerRadius="2dp"
+        app:trackThickness="4dp" />
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/refreshLayout"

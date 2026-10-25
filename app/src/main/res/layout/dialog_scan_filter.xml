@@ -50,34 +50,6 @@
             android:text="全部协议" />
 
         <com.google.android.material.chip.Chip
-            android:id="@+id/protoOnvif"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="ONVIF" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/protoSadp"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SADP" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/protoRouter"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="路由器" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/protoSsdp"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SSDP" />
-
-        <com.google.android.material.chip.Chip
             android:id="@+id/protoMdns"
             style="@style/Widget.Material3.Chip.Filter"
             android:layout_width="wrap_content"
@@ -90,6 +62,27 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="NetBIOS" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoRouter"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="路由器" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoSadp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SADP" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoSsdp"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SSDP" />
 
         <com.google.android.material.chip.Chip
             android:id="@+id/protoArp"
@@ -132,6 +125,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="端口探测" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/protoOnvif"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ONVIF" />
 
     </com.google.android.material.chip.ChipGroup>
 

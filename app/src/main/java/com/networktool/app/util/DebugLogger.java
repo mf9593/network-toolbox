@@ -139,6 +139,8 @@ public class DebugLogger {
      * 记录局域网广播/多播消息响应
      */
     public static void logBroadcast(String protocol, String senderIp, String rawData) {
+        // 无论是否落盘，都把原始报文记入内存日志，供「设置 → 运行日志」查看
+        RuntimeLogStore.record(protocol, senderIp, "广播/多播", rawData);
         if (!isBroadcastLogEnabled()) return;
 
         String timestamp = getCurrentTime();
@@ -210,6 +212,8 @@ public class DebugLogger {
      * @param detail 详细信息（如XML内容、IP地址等）
      */
     public static void logDiscovery(String protocol, String event, String detail) {
+        // 事件 + 详情记入内存日志（不落盘）
+        RuntimeLogStore.record(protocol, "", event, detail);
         if (!isEnabled()) {
             return;
         }
@@ -245,6 +249,8 @@ public class DebugLogger {
      * @param xmlContent XML内容
      */
     public static void logXmlResponse(String protocol, String senderIp, String xmlContent) {
+        // XML 响应记入内存日志（不落盘）
+        RuntimeLogStore.record(protocol, senderIp, "XML响应", xmlContent);
         if (!isEnabled()) {
             return;
         }

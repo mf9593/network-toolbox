@@ -62,6 +62,10 @@ public class DeviceInfo {
     private String description;
     /** 各协议发现的名称（协议名→名称） */
     private Map<String, String> protocolNames = new LinkedHashMap<>();
+    /** 发现的常用端口（如 HTTP 80、RTSP 554），用于列表展示 */
+    private java.util.Set<Integer> ports = new java.util.LinkedHashSet<>();
+    /** 发现优先级（数字越小越优先，决定列表排序；默认取最低优先级） */
+    private int discoveryPriority = Integer.MAX_VALUE;
 
     /**
      * 获取设备显示标题
@@ -209,5 +213,41 @@ public class DeviceInfo {
      */
     public Map<String, String> getProtocolNames() {
         return protocolNames;
+    }
+
+    /**
+     * 获取发现的常用端口（升序）
+     */
+    public java.util.List<Integer> getPorts() {
+        java.util.List<Integer> list = new java.util.ArrayList<>(ports);
+        java.util.Collections.sort(list);
+        return list;
+    }
+
+    /**
+     * 记录一个发现的端口（去重）
+     */
+    public void addPort(int port) {
+        if (port > 0 && port <= 65535) {
+            ports.add(port);
+        }
+    }
+
+    /**
+     * 获取发现优先级（数字越小越靠前）
+     */
+    public int getDiscoveryPriority() {
+        return discoveryPriority;
+    }
+
+    /**
+     * 设置发现优先级；仅当新的优先级更高（数字更小）时生效，
+     * 避免后到的低优先级协议覆盖高优先级排序。
+     * @param priority 优先级数字
+     */
+    public void setDiscoveryPriority(int priority) {
+        if (priority < this.discoveryPriority) {
+            this.discoveryPriority = priority;
+        }
     }
 }

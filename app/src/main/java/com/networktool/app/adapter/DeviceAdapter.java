@@ -76,6 +76,21 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         holder.protocolText.setTextColor(ThemeManager.getOnSurfaceVariantColor(holder.itemView.getContext()));
         holder.protocolText.setVisibility(protocols.isEmpty() ? View.GONE : View.VISIBLE);
 
+        // 展示发现的服务端口（如 HTTP 80、RTSP 554）；无端口则隐藏
+        java.util.List<Integer> ports = device.getPorts();
+        if (ports == null || ports.isEmpty()) {
+            holder.portsText.setVisibility(View.GONE);
+        } else {
+            StringBuilder portsBuilder = new StringBuilder("端口: ");
+            for (int i = 0; i < ports.size(); i++) {
+                if (i > 0) portsBuilder.append(", ");
+                portsBuilder.append(ports.get(i));
+            }
+            holder.portsText.setText(portsBuilder.toString());
+            holder.portsText.setTextColor(ThemeManager.getOnSurfaceVariantColor(holder.itemView.getContext()));
+            holder.portsText.setVisibility(View.VISIBLE);
+        }
+
         boolean ipv6 = device.getIpVersion() == DeviceInfo.IPV6;
         holder.ipVersionText.setText(ipv6 ? "IPv6" : "IPv4");
         holder.ipVersionText.setTextColor(ipv6
@@ -170,6 +185,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         final TextView macText;
         final TextView ipVersionText;
         final TextView protocolText;
+        final TextView portsText;
 
         ViewHolder(View itemView) {
             super(itemView);
@@ -181,6 +197,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             macText = itemView.findViewById(R.id.macText);
             ipVersionText = itemView.findViewById(R.id.ipVersionText);
             protocolText = itemView.findViewById(R.id.protocolText);
+            portsText = itemView.findViewById(R.id.portsText);
         }
     }
 }

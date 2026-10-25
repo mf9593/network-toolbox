@@ -81,5 +81,8 @@
 
     <style name="Widget.NetworkTool.BottomNavText" parent="TextAppearance.Material3.LabelSmall">
         <item name="android:textSize">11sp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
     </style>
 </resources>

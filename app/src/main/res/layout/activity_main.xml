@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?android:attr/colorBackground"
-    android:fitsSystemWindows="true"
+    android:fitsSystemWindows="false"
     android:orientation="vertical">
 
     <androidx.viewpager2.widget.ViewPager2
@@ -25,11 +25,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"
-        android:minHeight="@dimen/bottom_nav_min_height"
+        android:minHeight="56dp"
         app:itemIconSize="24dp"
         app:itemTextAppearanceActive="@style/Widget.NetworkTool.BottomNavText"
         app:itemTextAppearanceInactive="@style/Widget.NetworkTool.BottomNavText"
-        app:labelVisibilityMode="labeled"
+        app:labelVisibilityMode="unlabeled"
         app:menu="@menu/bottom_nav_menu" />
 
 </LinearLayout>
