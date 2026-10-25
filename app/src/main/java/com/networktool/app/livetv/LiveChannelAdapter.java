@@ -130,16 +130,16 @@ public class LiveChannelAdapter extends RecyclerView.Adapter<LiveChannelAdapter.
         LiveChannel channel = visibleItems.get(position);
         android.content.Context context = holder.itemView.getContext();
         int accent = ThemeManager.getAccessibleThemeColor(context);
-        int onSurface = ThemeManager.getOnSurfaceColor(context);
-        int muted = ThemeManager.getOnSurfaceVariantColor(context);
         boolean selected = channel == selectedChannel;
 
         holder.name.setText(channel.getName());
         holder.url.setText(channel.hasMultipleSources()
                 ? channel.getSourceLabel() + " · " + channel.getUrl()
                 : channel.getUrl());
-        // 地址行也用白色系（浅一档），未选中同样看得清
-        holder.url.setTextColor(selected ? 0xE6FFFFFF : 0xB8FFFFFF);
+        // 抽屉是深色玻璃底：未选中文字必须用白色系。
+        // 不能用随主题走的 onSurface —— 浅色主题下它是近黑色，在深色抽屉里完全看不清。
+        holder.name.setTextColor(selected ? 0xFFFFFFFF : 0xFFF2F7FA);
+        holder.url.setTextColor(selected ? 0xE6FFFFFF : 0xC9FFFFFF);
 
         if (channel.hasMultipleSources()) {
             holder.badge.setVisibility(View.VISIBLE);
@@ -170,7 +170,7 @@ public class LiveChannelAdapter extends RecyclerView.Adapter<LiveChannelAdapter.
             holder.indicator.setBackground(bar);
         } else {
             holder.itemView.setBackground(null);
-            holder.name.setTextColor(onSurface);
+            holder.name.setTextColor(0xFFF2F7FA);
             holder.indicator.setVisibility(View.INVISIBLE);
         }
 

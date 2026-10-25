@@ -582,7 +582,8 @@ public class LiveTvActivity extends AppCompatActivity implements RtspPlayer.Dele
         box.setPadding(pad, pad, pad, pad);
         android.widget.TextView tip = new android.widget.TextView(this);
         tip.setText("正在搜索局域网内的投屏设备…");
-        tip.setTextColor(ThemeManager.getOnSurfaceColor(this));
+        // 弹窗是深色玻璃底，固定浅色文字（浅色主题下 onSurface 会变成近黑色，看不见）
+        tip.setTextColor(0xFFE9F1F7);
         box.addView(tip);
         android.widget.ProgressBar bar = new android.widget.ProgressBar(this);
         bar.setIndeterminate(true);
@@ -1235,8 +1236,6 @@ public class LiveTvActivity extends AppCompatActivity implements RtspPlayer.Dele
     private void updateCategoryTabStyles() {
         if (categoryTabs == null) return;
         int accent = ThemeManager.getAccessibleThemeColor(this);
-        int muted = ThemeManager.getOnSurfaceVariantColor(this);
-        int outline = ThemeManager.getOutlineVariantColor(this);
         String current = adapter.getGroup();
         for (int i = 0; i < categoryTabs.getChildCount(); i++) {
             View child = categoryTabs.getChildAt(i);
