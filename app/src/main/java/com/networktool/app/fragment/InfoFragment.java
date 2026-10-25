@@ -33,6 +33,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -126,6 +127,16 @@ public class InfoFragment extends Fragment {
         }
     };
 
+    /** 电池硬件信息需要持续刷新（充电功率/电压/温度会随充电过程变化） */
+    private final Runnable batteryTimer = new Runnable() {
+        @Override
+        public void run() {
+            updateBatteryInfo();
+            mainHandler.postDelayed(this, 2000);
+        }
+    };
+    private BroadcastReceiver batteryReceiver;
+
     private final List<Integer> rssiHistory = new ArrayList<>();
     private final Runnable rssiTimer = new Runnable() {
         @Override
@@ -160,12 +171,47 @@ public class InfoFragment extends Fragment {
         refreshInfo();
         collectRssi();
         mainHandler.post(rssiTimer);
+        // 电池信息：2 秒轮询 + 系统电池广播双重驱动，避免电量/充电功率停在初次进入时的数值
+        mainHandler.removeCallbacks(batteryTimer);
+        mainHandler.post(batteryTimer);
+        registerBatteryReceiver();
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mainHandler.removeCallbacks(rssiTimer);
+        mainHandler.removeCallbacks(batteryTimer);
+        unregisterBatteryReceiver();
+    }
+
+    /** 注册电池变化广播：充电插拔、电量变化时立刻刷新，不用等轮询 */
+    private void registerBatteryReceiver() {
+        if (batteryReceiver != null || !isAdded()) return;
+        batteryReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent != null && Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
+                    updateBatteryInfo();
+                }
+            }
+        };
+        try {
+            ContextCompat.registerReceiver(requireContext(), batteryReceiver,
+                    new IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                    ContextCompat.RECEIVER_NOT_EXPORTED);
+        } catch (Exception e) {
+            batteryReceiver = null;
+        }
+    }
+
+    private void unregisterBatteryReceiver() {
+        if (batteryReceiver == null) return;
+        try {
+            requireContext().unregisterReceiver(batteryReceiver);
+        } catch (Exception ignored) {
+        }
+        batteryReceiver = null;
     }
 
     private void initViews(View view) {
@@ -343,15 +389,34 @@ public class InfoFragment extends Fragment {
             if (battery == null) return;
 
             int voltage = battery.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1); // mV
+            if (voltage <= 0) {
+                // 部分机型/模拟器广播里没有电压，回退到 sysfs
+                voltage = readBatteryVoltageMv();
+            }
             int temp = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1); // 0.1°C
             int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            // 是否在充电：状态位 + 是否插着电源，两者任一成立即视为充电
+            // （有些机型放电状态位不准，只靠 EXTRA_STATUS 会误报「未充电」）
+            int plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+            // 充电电流：CURRENT_NOW → CURRENT_AVERAGE → sysfs 三级回退
+            // （不少机型 CURRENT_NOW 直接返回 0，导致充电功率一直显示 "--"）
             int current = Integer.MIN_VALUE;
             if (bm != null) {
-                current = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW); // µA
+                current = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+                if (current == 0 || current == Integer.MIN_VALUE) {
+                    int average = bm.getIntProperty(
+                            android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+                    if (average != 0 && average != Integer.MIN_VALUE) current = average;
+                }
+            }
+            if (current == 0 || current == Integer.MIN_VALUE) {
+                int sysfs = readBatteryCurrentUa();
+                if (sysfs != 0) current = sysfs;
             }
 
-            // 电压
-            if (voltage > 0) {
+            // 电压：手机电池正常在 3.0~4.5V，小于 2.5V 的读数视为无效（模拟器/个别机型会给垃圾值）
+            boolean voltageValid = voltage >= 2500 && voltage <= 5000;
+            if (voltageValid) {
                 batteryVoltage.setText(String.format(Locale.US, "%.2fV", voltage / 1000f));
             } else {
                 batteryVoltage.setText("--");
@@ -366,20 +431,99 @@ public class InfoFragment extends Fragment {
 
             // 充电功率：仅充电状态下计算（电流取绝对值）
             boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
-                    || status == BatteryManager.BATTERY_STATUS_FULL;
-            if (charging && voltage > 0 && current != Integer.MIN_VALUE && current != 0) {
+                    || status == BatteryManager.BATTERY_STATUS_FULL
+                    || plugged != 0;
+            if (charging && voltageValid && current != Integer.MIN_VALUE && current != 0) {
                 double amps = Math.abs(current) / 1_000_000.0;
                 double watts = (voltage / 1000.0) * amps;
-                batteryPower.setText(String.format(Locale.US, "%.2fW", watts));
+                batteryPower.setText(String.format(Locale.US, "%.1fW", watts));
             } else if (!charging) {
                 batteryPower.setText("未充电");
             } else {
-                batteryPower.setText("--");
+                // 充电中但读不到电流：至少说明在充电，而不是显示无意义的 "--"
+                batteryPower.setText("充电中");
+            }
+            if (com.networktool.app.BuildConfig.DEBUG) {
+                android.util.Log.d("InfoFragment", "硬件信息刷新: 电量=" + batteryPercent.getText()
+                        + " 电压=" + batteryVoltage.getText()
+                        + " 功率=" + batteryPower.getText()
+                        + " 温度=" + batteryTemperature.getText()
+                        + " 状态=" + status + " 电流=" + current + "µA");
             }
         } catch (Exception e) {
             // 读取失败不影响页面其它内容
             if (batteryPercent != null) batteryPercent.setText("--");
         }
+    }
+
+    /**
+     * 从 sysfs 读电池电压并换算成 mV。
+     * sysfs 里通常是 µV（如 4300000），少数机型直接给 mV（如 4300）。
+     */
+    private int readBatteryVoltageMv() {
+        String[] paths = {
+                "/sys/class/power_supply/battery/voltage_now",
+                "/sys/class/power_supply/Battery/voltage_now",
+                "/sys/class/power_supply/bms/voltage_now"
+        };
+        for (String path : paths) {
+            java.io.BufferedReader reader = null;
+            try {
+                reader = new java.io.BufferedReader(new java.io.FileReader(path));
+                String line = reader.readLine();
+                if (line != null) {
+                    int value = Integer.parseInt(line.trim());
+                    if (value > 0) {
+                        return value > 100000 ? value / 1000 : value;
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (reader != null) {
+                    try {
+                        reader.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 从 sysfs 读充电电流（µA）。Android 没有公开 API 的机型只能走这条路。
+     * 不同机型路径不同，逐个尝试，读到非 0 值就用。
+     */
+    private int readBatteryCurrentUa() {
+        String[] paths = {
+                "/sys/class/power_supply/battery/current_now",
+                "/sys/class/power_supply/Battery/current_now",
+                "/sys/class/power_supply/bms/current_now",
+                "/sys/class/power_supply/usb/current_now"
+        };
+        for (String path : paths) {
+            java.io.BufferedReader reader = null;
+            try {
+                reader = new java.io.BufferedReader(new java.io.FileReader(path));
+                String line = reader.readLine();
+                if (line != null) {
+                    int value = Integer.parseInt(line.trim());
+                    if (value != 0) {
+                        // 规范单位是 µA；个别机型/内核直接写 mA，数值小于 1000 时按 mA 处理
+                        return Math.abs(value) < 1000 ? value * 1000 : value;
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (reader != null) {
+                    try {
+                        reader.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     private void refreshInfo() {
@@ -1143,7 +1287,9 @@ public class InfoFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         mainHandler.removeCallbacks(rssiTimer);
+        mainHandler.removeCallbacks(batteryTimer);
         mainHandler.removeCallbacks(delayedRefresh);
+        unregisterBatteryReceiver();
         if (connectivityManager != null && networkCallback != null) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback);

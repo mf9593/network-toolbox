@@ -81,6 +81,7 @@
 
                         </LinearLayout>
 
+                        <!-- 信号强度 dBm 只在下面的「信号强度」卡片里展示，顶部标题卡片不显示 -->
                         <TextView
                             android:id="@+id/wifiSignal"
                             android:layout_width="wrap_content"
@@ -89,7 +90,8 @@
                             android:text="--"
                             android:textColor="?attr/colorOnPrimary"
                             android:textSize="16sp"
-                            android:textStyle="bold" />
+                            android:textStyle="bold"
+                            android:visibility="gone" />
 
                     </LinearLayout>
 

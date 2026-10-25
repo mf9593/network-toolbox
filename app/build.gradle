@@ -21,6 +21,28 @@ plugins {
 android {
     // 命名空间，用于生成 R 类和 BuildConfig
     namespace 'com.networktool.app'
+
+    // ==================== 发布签名 ====================
+    // 仓库根目录放 keystore.properties（已在 .gitignore 里排除，不会上传）即可自动签名：
+    //   storeFile=../keystore/network-toolbox-release.jks
+    //   storePassword=xxx
+    //   keyAlias=networktoolbox
+    //   keyPassword=xxx
+    // 没有该文件时，release 产出未签名 APK，不影响日常 assembleDebug。
+    def keystorePropsFile = rootProject.file("keystore.properties")
+    def hasKeystore = keystorePropsFile.exists()
+    if (hasKeystore) {
+        def props = new Properties()
+        keystorePropsFile.withInputStream { props.load(it) }
+        signingConfigs {
+            release {
+                storeFile rootProject.file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+        }
+    }
     
     // 编译 SDK 版本 (Android 14)
     compileSdk 34
@@ -57,6 +79,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             minifyEnabled false

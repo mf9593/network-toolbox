@@ -97,3 +97,8 @@ m1.xml
 p1.xml
 m2.xml
 x.xml
+
+# 发布签名配置（不上传）
+keystore.properties
+*.jks
+*.keystore
