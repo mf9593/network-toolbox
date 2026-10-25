@@ -47,6 +47,8 @@ import com.journeyapps.barcodescanner.CaptureManager;
 import com.journeyapps.barcodescanner.DecoratedBarcodeView;
 import com.networktool.app.R;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.WifiConnector;
+import com.networktool.app.util.WifiDataManager;
 import com.networktool.app.widget.ScanOverlayView;
 
 import org.json.JSONArray;
@@ -373,31 +375,103 @@ public class ScanActivity extends AppCompatActivity {
         Map<String, String> wifi = parseWifiQr(raw);
         String ssid = wifi.containsKey("S") ? wifi.get("S") : "未知 WiFi";
         String password = wifi.containsKey("P") ? wifi.get("P") : "";
-        String security = wifiSecurityLabel(wifi.get("T"));
+        String qrType = wifi.get("T");
+        String security = wifiSecurityLabel(qrType);
+
+        // 自动保存到 WiFi 密码库（addWifi 内部按 SSID + 密码去重，重复扫不会产生重复记录）
+        boolean alreadySaved = isWifiPasswordSaved(ssid, password);
+        saveWifiToLibrary(ssid, password);
 
         String message = "WiFi 名称：" + ssid + "\n"
                 + "加密方式：" + security + "\n"
-                + "密码：" + (password.isEmpty() ? "无密码" : password);
+                + "密码：" + (password.isEmpty() ? "无密码" : password)
+                + "\n\n" + (alreadySaved ? "该密码已在密码库中" : "已自动保存到 WiFi 密码库");
 
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
                 .setTitle("WiFi 二维码")
                 .setMessage(message)
                 .setNegativeButton("关闭", null)
-                .setNeutralButton("打开 WiFi 设置", (dialog, which) -> openWifiSettings())
+                .setPositiveButton("连接", (dialog, which) -> connectFromQr(ssid, password, qrType))
                 .setOnDismissListener(dialog -> resumeScanning());
 
         if (password.isEmpty()) {
-            builder.setPositiveButton("复制名称", (dialog, which) -> {
+            builder.setNeutralButton("复制名称", (dialog, which) -> {
                 copyToClipboard(ssid);
                 showToast("已复制 WiFi 名称");
             });
         } else {
-            builder.setPositiveButton("复制密码", (dialog, which) -> {
+            builder.setNeutralButton("复制密码", (dialog, which) -> {
                 copyToClipboard(password);
                 showToast("已复制 WiFi 密码");
             });
         }
         builder.show();
+    }
+
+    /** 该 SSID 下是否已经存过这个密码 */
+    private boolean isWifiPasswordSaved(String ssid, String password) {
+        try {
+            Map<String, List<String>> all =
+                    WifiDataManager.getInstance(this).getAllWifiData();
+            if (all == null) return false;
+            List<String> passwords = all.get(ssid);
+            return passwords != null && passwords.contains(password == null ? "" : password);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 保存到 WiFi 密码库，内部已按 SSID + 密码去重 */
+    private void saveWifiToLibrary(String ssid, String password) {
+        if (ssid == null || ssid.isEmpty() || "未知 WiFi".equals(ssid)) return;
+        try {
+            WifiDataManager.getInstance(this).addWifi(ssid, password == null ? "" : password);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 二维码里的加密方式转成 capabilities 字符串，供 WifiConnector 判断 */
+    private String capabilitiesFromQrType(String qrType) {
+        String type = qrType == null ? "" : qrType.toUpperCase(Locale.ROOT);
+        if (type.contains("WEP")) return "[WEP][ESS]";
+        if (type.contains("SAE")) return "[WPA3-SAE][ESS]";
+        if (type.contains("WPA")) return "[WPA2-PSK-CCMP][ESS]";
+        return "[ESS]";
+    }
+
+    /** 直接用二维码里的信息发起连接（Android 10+ 走 WifiNetworkSuggestion，系统会弹确认） */
+    private void connectFromQr(String ssid, String password, String qrType) {
+        String capabilities = capabilitiesFromQrType(qrType);
+        int securityType = WifiConnector.detectSecurityType(capabilities);
+        if (!WifiConnector.isSupported(securityType)) {
+            showToast("该加密方式不支持应用内连接，请到系统 WiFi 设置手动连接");
+            return;
+        }
+        if (WifiConnector.requiresPassword(securityType)) {
+            String error = WifiConnector.validatePassword(securityType, password);
+            if (error != null) {
+                showToast(error);
+                return;
+            }
+        }
+        showToast("正在连接 " + ssid + "…");
+        WifiConnector.getInstance(this).connect(ssid, capabilities,
+                password == null ? "" : password, new WifiConnector.Callback() {
+                    @Override
+                    public void onConnecting(String name) {
+                        showToast("正在连接 " + name + "…");
+                    }
+
+                    @Override
+                    public void onConnected(String name) {
+                        showToast("已连接到 " + name);
+                    }
+
+                    @Override
+                    public void onFailed(String name, String failureMessage) {
+                        showToast(failureMessage == null ? "连接失败" : failureMessage);
+                    }
+                });
     }
 
     private void showScanResultDialog(String result) {
@@ -524,6 +598,16 @@ public class ScanActivity extends AppCompatActivity {
                     scanData = new JSONArray(jsonStr.toString());
                 }
             }
+
+            // 去重：同一内容只保留最后一次识别结果（重复扫同一个码不会堆出一堆历史）
+            JSONArray deduped = new JSONArray();
+            for (int i = 0; i < scanData.length(); i++) {
+                JSONObject item = scanData.optJSONObject(i);
+                if (item == null) continue;
+                if (result.equals(item.optString("title", null))) continue;
+                deduped.put(item);
+            }
+            scanData = deduped;
 
             JSONObject newEntry = new JSONObject();
             newEntry.put("title", result);
