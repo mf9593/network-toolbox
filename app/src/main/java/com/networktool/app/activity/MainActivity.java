@@ -61,6 +61,25 @@ public class MainActivity extends AppCompatActivity {
         }
         viewPager.setCurrentItem(lastPage, false);
 
+        // 调试用：不点界面直接触发一次「检查更新」，结果写 logcat
+        // adb shell am start -n com.networktool.app/.activity.MainActivity --ez debug_check_update true
+        if (com.networktool.app.BuildConfig.DEBUG
+                && getIntent().getBooleanExtra("debug_check_update", false)) {
+            com.networktool.app.util.UpdateChecker.check(this,
+                    new com.networktool.app.util.UpdateChecker.Callback() {
+                        @Override
+                        public void onResult(com.networktool.app.util.UpdateChecker.UpdateInfo info) {
+                            android.util.Log.d("UpdateCheck", "结果: 版本=" + info.version
+                                    + " 有新版本=" + info.newer + " 地址=" + info.releaseUrl);
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            android.util.Log.d("UpdateCheck", "失败: " + message);
+                        }
+                    });
+        }
+
         // 注册全局房间邀请监听（确保所有页面都能收到邀请）
         LanChatManager chatManager = LanChatManager.getInstance();
         chatManager.setRoomInviteListener((inviterName, roomCode, roomName) -> {
