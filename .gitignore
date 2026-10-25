@@ -91,3 +91,9 @@ app/build/
 44023.txt
 *.m3u
 *.m3u8
+
+# 调试用 UI dump（不上传）
+m1.xml
+p1.xml
+m2.xml
+x.xml
