@@ -76,7 +76,7 @@ Android 11 及以上首次使用会提示授予“所有文件访问权限”。
 设备扫描不是只做 Ping，会组合使用：
 
 - ARP 表 / NDP 表
-- IPv4 / IPv6 邻居
+- IPv4 / IPv6 局域网设备（ARP / NDP 邻居表）
 - ICMP Ping
 - SSDP / mDNS
 - NetBIOS

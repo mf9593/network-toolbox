@@ -538,10 +538,49 @@ public class LanScanManager {
         };
         for (int i = 0; i < ports.length; i++) {
             if (!isScanning) return;
-            if (isPortOpen(ip, ports[i], 250)) {
-                // 记录发现的开放端口，供列表展示
-                addDeviceWithPriority(ip, labels[i], null,
-                        icons[i], PRIORITY_SERVICE, null, ports[i]);
+            if (!isPortOpen(ip, ports[i], 250)) continue;
+
+            String label = labels[i];
+            int icon = icons[i];
+            // 554 端口开放不等于就是摄像头：发一条 RTSP OPTIONS 确认对面真的是 RTSP 服务，
+            // 不是的话只标「554 端口开放」，避免把随便开着 554 的设备误判成摄像头
+            if (ports[i] == 554 && !isRtspServer(ip, ports[i])) {
+                label = "554 端口开放（未见 RTSP 响应）";
+                icon = DeviceInfo.ICON_UNKNOWN;
+            }
+            // 记录发现的开放端口，供列表展示
+            addDeviceWithPriority(ip, label, null, icon, PRIORITY_SERVICE, null, ports[i]);
+        }
+    }
+
+    /**
+     * 用 RTSP OPTIONS 请求确认目标是不是真正的 RTSP 服务（摄像头 / NVR / 流媒体）。
+     * 只要首行以 RTSP/1.0 开头（含 401 需要认证的情况）就认定是 RTSP。
+     */
+    private boolean isRtspServer(String ip, int port) {
+        java.net.Socket socket = null;
+        try {
+            socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress(ip, port), 400);
+            socket.setSoTimeout(800);
+            String request = "OPTIONS rtsp://" + ip + ":" + port + "/ RTSP/1.0\r\n"
+                    + "CSeq: 1\r\n"
+                    + "User-Agent: NetworkToolbox\r\n\r\n";
+            socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
+            socket.getOutputStream().flush();
+            byte[] buffer = new byte[64];
+            int read = socket.getInputStream().read(buffer);
+            if (read <= 0) return false;
+            String head = new String(buffer, 0, read, StandardCharsets.UTF_8).trim();
+            return head.startsWith("RTSP/1.0") || head.startsWith("RTSP/2.0");
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
             }
         }
     }
@@ -848,7 +887,7 @@ public class LanScanManager {
 
                     if (!mac.equals("00:00:00:00:00:00") && !mac.equals("(INCOMPLETE)")) {
                         String vendor = getVendorFromMac(mac);
-                        String title = vendor.isEmpty() ? "IPv6邻居设备" : vendor + " 设备";
+                        String title = vendor.isEmpty() ? "IPv6局域网设备" : vendor + " 设备";
                         addDeviceWithPriority(ipv6, title, DeviceInfo.ICON_ARP,
                                 PRIORITY_IPV6, mac);
                     }
@@ -875,7 +914,7 @@ public class LanScanManager {
                         }
 
                         String vendor = getVendorFromMac(mac);
-                        String title = vendor.isEmpty() ? "IPv6邻居设备" : vendor + " 设备";
+                        String title = vendor.isEmpty() ? "IPv6局域网设备" : vendor + " 设备";
                         addDeviceWithPriority(ipv6, title, DeviceInfo.ICON_ARP,
                                 PRIORITY_IPV6, mac);
                     }
