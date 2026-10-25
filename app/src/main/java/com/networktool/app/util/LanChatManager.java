@@ -355,7 +355,7 @@ public class LanChatManager {
                 negotiationSocket.setReuseAddress(true);
                 negotiationSocket.joinGroup(groupAddr);
                 negotiationSocket.setSoTimeout(1000);
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[65535];
                 while (isRunning) {
                     try {
                         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -1690,7 +1690,7 @@ public class LanChatManager {
                 }
             };
 
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[65535];
             while (isRunning) {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -1863,18 +1863,22 @@ public class LanChatManager {
                             // NACK丢包检测：检查seq是否连续
                             int msgSeq = message.getSeq();
                             if (msgSeq > 0 && expectedRoomCode != null) {
-                                String lastSeqKey = expectedRoomCode + "_lastSeq";
+                                // 序号是「每个发送方各自递增」的，必须按发送方分开记录，
+                                // 否则多设备时必然误判丢包，触发 NACK 重传风暴 + 大量重复消息
+                                String seqOwner = (message.getDeviceId() != null && !message.getDeviceId().isEmpty())
+                                        ? message.getDeviceId() : ("uid" + message.getUid());
+                                String lastSeqKey = expectedRoomCode + "_" + seqOwner + "_lastSeq";
                                 Integer lastSeqObj = roomLastReceivedSeq.get(lastSeqKey);
                                 int lastSeq = lastSeqObj != null ? lastSeqObj : 0;
-                                
-                                if (lastSeq > 0 && msgSeq > lastSeq + 1) {
-                                    // 检测到间隙，发送NACK请求重传丢失的消息
+
+                                // 间隙过大说明对方重启/序号重置，直接接受新基准，不要 NACK
+                                if (lastSeq > 0 && msgSeq > lastSeq + 1 && msgSeq - lastSeq <= 50) {
                                     Log.d(TAG, "Seq gap detected: expected " + (lastSeq + 1) + " got " + msgSeq + ", sending NACK");
                                     sendNackRequest(expectedRoomCode, lastSeq + 1, msgSeq - 1);
                                 }
-                                
+
                                 // 更新最后收到的seq
-                                if (msgSeq > lastSeq) {
+                                if (msgSeq > lastSeq || msgSeq - lastSeq > 50) {
                                     roomLastReceivedSeq.put(lastSeqKey, msgSeq);
                                 }
                             }
@@ -1966,9 +1970,14 @@ public class LanChatManager {
             }
 
             socket.close();
-            // 清理映射
-            multicastSockets.remove(port);
-            multicastPortRoomCodes.remove(port);
+            // 清理映射：只有映射仍指向本 socket 时才移除。
+            // 否则旧监听线程退出时会删掉「重新启动的新监听」的映射，
+            // 导致房间码校验（expectedRoomCode）变 null，房间隔离与成员同步全部失效。
+            if (multicastSockets.get(port) == socket) {
+                multicastSockets.remove(port);
+                multicastPortRoomCodes.remove(port);
+                multicastPortAddresses.remove(port);
+            }
         } catch (Exception e) {
             Log.e(TAG, "Failed to start UDP multicast listener on port " + port + ": " + e.getMessage());
             DebugLogger.logDiscovery("LanChat", "UDP组播监听启动失败", "端口: " + port + ", 错误: " + e.getMessage());
@@ -2399,6 +2408,10 @@ public class LanChatManager {
                 peer.setSocket(socket);
                 peer.setWriter(writer);
                 peer.setOnline(true);
+                synchronized (peer) {
+                    // 入站连接由本线程负责读，登记后不会再挂第二个读线程
+                    peer.setReaderSocket(socket);
+                }
                 currentWriter = writer; // 捕获当前writer，用于后续判断
 
                 // 处理握手响应
@@ -2508,8 +2521,14 @@ public class LanChatManager {
                         continue;
                     }
 
-                    // 处理旧版JSON消息
-                    ChatMessage chatMsg = gson.fromJson(line, ChatMessage.class);
+                    // 处理旧版JSON消息（解析失败只跳过这一行）
+                    ChatMessage chatMsg;
+                    try {
+                        chatMsg = gson.fromJson(line, ChatMessage.class);
+                    } catch (Exception parseError) {
+                        Log.w(TAG, "跳过无法解析的消息行: " + parseError.getMessage());
+                        continue;
+                    }
                     if (chatMsg != null) {
                         // 处理握手消息（已经处理过了，跳过）
                         if ("handshake".equals(chatMsg.getType())) {
@@ -2596,6 +2615,12 @@ public class LanChatManager {
                                         finalPeer.getIp(),
                                         finalMsg.getContent());
                             }
+                            // 入站连接这一侧同样要回执，否则主动方永远停在「发送中」
+                            if ("text".equals(finalMsg.getType())
+                                    && finalMsg.getMessageId() != null
+                                    && !finalMsg.getMessageId().isEmpty()) {
+                                sendDeliveryStatus(finalPeer, finalMsg.getMessageId());
+                            }
                         }
                     }
                 }
@@ -2603,6 +2628,9 @@ public class LanChatManager {
                 // while 循环正常退出（line == null），表示客户端关闭了连接
                 Log.d(TAG, "TCP client reader reached EOF: " + clientIp);
                 if (peer != null) {
+                    synchronized (peer) {
+                        if (peer.getReaderSocket() == socket) peer.setReaderSocket(null);
+                    }
                     synchronized (peer) {
                         if (peer.getWriter() == currentWriter) {
                             Log.d(TAG, "Cleaning up peer state due to EOF: " + peer.getUserName());
@@ -2625,11 +2653,31 @@ public class LanChatManager {
                     }
                 }
             } finally {
+                if (peer != null) {
+                    synchronized (peer) {
+                        if (peer.getReaderSocket() == socket) peer.setReaderSocket(null);
+                    }
+                }
                 try { socket.close(); } catch (IOException ignored) {}
             }
         });
     }
-    
+
+    /**
+     * 判断是不是「本机这个实例」发出的消息（回声过滤）。
+     *
+     * 只按 deviceId + 本机服务端口判断：昵称可能重名（默认昵称都是「用户xxx」），
+     * 用昵称判自环会让同名设备之间整条通道的消息被丢掉 —— 这正是「只能单向聊天」的主因之一。
+     */
+    private boolean isSelfMessage(ChatMessage message) {
+        if (message == null) return false;
+        String id = message.getDeviceId();
+        if (id == null || id.isEmpty() || deviceId == null || !id.equals(deviceId)) return false;
+        int port = message.getSenderPort();
+        // 同设备多开时端口不同，端口相同才算自己发出去的回声
+        return port <= 0 || port == tcpServerPort;
+    }
+
     /**
      * 主动连接到其他设备
      */
@@ -2701,6 +2749,7 @@ public class LanChatManager {
                     Socket socket = new Socket();
                     socket.connect(new java.net.InetSocketAddress(peer.getIp(), peer.getTcpPort()), 3000); // 3秒连接超时
                     socket.setSoTimeout(5000); // 5秒读取超时
+                    socket.setKeepAlive(true); // 半开连接至少能被内核探测出来
 
                     PrintWriter writer = new PrintWriter(
                             socket.getOutputStream(), true);
@@ -2757,8 +2806,8 @@ public class LanChatManager {
 
                     Log.d(TAG, "Handshake sent to " + peer.getIp() + " uid=" + myUid);
 
-                    // 开始监听该peer的消息
-                    startPeerListener(peer);
+                    // 开始监听该peer的消息（传本次握手用的 socket，避免读到被别人替换的连接）
+                    startPeerListener(peer, socket);
 
                     Log.d(TAG, "Connected to peer: " + peer.getUserName() + " (attempt " + attempt + ")");
                     DebugLogger.logDiscovery("LanChat", "TCP连接成功", peer.getUserName() + " @ " + peer.getIp() + ":" + peer.getTcpPort());
@@ -2796,12 +2845,30 @@ public class LanChatManager {
      * 监听peer消息
      */
     private void startPeerListener(LanPeer peer) {
+        startPeerListener(peer, peer.getSocket());
+    }
+
+    /**
+     * 监听指定 socket 上的消息。
+     *
+     * 必须显式传入本次握手所用的 socket：peer.socket 可能被「互连竞态」的另一条连接替换，
+     * 如果这里再去读 peer.getSocket()，就会出现两个线程读同一个 InputStream，
+     * JSON 行被随机撕成两半、双方解析失败并丢弃 —— 表现就是「一边能收、另一边收不到」。
+     */
+    private void startPeerListener(LanPeer peer, Socket boundSocket) {
+        if (peer == null || boundSocket == null || boundSocket.isClosed()) return;
+        synchronized (peer) {
+            if (peer.getReaderSocket() == boundSocket) {
+                Log.d(TAG, "startPeerListener: 该 socket 已有读线程，跳过");
+                return;
+            }
+            peer.setReaderSocket(boundSocket);
+        }
         executorService.execute(() -> {
-            Socket currentSocket = null; // 在try外声明，供catch块使用
+            Socket currentSocket = boundSocket; // 固定本次监听的 socket
             try {
-                Socket socket = peer.getSocket();
+                Socket socket = boundSocket;
                 if (socket == null || socket.isClosed()) return;
-                currentSocket = socket; // 捕获当前socket，用于后续判断
 
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -2854,8 +2921,14 @@ public class LanChatManager {
                         continue;
                     }
                     
-                    // 处理旧版JSON消息
-                    ChatMessage chatMsg = gson.fromJson(line, ChatMessage.class);
+                    // 处理旧版JSON消息（解析失败只跳过这一行，绝不能让接收线程直接死掉）
+                    ChatMessage chatMsg;
+                    try {
+                        chatMsg = gson.fromJson(line, ChatMessage.class);
+                    } catch (Exception parseError) {
+                        Log.w(TAG, "跳过无法解析的消息行: " + parseError.getMessage());
+                        continue;
+                    }
                     if (chatMsg != null) {
                         // 过滤握手响应消息，不作为聊天消息处理
                         if ("handshake_response".equals(chatMsg.getType())) {
@@ -2906,7 +2979,7 @@ public class LanChatManager {
                         if (!peerChangeListeners.isEmpty()) {
                             final ChatMessage finalMsg = chatMsg;
                             // 跳过自己发送的消息（避免重复显示）
-                            if (userName != null && userName.equals(chatMsg.getSender())) {
+                            if (isSelfMessage(chatMsg)) {
                                 continue;
                             }
 
@@ -2918,7 +2991,7 @@ public class LanChatManager {
 
                         // 保存消息到数据库，确保从通知进入聊天窗口时消息已持久化
                         if (appContext != null && "text".equals(chatMsg.getType())) {
-                            if (userName != null && userName.equals(chatMsg.getSender())) {
+                            if (isSelfMessage(chatMsg)) {
                                 continue;
                             }
                             try {
@@ -2932,7 +3005,7 @@ public class LanChatManager {
                         // 在LanChatManager层面直接显示通知，确保无论用户在哪个界面都能收到
                         // 通知逻辑独立于peerChangeListeners，即使没有监听器也要显示通知
                         if (appContext != null && "text".equals(chatMsg.getType())) {
-                            if (userName != null && userName.equals(chatMsg.getSender())) {
+                            if (isSelfMessage(chatMsg)) {
                                 continue;
                             }
                             LanChatNotificationManager notificationMgr = LanChatNotificationManager.getInstance(appContext);
@@ -2948,17 +3021,23 @@ public class LanChatManager {
                         }
                     }
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 Log.d(TAG, "Peer listener closed: " + peer.getUserName() + " - " + e.getMessage());
                 synchronized (peer) {
                     // 仅当socket未被新连接更新时才清理
                     if (peer.getSocket() == currentSocket) {
-                        Log.d(TAG, "Cleaning up peer state due to IOException: " + peer.getUserName());
+                        Log.d(TAG, "Cleaning up peer state: " + peer.getUserName());
                         peer.setOnline(false);
                         peer.setSocket(null);
                         peer.setWriter(null);
                     } else {
                         Log.d(TAG, "Peer socket updated, skipping cleanup: " + peer.getUserName());
+                    }
+                }
+            } finally {
+                synchronized (peer) {
+                    if (peer.getReaderSocket() == currentSocket) {
+                        peer.setReaderSocket(null);
                     }
                 }
             }
@@ -4092,9 +4171,10 @@ public class LanChatManager {
                     return false;
                 }
                 
-                socket = new Socket();
+                socket = new java.net.Socket();
                 socket.connect(new java.net.InetSocketAddress(ip, tcpPort), 3000);
                 socket.setSoTimeout(5000);
+                socket.setKeepAlive(true);
                 writer = new PrintWriter(socket.getOutputStream(), true);
                 online = true;
                 Log.d(TAG, "Connected to " + ip + ":" + tcpPort);
@@ -4186,6 +4266,12 @@ public class LanChatManager {
 
         public Socket getSocket() { return socket; }
         public void setSocket(Socket socket) { this.socket = socket; }
+
+        // 当前挂在该 peer 上负责读的 socket：保证一条连接只有一个读线程
+        private volatile Socket readerSocket;
+
+        public Socket getReaderSocket() { return readerSocket; }
+        public void setReaderSocket(Socket readerSocket) { this.readerSocket = readerSocket; }
         
         public PrintWriter getWriter() { return writer; }
         public void setWriter(PrintWriter writer) { this.writer = writer; }
@@ -4193,7 +4279,7 @@ public class LanChatManager {
         /**
          * 发送消息
          */
-        public boolean sendMessage(ChatMessage message) {
+        public synchronized boolean sendMessage(ChatMessage message) {
             // 更严格的连接状态检查
             if (writer != null && socket != null && !socket.isClosed() && online) {
                 try {

@@ -49,6 +49,8 @@ public class ChatMessageAdapter extends RecyclerView.Adapter<ChatMessageAdapter.
 
     private List<LanChatManager.ChatMessage> messages = new ArrayList<>();
     private String myUserName;
+    private String myDeviceId;
+    private int myTcpPort;
     private boolean isGroupChat = false;  // 是否群聊模式
     private Context context;
     private OnMessageClickListener messageClickListener;
@@ -88,11 +90,26 @@ public class ChatMessageAdapter extends RecyclerView.Adapter<ChatMessageAdapter.
         notifyItemInserted(messages.size() - 1);
     }
 
+    public void setMyDeviceId(String deviceId) {
+        this.myDeviceId = deviceId;
+    }
+
+    public void setMyTcpPort(int port) {
+        this.myTcpPort = port;
+    }
+
     @Override
     public int getItemViewType(int position) {
         LanChatManager.ChatMessage msg = messages.get(position);
-        // 判断是否是"我"发送的消息
-        return myUserName != null && myUserName.equals(msg.getSender()) ? TYPE_SENT : TYPE_RECEIVED;
+        // 判断是否是"我"发送的消息：优先用 deviceId + 本机端口，
+        // 昵称可能重名（默认昵称都一样），同名时会把对方消息画到右侧
+        if (myDeviceId != null && !myDeviceId.isEmpty() && msg.getDeviceId() != null
+                && myDeviceId.equals(msg.getDeviceId())) {
+            if (msg.getSenderPort() <= 0 || myTcpPort <= 0 || msg.getSenderPort() == myTcpPort) {
+                return TYPE_SENT;
+            }
+        }
+        return TYPE_RECEIVED;
     }
 
     @NonNull

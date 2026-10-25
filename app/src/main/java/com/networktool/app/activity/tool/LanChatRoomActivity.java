@@ -222,6 +222,7 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
 
             setupStatusBar();
             initViews();
+            registerFileTransferListener();
             setupToolbar();
             setupMessageList();
             loadHistory();
@@ -520,6 +521,9 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
     private void setupMessageList() {
         // 房间聊天使用群聊模式显示发送者名称
         messageAdapter = new ChatMessageAdapter(this, chatManager.getUserName(), isRoomChat);
+        // 气泡左右按 deviceId 判断（昵称可能重名，同名时对方消息会被画成「我发的」）
+        messageAdapter.setMyDeviceId(chatManager.getDeviceId());
+        messageAdapter.setMyTcpPort(chatManager.getTcpServerPort());
         messageRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         messageRecyclerView.setAdapter(messageAdapter);
 
@@ -1906,6 +1910,10 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
         if (chatManager != null) {
             chatManager.removePeerChangeListener(this);
         }
+        try {
+            LanChatFileManager.getInstance().setFileListener(null);
+        } catch (Exception ignored) {
+        }
         chatExecutor.shutdownNow();
     }
 
@@ -1934,16 +1942,87 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
 
     // ==================== OnPeerChangeListener ====================
 
+    /**
+     * 注册文件接收监听：之前没有注册，导致收到文件时无人弹「是否接收」，
+     * 30 秒超时后一律按拒绝处理，图片/文件发送 100% 失败。
+     */
+    private void registerFileTransferListener() {
+        try {
+            LanChatFileManager.getInstance().setFileListener(
+                    new LanChatFileManager.OnFileTransferListener() {
+                        @Override
+                        public void onFileOfferReceived(LanChatFileManager.FileTransferOffer offer) {
+                            if (offer == null || isFinishing() || isDestroyed()) return;
+                            runOnUiThread(() -> showFileOfferDialog(offer));
+                        }
+
+                        @Override
+                        public void onFileTransferProgress(String fileId, int progress) {
+                        }
+
+                        @Override
+                        public void onFileReceived(String fileId, String fileName,
+                                                   String filePath, long fileSize) {
+                            if (isFinishing() || isDestroyed()) return;
+                            runOnUiThread(() -> Toast.makeText(LanChatRoomActivity.this,
+                                    "已接收文件：" + fileName, Toast.LENGTH_SHORT).show());
+                        }
+
+                        @Override
+                        public void onFileSent(String fileId, String fileName, long fileSize) {
+                        }
+
+                        @Override
+                        public void onFileTransferError(String error) {
+                            if (isFinishing() || isDestroyed()) return;
+                            runOnUiThread(() -> Toast.makeText(LanChatRoomActivity.this,
+                                    "文件传输失败：" + error, Toast.LENGTH_SHORT).show());
+                        }
+                    });
+        } catch (Exception e) {
+            android.util.Log.e("LanChatRoom", "注册文件监听失败", e);
+        }
+    }
+
+    private void showFileOfferDialog(LanChatFileManager.FileTransferOffer offer) {
+        try {
+            String size = offer.getFileSize() >= 1024 * 1024
+                    ? String.format(java.util.Locale.US, "%.1f MB", offer.getFileSize() / 1048576f)
+                    : String.format(java.util.Locale.US, "%.0f KB", offer.getFileSize() / 1024f);
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("收到文件")
+                    .setMessage(offer.getFileName() + "\n大小：" + size)
+                    .setPositiveButton("接收", (dialog, which) -> {
+                        com.networktool.app.util.LanChatFileManager.getInstance()
+                                .acceptFileTransfer(offer.getFileId());
+                        Toast.makeText(this, "正在接收…", Toast.LENGTH_SHORT).show();
+                    })
+                    .setNegativeButton("拒绝", (dialog, which) -> {
+                        com.networktool.app.util.LanChatFileManager.getInstance()
+                                .rejectFileTransfer(offer.getFileId());
+                        Toast.makeText(this, "已拒绝接收", Toast.LENGTH_SHORT).show();
+                    })
+                    .setCancelable(false)
+                    .show();
+        } catch (Exception e) {
+            android.util.Log.e("LanChatRoom", "显示文件接收弹窗失败", e);
+        }
+    }
+
     @Override
     public void onPeerListChanged(List<LanChatManager.LanPeer> peers) {
         // 好友列表变化，更新当前聊天对象状态
-        if (currentPeer != null) {
-            for (LanChatManager.LanPeer peer : peers) {
-                if (peer.getIp().equals(currentPeer.getIp())) {
-                    currentPeer = peer;
-                    break;
+        try {
+            if (currentPeer != null && peers != null) {
+                for (LanChatManager.LanPeer peer : peers) {
+                    if (peer == null || peer.getIp() == null || currentPeer.getIp() == null) continue;
+                    if (peer.getIp().equals(currentPeer.getIp())) {
+                        currentPeer = peer;
+                        break;
+                    }
                 }
             }
+        } catch (Exception ignored) {
         }
         // 房间模式下更新房间信息栏（在线人数、房主等）
         if (isRoomChat) {
@@ -2009,25 +2088,13 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
                 return;
             }
 
-            String myUserName = chatManager != null ? chatManager.getUserName() : null;
-            String sender = message.getSender();
+            String myDeviceId = chatManager != null ? chatManager.getDeviceId() : null;
 
-            // 跳过自己发送的消息（避免重复显示）
-            if (myUserName != null && myUserName.equals(sender)) {
-                // 对于房间聊天，还需要通过IP和端口进一步确认是否是自己发送的消息
-                if (isRoomChat) {
-                    String localIp = com.networktool.app.util.NetworkUtils.getLocalIpAddress();
-                    int localPort = chatManager != null ? chatManager.getTcpServerPort() : 0;
-
-                    // 跳过自己发送的消息（通过IP+端口判断）
-                    if (localIp != null && localIp.equals(message.getSenderIp()) &&
-                        localPort == message.getSenderPort()) {
-                        return;
-                    }
-                } else {
-                    // 好友聊天模式下，用户名相同就跳过
-                    return;
-                }
+            // 跳过自己发送的消息：只按 deviceId + 本机端口判断。
+            // 之前用昵称判断，两台设备昵称相同（默认都是「用户xxx」）时会把对方的消息整条丢掉，
+            // 表现就是「一边能收、另一边收不到」。
+            if (isSelfMessage(message, myDeviceId)) {
+                return;
             }
 
             if (isRoomChat) {
@@ -2046,14 +2113,39 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
                 }
                 runOnUiThread(() -> addReceivedMessage(message));
             } else {
-                // 好友聊天模式 - 只显示当前聊天对象发送的消息
-                if (peer != null && peerIp != null && peer.getIp() != null &&
-                    peer.getIp().equals(peerIp) && peer.getTcpPort() == message.getSenderPort()) {
+                // 好友聊天模式 - 只显示当前聊天对象发送的消息。
+                // 不再要求「对方当前端口 == 消息里的端口」：端口会被 presence / 房间成员同步反复更新，
+                // 对端重启换了端口后消息会被静默丢弃（表现为「数据库里有、界面不显示」）。
+                boolean fromCurrentPeer = false;
+                if (peer != null && peer.getUid() != 0 && message.getUid() == peer.getUid()) {
+                    fromCurrentPeer = true;
+                } else if (peer != null && peer.getIp() != null && peerIp != null
+                        && peer.getIp().equals(peerIp)) {
+                    fromCurrentPeer = true;
+                } else if (message.getSenderIp() != null && peerIp != null
+                        && peerIp.equals(message.getSenderIp())) {
+                    fromCurrentPeer = true;
+                }
+                if (fromCurrentPeer) {
                     runOnUiThread(() -> addReceivedMessage(message));
                 }
             }
         } catch (Exception e) {
             android.util.Log.e("LanChatRoom", "Error in onMessageReceived", e);
+        }
+    }
+
+    /** 是否是本机这个实例发出的消息：deviceId 相同且发送端口等于本机服务端口 */
+    private boolean isSelfMessage(LanChatManager.ChatMessage message, String myDeviceId) {
+        try {
+            if (message == null || myDeviceId == null) return false;
+            String id = message.getDeviceId();
+            if (id == null || id.isEmpty() || !id.equals(myDeviceId)) return false;
+            int localPort = chatManager != null ? chatManager.getTcpServerPort() : 0;
+            int senderPort = message.getSenderPort();
+            return senderPort <= 0 || senderPort == localPort;
+        } catch (Exception e) {
+            return false;
         }
     }
 
