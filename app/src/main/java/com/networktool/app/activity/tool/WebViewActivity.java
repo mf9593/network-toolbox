@@ -305,12 +305,15 @@ public class WebViewActivity extends AppCompatActivity {
             }
         });
 
-        // 网址输入框焦点变化 - 失焦时折叠
+        // 网址输入框焦点变化：获得焦点时显示真实网址（而不是网页标题），失焦时折叠
         urlEditText.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) {
+            if (hasFocus) {
+                showUrlInInput();
+            } else {
                 collapseUrlInput();
             }
         });
+        urlEditText.setOnClickListener(v -> showUrlInInput());
 
         // 底部工具栏
         backButton.setOnClickListener(v -> {
@@ -438,7 +441,9 @@ public class WebViewActivity extends AppCompatActivity {
                 // 显示网页标题
                 if (!TextUtils.isEmpty(currentTitle)) {
                     pageTitle.setText(currentTitle);
-                    urlEditText.setText(currentTitle);
+                    if (!urlEditText.hasFocus()) {
+                        urlEditText.setText(currentTitle);
+                    }
                     
                     // 更新标签页标题
                     int tabIndex = getTabIndexById(tabId);
@@ -506,7 +511,9 @@ public class WebViewActivity extends AppCompatActivity {
                 super.onReceivedTitle(view, title);
                 currentTitle = title;
                 if (!TextUtils.isEmpty(title) && !isHomePage) {
-                    urlEditText.setText(title);
+                    if (!urlEditText.hasFocus()) {
+                        urlEditText.setText(title);
+                    }
                     
                     // 更新标签页标题
                     int tabIndex = getTabIndexById(tabId);
@@ -630,9 +637,11 @@ public class WebViewActivity extends AppCompatActivity {
         com.google.android.material.button.MaterialButton newTabButton = dialogView.findViewById(R.id.newTabButton);
         com.google.android.material.button.MaterialButton closeAllButton = dialogView.findViewById(R.id.closeAllButton);
         
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-        builder.setView(dialogView);
-        final AppCompatDialog dialog = builder.create();
+        // 标签页列表也改成底部弹出，和「更多」菜单保持一致
+        final com.google.android.material.bottomsheet.BottomSheetDialog dialog =
+                new com.google.android.material.bottomsheet.BottomSheetDialog(this);
+        dialogView.setBackgroundResource(R.drawable.bg_sheet_browser_menu);
+        dialog.setContentView(dialogView);
         
         // 使用数组包装 adapter 以解决 lambda 中的初始化问题
         final TabAdapter[] adapterRef = new TabAdapter[1];
@@ -857,7 +866,7 @@ public class WebViewActivity extends AppCompatActivity {
                 Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show();
             }));
             actions.add(new SheetAction(R.drawable.ic_delete, "清除缓存", this::clearCache));
-            actions.add(new SheetAction(R.drawable.ic_download, "分享", this::shareCurrentUrl));
+            actions.add(new SheetAction(R.drawable.ic_share, "分享", this::shareCurrentUrl));
             actions.add(new SheetAction(R.drawable.ic_info, "关于", this::showAbout));
             actions.add(new SheetAction(R.drawable.ic_close, "退出", this::finish));
         }
@@ -919,10 +928,16 @@ public class WebViewActivity extends AppCompatActivity {
         cell.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams cellParams = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cellParams.setMarginStart(dp(4));
+        cellParams.setMarginEnd(dp(4));
         cell.setLayoutParams(cellParams);
         cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        cell.setPadding(0, dp(8), 0, dp(8));
-        cell.setBackgroundResource(R.drawable.bg_chip);
+        cell.setPadding(0, dp(10), 0, dp(10));
+        // 不要整块背景色，只留点击水波纹；格子之间靠外边距拉开
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
+                ripple, true);
+        cell.setBackgroundResource(ripple.resourceId);
         cell.setClickable(true);
         cell.setFocusable(true);
 
@@ -956,6 +971,18 @@ public class WebViewActivity extends AppCompatActivity {
             }
         });
         return cell;
+    }
+
+    /** 把输入框内容换成当前真实网址，并把光标放到末尾 */
+    private void showUrlInInput() {
+        if (isHomePage) return;
+        String url = currentUrl;
+        if (TextUtils.isEmpty(url)) return;
+        String shown = urlEditText.getText() == null ? "" : urlEditText.getText().toString();
+        if (!url.equals(shown)) {
+            urlEditText.setText(url);
+        }
+        urlEditText.setSelection(urlEditText.getText().length());
     }
 
     private int dp(int value) {

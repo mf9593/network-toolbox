@@ -256,11 +256,21 @@
                         android:clickable="true"
                         android:focusable="true">
 
-                        <ImageView
+                        <FrameLayout
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:src="@drawable/ic_bookmark"
-                            android:tint="?attr/colorAccent" />
+                            android:background="@drawable/bg_bookmark_baidu">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="百"
+                                android:textColor="#FFFFFF"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -285,11 +295,21 @@
                         android:clickable="true"
                         android:focusable="true">
 
-                        <ImageView
+                        <FrameLayout
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:src="@drawable/ic_bookmark"
-                            android:tint="?attr/colorAccent" />
+                            android:background="@drawable/bg_bookmark_bing">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="必"
+                                android:textColor="#FFFFFF"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -314,11 +334,21 @@
                         android:clickable="true"
                         android:focusable="true">
 
-                        <ImageView
+                        <FrameLayout
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:src="@drawable/ic_bookmark"
-                            android:tint="?attr/colorAccent" />
+                            android:background="@drawable/bg_bookmark_google">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="G"
+                                android:textColor="#FFFFFF"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -343,11 +373,21 @@
                         android:clickable="true"
                         android:focusable="true">
 
-                        <ImageView
+                        <FrameLayout
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:src="@drawable/ic_bookmark"
-                            android:tint="?attr/colorAccent" />
+                            android:background="@drawable/bg_bookmark_sogou">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="搜"
+                                android:textColor="#FFFFFF"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"

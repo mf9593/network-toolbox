@@ -43,4 +43,10 @@
     <color name="scan_white">#FFFFFFFF</color>
     <color name="scan_scrim">#B3000000</color>
     <color name="scan_action_bg">#66000000</color>
+<!-- 浏览器主页书签的品牌色（仅用于站点图标识别，不参与主题） -->
+<color name="brand_baidu">#2932E1</color>
+<color name="brand_bing">#00809D</color>
+<color name="brand_google">#4285F4</color>
+<color name="brand_sogou">#FF6A00</color>
+
 </resources>
