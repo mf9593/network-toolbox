@@ -372,11 +372,15 @@ public class InfoFragment extends Fragment {
         try {
             java.util.List<com.networktool.app.model.DeviceInfo> devices =
                     com.networktool.app.util.LanScanManager.getCachedDevices();
+            boolean fromLastScan = false;
             if (devices.isEmpty()) {
                 // 进程刚重启时内存快照是空的，用上次扫描落盘的记录兜底
                 devices = com.networktool.app.util.LanScanManager
                         .loadPersistedDevices(requireContext());
+                fromLastScan = !devices.isEmpty();
             }
+            // 换过网络的话旧记录里的设备已经不在同一网段，直接过滤掉，避免看起来像缓存
+            devices = filterToCurrentSubnet(devices);
             StringBuilder signature = new StringBuilder();
             for (com.networktool.app.model.DeviceInfo device : devices) {
                 signature.append(device.getIp()).append('#')
@@ -407,8 +411,46 @@ public class InfoFragment extends Fragment {
             for (int i = 0; i < count; i++) {
                 addHomeDeviceRow(devices.get(i));
             }
+            if (fromLastScan) {
+                // 数据来自上次扫描的落盘记录，标明一下，点「全部」可重新扫描
+                TextView note = new TextView(requireContext());
+                note.setText("以上为上次扫描记录，点「全部」可重新扫描");
+                note.setTextSize(11f);
+                note.setTextColor(ThemeManager.getOnSurfaceVariantColor(requireContext()));
+                note.setPadding(0, (int) dp(6), 0, 0);
+                homeDeviceContainer.addView(note);
+            }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * 只保留和手机当前同网段的设备。
+     *
+     * 主页展示的是扫描快照，换了 WiFi / 换了网段后旧记录里的设备已经不可达，
+     * 不过滤会让用户以为还在线。判断不到本机 IP 时不做过滤。
+     */
+    private java.util.List<com.networktool.app.model.DeviceInfo> filterToCurrentSubnet(
+            java.util.List<com.networktool.app.model.DeviceInfo> devices) {
+        java.util.List<com.networktool.app.model.DeviceInfo> result = new java.util.ArrayList<>();
+        if (devices == null || devices.isEmpty()) return result;
+        String localIp = null;
+        try {
+            localIp = NetworkUtils.getActiveLocalIpv4Address(requireContext());
+        } catch (Exception ignored) {
+        }
+        if (localIp == null || localIp.isEmpty() || !localIp.contains(".")) {
+            result.addAll(devices);
+            return result;
+        }
+        String prefix = localIp.substring(0, localIp.lastIndexOf('.') + 1);
+        for (com.networktool.app.model.DeviceInfo device : devices) {
+            String ip = device.getIp();
+            if (ip != null && ip.startsWith(prefix) && !ip.equals(localIp)) {
+                result.add(device);
+            }
+        }
+        return result;
     }
 
     private void addHomeDeviceRow(com.networktool.app.model.DeviceInfo device) {
@@ -741,10 +783,14 @@ public class InfoFragment extends Fragment {
                 updateNoNetworkInfo();
                 return;
             }
-            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                updateWifiInfo();
-            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
                 updateEthernetInfo();
+            } else if (hasWifiConnection()) {
+                // WiFi 已经连上时以 WiFi 为准：连着摄像头/无外网的局域网时，
+                // 系统默认网络会切到移动数据，但用户实际在用的是 WiFi
+                updateWifiInfo();
+            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                updateWifiInfo();
             } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
                 updateMobileInfo();
             } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
@@ -754,6 +800,25 @@ public class InfoFragment extends Fragment {
             }
         } catch (Exception e) {
             updateNoNetworkInfo();
+        }
+    }
+
+    /** 当前是否已经连上某个 WiFi（用来压过「默认网络是移动数据」的判定） */
+    private boolean hasWifiConnection() {
+        if (wifiManager == null || !isAdded()) return false;
+        try {
+            if (!wifiManager.isWifiEnabled()) return false;
+            android.net.wifi.WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+            if (wifiInfo == null) return false;
+            String ssid = wifiInfo.getSSID();
+            if (ssid == null) return false;
+            if (ssid.contains("unknown") || ssid.contains("0x")) return false;
+            int networkId = wifiInfo.getNetworkId();
+            if (networkId < 0) return false;
+            android.net.wifi.SupplicantState state = wifiInfo.getSupplicantState();
+            return state == android.net.wifi.SupplicantState.COMPLETED;
+        } catch (Exception e) {
+            return false;
         }
     }
 

@@ -151,7 +151,8 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         refreshLayout = view.findViewById(R.id.refreshLayout);
         recyclerView = view.findViewById(R.id.recyclerView);
         currentWifiCard = view.findViewById(R.id.currentWifiCard);
-        currentSignalIcon = view.findViewById(R.id.currentSignalIcon);
+        // 标题栏已不使用信号图标（保留字段做空值保护）
+        currentSignalIcon = null;
         currentSsid = view.findViewById(R.id.currentSsid);
         currentIp = view.findViewById(R.id.currentIp);
         currentMeta = view.findViewById(R.id.currentMeta);
@@ -303,7 +304,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         int surfaceColor = ThemeManager.getSurfaceColor(requireContext());
         int onSurfaceVariant = ThemeManager.getOnSurfaceVariantColor(requireContext());
 
-        currentSignalIcon.setColorFilter(accentColor);
+        if (currentSignalIcon != null) currentSignalIcon.setColorFilter(accentColor);
 
         openWifiSettingsButton.setTextColor(accentColor);
         scanEntryButton.setIconTint(ColorStateList.valueOf(accentColor));
@@ -630,18 +631,16 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             currentSsid.setText("WiFi 不可用");
             currentIp.setText("当前设备不支持 WiFi 管理");
             currentMeta.setText("--");
-            currentSignalIcon.setImageResource(R.drawable.ic_wifi_off);
-            currentSignalIcon.setColorFilter(ThemeManager.getOnSurfaceVariantColor(requireContext()));
-            currentSignalIcon.setContentDescription("WiFi 不可用");
+            setCurrentSignalIcon(R.drawable.ic_wifi_off,
+                    ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 不可用");
             return;
         }
         if (!wifiManager.isWifiEnabled()) {
             currentSsid.setText("WiFi 已关闭");
             currentIp.setText("点击前往系统设置开启 WiFi");
             currentMeta.setText("开启后可扫描附近网络");
-            currentSignalIcon.setImageResource(R.drawable.ic_wifi_off);
-            currentSignalIcon.setColorFilter(ThemeManager.getOnSurfaceVariantColor(requireContext()));
-            currentSignalIcon.setContentDescription("WiFi 已关闭");
+            setCurrentSignalIcon(R.drawable.ic_wifi_off,
+                    ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 已关闭");
             return;
         }
 
@@ -678,21 +677,25 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         String standard = getConnectionStandard(info);
         String band = getFrequencyBand(frequency);
 
-        currentSsid.setText(ssid);
-        currentIp.setText(ip + " · 已连接");
+        currentSsid.setText("已连接：" + ssid);
+        currentIp.setText("IP " + ip + " · 点击可前往系统设置切换网络");
         currentMeta.setText(band + " · " + standard + " · " + rssi + " dBm");
-        currentSignalIcon.setImageResource(signalIconRes(rssi));
-        currentSignalIcon.setColorFilter(themeColor);
-        currentSignalIcon.setContentDescription("当前 WiFi 信号 " + rssi + " dBm");
+        setCurrentSignalIcon(signalIconRes(rssi), themeColor, "当前 WiFi 信号 " + rssi + " dBm");
     }
 
     private void showDisconnected(int themeColor) {
         currentSsid.setText("未连接 WiFi");
         currentIp.setText("点击前往系统设置连接网络");
         currentMeta.setText("扫描附近网络或连接已知网络");
-        currentSignalIcon.setImageResource(R.drawable.ic_signal_wifi_outline_0);
-        currentSignalIcon.setColorFilter(themeColor);
-        currentSignalIcon.setContentDescription("WiFi 已开启，未连接网络");
+        setCurrentSignalIcon(R.drawable.ic_signal_wifi_outline_0, themeColor, "WiFi 已开启，未连接网络");
+    }
+
+    /** 标题栏图标已在布局中移除，这里做空值保护 */
+    private void setCurrentSignalIcon(int resId, int color, String description) {
+        if (currentSignalIcon == null) return;
+        currentSignalIcon.setImageResource(resId);
+        currentSignalIcon.setColorFilter(color);
+        currentSignalIcon.setContentDescription(description);
     }
 
     private String getWifiStandard(ScanResult result) {
