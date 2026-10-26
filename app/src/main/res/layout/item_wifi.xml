@@ -128,9 +128,34 @@
                     android:text="-50 dBm"
                     android:textSize="10sp" />
 
+                <!-- 同名 WiFi（多 AP）时的数量提示 -->
+                <TextView
+                    android:id="@+id/apCountText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_chip_filled"
+                    android:paddingStart="6dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="2dp"
+                    android:text="2 个"
+                    android:textSize="10sp"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
         </LinearLayout>
+
+        <!-- 展开/收起箭头（仅同名多 AP 的组显示） -->
+        <ImageView
+            android:id="@+id/expandIcon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="展开同名网络"
+            android:src="@drawable/ic_expand_more"
+            android:visibility="gone" />
 
     </LinearLayout>
 

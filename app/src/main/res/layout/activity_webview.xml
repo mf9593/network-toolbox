@@ -98,7 +98,8 @@
                         android:layout_height="36dp"
                         android:layout_marginStart="4dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:src="@drawable/ic_import_export"
+                        android:contentDescription="复制当前网址"
+                        android:src="@drawable/ic_copy"
                         app:tint="?attr/colorOnSurfaceVariant" />
 
                 </LinearLayout>
@@ -114,14 +115,6 @@
                 android:src="@drawable/ic_refresh"
                 app:tint="?attr/colorOnSurfaceVariant" />
 
-            <!-- 更多菜单 -->
-            <ImageButton
-                android:id="@+id/menuButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_more"
-                app:tint="?attr/colorOnSurface" />
 
         </LinearLayout>
 

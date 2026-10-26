@@ -24,6 +24,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -81,7 +82,6 @@ public class WebViewActivity extends AppCompatActivity {
     private ImageButton navButton;
     private ImageButton refreshButton;
     private ImageButton copyButton;
-    private ImageButton menuButton;
     private ImageButton backButton;
     private ImageButton forwardButton;
     private ImageButton homeButton;
@@ -193,7 +193,6 @@ public class WebViewActivity extends AppCompatActivity {
         navButton = findViewById(R.id.navButton);
         refreshButton = findViewById(R.id.refreshButton);
         copyButton = findViewById(R.id.copyButton);
-        menuButton = findViewById(R.id.menuButton);
         backButton = findViewById(R.id.backButton);
         forwardButton = findViewById(R.id.forwardButton);
         homeButton = findViewById(R.id.homeButton);
@@ -254,7 +253,6 @@ public class WebViewActivity extends AppCompatActivity {
         });
 
         // 更多菜单
-        menuButton.setOnClickListener(v -> showMoreOptions());
         
         // 底部菜单按钮
         bottomMenuButton.setOnClickListener(v -> showMoreOptions());
@@ -822,63 +820,146 @@ public class WebViewActivity extends AppCompatActivity {
         startActivity(Intent.createChooser(shareIntent, "分享链接"));
     }
 
+    /** 底部菜单里的一项 */
+    private static final class SheetAction {
+        final int iconRes;
+        final String label;
+        final Runnable action;
+
+        SheetAction(int iconRes, String label, Runnable action) {
+            this.iconRes = iconRes;
+            this.label = label;
+            this.action = action;
+        }
+    }
+
     /**
-     * 显示更多选项
+     * 显示更多选项：底部弹出 + 网格布局。
+     *
+     * 底部工具条的「菜单」按钮和内容区都走这里，统一从底部升起，
+     * 图标加文字的网格比长列表更好点，也不会挡住页面。
      */
     private void showMoreOptions() {
-        String[] options;
+        java.util.List<SheetAction> actions = new java.util.ArrayList<>();
         if (isHomePage) {
-            options = new String[]{"在新浏览器打开首页", "清除缓存", "关于", "退出"};
+            actions.add(new SheetAction(R.drawable.ic_import_export, "外部打开",
+                    () -> openInExternalBrowser("https://www.baidu.com")));
+            actions.add(new SheetAction(R.drawable.ic_delete, "清除缓存", this::clearCache));
+            actions.add(new SheetAction(R.drawable.ic_info, "关于", this::showAbout));
+            actions.add(new SheetAction(R.drawable.ic_close, "退出", this::finish));
         } else {
-            options = new String[]{"刷新页面", "在新浏览器打开", "复制链接", "清除缓存", "分享", "关于", "退出"};
+            actions.add(new SheetAction(R.drawable.ic_refresh, "刷新",
+                    () -> webView.reload()));
+            actions.add(new SheetAction(R.drawable.ic_import_export, "外部打开",
+                    () -> openInExternalBrowser(currentUrl)));
+            actions.add(new SheetAction(R.drawable.ic_copy, "复制链接", () -> {
+                copyToClipboard(currentUrl);
+                Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show();
+            }));
+            actions.add(new SheetAction(R.drawable.ic_delete, "清除缓存", this::clearCache));
+            actions.add(new SheetAction(R.drawable.ic_download, "分享", this::shareCurrentUrl));
+            actions.add(new SheetAction(R.drawable.ic_info, "关于", this::showAbout));
+            actions.add(new SheetAction(R.drawable.ic_close, "退出", this::finish));
         }
 
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("更多选项")
-                .setItems(options, (dialog, which) -> {
-                    if (isHomePage) {
-                        switch (which) {
-                            case 0:
-                                openInExternalBrowser("https://www.baidu.com");
-                                break;
-                            case 1:
-                                clearCache();
-                                break;
-                            case 2:
-                                showAbout();
-                                break;
-                            case 3:
-                                finish();
-                                break;
-                        }
-                    } else {
-                        switch (which) {
-                            case 0:
-                                webView.reload();
-                                break;
-                            case 1:
-                                openInExternalBrowser(currentUrl);
-                                break;
-                            case 2:
-                                copyToClipboard(currentUrl);
-                                Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show();
-                                break;
-                            case 3:
-                                clearCache();
-                                break;
-                            case 4:
-                                shareCurrentUrl();
-                                break;
-                            case 5:
-                                showAbout();
-                                break;
-                            case 6:
-                                finish();
-                                break;
-                        }
-                    }
-                })
-                .show();
+        com.google.android.material.bottomsheet.BottomSheetDialog sheet =
+                new com.google.android.material.bottomsheet.BottomSheetDialog(this);
+        sheet.setContentView(buildMoreSheetView(actions, sheet));
+        sheet.show();
+    }
+
+    /** 组装底部网格菜单：每行 4 个，图标在上文字在下 */
+    private View buildMoreSheetView(java.util.List<SheetAction> actions,
+                                    com.google.android.material.bottomsheet.BottomSheetDialog sheet) {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int padH = dp(16);
+        root.setPadding(padH, dp(14), padH, dp(10));
+        root.setBackgroundResource(R.drawable.bg_sheet_browser_menu);
+
+        TextView title = new TextView(this);
+        title.setText("更多");
+        title.setTextSize(14f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTextColor(ThemeManager.getOnSurfaceColor(this));
+        title.setPadding(dp(4), 0, 0, dp(10));
+        root.addView(title);
+
+        final int columns = 4;
+        LinearLayout row = null;
+        for (int i = 0; i < actions.size(); i++) {
+            if (i % columns == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                rowParams.topMargin = dp(6);
+                root.addView(row, rowParams);
+            }
+            row.addView(buildSheetCell(actions.get(i), sheet));
+        }
+        // 最后一行用占位补满，保证每格等宽
+        if (row != null) {
+            int filled = actions.size() % columns;
+            if (filled != 0) {
+                for (int i = filled; i < columns; i++) {
+                    View spacer = new View(this);
+                    spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+                    row.addView(spacer);
+                }
+            }
+        }
+        return root;
+    }
+
+    private View buildSheetCell(SheetAction item,
+                                com.google.android.material.bottomsheet.BottomSheetDialog sheet) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams cellParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cell.setLayoutParams(cellParams);
+        cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        cell.setPadding(0, dp(8), 0, dp(8));
+        cell.setBackgroundResource(R.drawable.bg_chip);
+        cell.setClickable(true);
+        cell.setFocusable(true);
+
+        ImageView icon = new ImageView(this);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+        icon.setLayoutParams(iconParams);
+        icon.setImageResource(item.iconRes);
+        icon.setColorFilter(ThemeManager.getOnSurfaceColor(this),
+                android.graphics.PorterDuff.Mode.SRC_IN);
+        cell.addView(icon);
+
+        TextView label = new TextView(this);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        labelParams.topMargin = dp(6);
+        label.setLayoutParams(labelParams);
+        label.setText(item.label);
+        label.setTextSize(11f);
+        label.setGravity(android.view.Gravity.CENTER);
+        label.setMaxLines(1);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label.setTextColor(ThemeManager.getOnSurfaceVariantColor(this));
+        cell.addView(label);
+
+        cell.setOnClickListener(v -> {
+            sheet.dismiss();
+            try {
+                item.action.run();
+            } catch (Exception e) {
+                AppErrorLogger.logError(TAG, "菜单操作失败: " + item.label, e);
+            }
+        });
+        return cell;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void openInExternalBrowser(String url) {

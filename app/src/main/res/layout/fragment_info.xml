@@ -309,7 +309,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="局域网设备"
-                    android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+                    android:textAppearance="@style/TextAppearance.NetworkTool.SectionTitle" />
 
                 <TextView
                     android:id="@+id/homeDeviceAll"
@@ -343,7 +343,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="信号强度"
-                    android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+                    android:textAppearance="@style/TextAppearance.NetworkTool.SectionTitle" />
 
                 <TextView
                     android:id="@+id/signalCurrent"
@@ -383,7 +383,7 @@
                 android:layout_marginTop="@dimen/space_4"
                 android:paddingHorizontal="@dimen/space_1"
                 android:text="网络详情"
-                android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+                android:textAppearance="@style/TextAppearance.NetworkTool.SectionTitle" />
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/networkInfoCard"
@@ -416,7 +416,7 @@
                 android:layout_marginTop="@dimen/space_4"
                 android:paddingHorizontal="@dimen/space_1"
                 android:text="硬件信息"
-                android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+                android:textAppearance="@style/TextAppearance.NetworkTool.SectionTitle" />
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/batteryCard"

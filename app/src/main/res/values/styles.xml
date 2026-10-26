@@ -29,6 +29,13 @@
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
 
+    <!-- 主页分区标题（卡片外）：比正文更粗、更深，和卡片内容区分开 -->
+    <style name="TextAppearance.NetworkTool.SectionTitle" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
     <style name="TextAppearance.NetworkTool.Label" parent="TextAppearance.Material3.LabelLarge">
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
