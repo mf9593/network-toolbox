@@ -15,6 +15,7 @@ import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.PlaybackException;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.Tracks;
+import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.rtsp.RtspMediaSource;
 import com.networktool.app.util.RuntimeLogStore;
 
@@ -395,6 +396,13 @@ public class RtspPlayer {
 
     /* ==================== 播放控制 ==================== */
 
+    /** 判断是否是 HLS 地址（看扩展名，兼顾不带扩展名的直播源） */
+    private boolean isHlsUrl(String url) {
+        if (url == null) return false;
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains(".m3u8") || lower.contains("/hls/") || lower.contains("format=m3u8");
+    }
+
     public void start() {
         if (released) return;
         writeBreadcrumb("start() 入口");
@@ -429,12 +437,17 @@ public class RtspPlayer {
         startInternal();
     }
 
+    /** 空值安全的字符串比较 */
+    private boolean safeEquals(String a, String b) {
+        return a == null ? b == null : a.equals(b);
+    }
+
     private void startInternal() {
         if (inputUrl == null || inputUrl.isEmpty()) return;
         writeBreadcrumb("startInternal: " + safeUrl(inputUrl));
 
         // 检查是否需要重建实例（hwdec 变化或首次启动）
-        boolean needsRecreate = (exoPlayer == null) || !currentHwdec.equals(hwdec);
+        boolean needsRecreate = (exoPlayer == null) || !safeEquals(currentHwdec, hwdec);
 
         try {
             if (needsRecreate) {
@@ -496,9 +509,28 @@ public class RtspPlayer {
                         .createMediaSource(mediaItem);
                 exoPlayer.setMediaSource(rtspSource);
                 writeBreadcrumb("RTSP 源已创建（RTP " + (forceTcpTransport ? "TCP 内联" : "UDP") + "）");
+            } else if (isHlsUrl(playUrl)) {
+                // HLS（.m3u8）需要显式创建 HlsMediaSource：DefaultMediaSourceFactory
+                // 在没有 HLS 模块或扩展名不标准时会报 No suitable media source factory
+                MediaSource hlsSource = new com.google.android.exoplayer2.source.hls.HlsMediaSource.Factory(
+                        new com.google.android.exoplayer2.upstream.DefaultDataSource.Factory(context))
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(mediaItem);
+                exoPlayer.setMediaSource(hlsSource);
+                writeBreadcrumb("HLS 源已创建");
             } else {
-                exoPlayer.setMediaItem(mediaItem);
-                writeBreadcrumb("渐进源已设置");
+                try {
+                    exoPlayer.setMediaItem(mediaItem);
+                    writeBreadcrumb("渐进源已设置");
+                } catch (Throwable t) {
+                    // 兜底：扩展名不规范但其实是 HLS 的地址
+                    writeBreadcrumb("渐进源失败，按 HLS 重试: " + t.getMessage());
+                    MediaSource hlsSource = new com.google.android.exoplayer2.source.hls.HlsMediaSource.Factory(
+                            new com.google.android.exoplayer2.upstream.DefaultDataSource.Factory(context))
+                            .setAllowChunklessPreparation(true)
+                            .createMediaSource(mediaItem);
+                    exoPlayer.setMediaSource(hlsSource);
+                }
             }
             exoPlayer.prepare();
             exoPlayer.play();

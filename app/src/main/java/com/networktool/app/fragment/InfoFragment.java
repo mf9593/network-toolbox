@@ -81,6 +81,7 @@ public class InfoFragment extends Fragment {
     private View heroContent;
 
     private ImageView wifiLogo;
+    private TextView heroNetLabel;
     private TextView wifiTitle;
     private TextView wifiIp;
     private TextView wifiSignal;
@@ -282,6 +283,7 @@ public class InfoFragment extends Fragment {
         }
 
         wifiLogo = view.findViewById(R.id.wifiLogo);
+        heroNetLabel = view.findViewById(R.id.heroNetLabel);
         wifiTitle = view.findViewById(R.id.wifiTitle);
         wifiIp = view.findViewById(R.id.wifiIp);
         wifiSignal = view.findViewById(R.id.wifiSignal);
@@ -508,6 +510,10 @@ public class InfoFragment extends Fragment {
             frequencyPill.setColor(withAlpha(contrastColor, 0x1F));
             frequencyPill.setCornerRadius(dp(20));
             wifiFrequency.setBackground(frequencyPill);
+        }
+        // 「当前网络」小标题也跟随反差色，否则在浅色主题色上会看不清
+        if (heroNetLabel != null) {
+            heroNetLabel.setTextColor(withAlpha(contrastColor, 0xB3));
         }
         wifiTitle.setTextColor(contrastColor);
         wifiIp.setTextColor(withAlpha(contrastColor, 0xD9));

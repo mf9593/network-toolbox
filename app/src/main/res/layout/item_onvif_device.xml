@@ -1,36 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Onvif设备列表项布局 -->
+<!-- Onvif设备列表项布局：与主页卡片风格一致（浅描边、大圆角、弱化次要文字） -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/cardView"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="0dp">
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="5dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="?attr/colorOutline">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="12dp">
 
-        <!-- 标题行 -->
+        <!-- 标题行：图标 + 名称/地址 + 认证状态 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="摄像头"
                 android:src="@drawable/ic_videocam"
                 app:tint="?attr/colorAccent" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
@@ -38,18 +44,23 @@
                     android:id="@+id/nameText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="设备名称"
                     android:textColor="?attr/colorOnSurface"
-                    android:textSize="16sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/addressText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="192.168.1.100:80"
-                    android:textColor="?attr/colorOnSurface"
-                    android:textSize="12sp" />
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="11sp" />
 
             </LinearLayout>
 
@@ -57,57 +68,62 @@
                 android:id="@+id/statusText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
                 android:text="未认证"
                 android:textSize="11sp" />
 
         </LinearLayout>
 
-        <!-- 设备信息 -->
+        <!-- 设备信息（制造商 / 型号），无内容时由代码隐藏 -->
         <TextView
             android:id="@+id/infoText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:text="制造商 型号"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp" />
 
         <!-- 操作按钮 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:gravity="end"
             android:orientation="horizontal">
 
             <ImageButton
                 android:id="@+id/connectButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_login"
                 android:contentDescription="连接"
+                android:src="@drawable/ic_login"
                 app:tint="?attr/colorAccent" />
 
             <ImageButton
                 android:id="@+id/streamButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_play"
                 android:contentDescription="播放流"
-                app:tint="#66BB6A" />
+                android:src="@drawable/ic_play"
+                app:tint="?attr/colorAccent" />
 
             <ImageButton
                 android:id="@+id/menuButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="设备功能菜单"
                 android:src="@drawable/ic_more_vert"
-                android:contentDescription="更多选项"
-                android:visibility="gone"
                 app:tint="?attr/colorAccent" />
 
         </LinearLayout>

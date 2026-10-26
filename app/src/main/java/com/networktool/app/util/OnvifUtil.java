@@ -189,11 +189,11 @@ public class OnvifUtil {
                 device.setScopes(scopes);
                 for (String scope : scopes.trim().split("\\s+")) {
                     if (scope.contains("/name/")) {
-                        device.setName(scope.substring(scope.indexOf("/name/") + 6));
+                        device.setName(decodeScope(scope.substring(scope.indexOf("/name/") + 6)));
                     } else if (scope.contains("/Hardware/")) {
-                        device.setHardware(scope.substring(scope.indexOf("/Hardware/") + 10));
+                        device.setHardware(decodeScope(scope.substring(scope.indexOf("/Hardware/") + 10)));
                     } else if (scope.contains("/location/")) {
-                        String loc = scope.substring(scope.indexOf("/location/") + 10);
+                        String loc = decodeScope(scope.substring(scope.indexOf("/location/") + 10));
                         if (device.getLocation() != null) {
                             device.setLocation(device.getLocation() + " " + loc);
                         } else {
@@ -1697,6 +1697,22 @@ public class OnvifUtil {
         public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {}
         public java.security.cert.X509Certificate[] getAcceptedIssuers() {
             return new java.security.cert.X509Certificate[0];
+        }
+    }
+
+    /**
+     * 解码 scope 里的转义字符。
+     *
+     * <p>ONVIF 的 Scopes 是 URI 形式，名称里的空格等字符会被转义，
+     * 例如 {@code onvif://www.onvif.org/name/HD%20IPC} 应显示为 {@code HD IPC}。
+     * 这里只做 URL 解码，不处理 {@code +}（scope 中它是真实字符）。</p>
+     */
+    private static String decodeScope(String value) {
+        if (value == null || value.isEmpty() || value.indexOf('%') < 0) return value;
+        try {
+            return java.net.URLDecoder.decode(value, "UTF-8");
+        } catch (Exception e) {
+            return value;
         }
     }
 }

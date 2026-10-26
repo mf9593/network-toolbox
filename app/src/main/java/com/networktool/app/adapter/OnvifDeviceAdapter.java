@@ -190,16 +190,17 @@ public class OnvifDeviceAdapter extends RecyclerView.Adapter<OnvifDeviceAdapter.
         holder.infoText.setText(info.toString());
 
         // 显示认证状态
-        if (device.isAuthenticated()) {
+        boolean authed = device.isAuthenticated();
+        if (authed) {
             holder.statusText.setText("已认证");
-            holder.statusText.setTextColor(0xFF66BB6A);
-            // 认证成功后显示菜单按钮
-            holder.menuButton.setVisibility(View.VISIBLE);
+            holder.statusText.setTextColor(0xFF2E7D32);
         } else {
             holder.statusText.setText("未认证");
-            holder.statusText.setTextColor(0xFFFFA726);
-            holder.menuButton.setVisibility(View.GONE);
+            holder.statusText.setTextColor(0xFFB26A00);
         }
+        // 菜单常驻显示：里面的「免登录尝试重启」「访问后台」等入口不需要先登录，
+        // 需要认证的功能会在点击时自行提示，不再把整个菜单藏起来
+        holder.menuButton.setVisibility(View.VISIBLE);
 
         // 按钮点击
         holder.itemView.setOnClickListener(v -> {

@@ -163,6 +163,11 @@ dependencies {
     implementation 'com.google.android.exoplayer:exoplayer-ui:2.19.1'
     // RTSP 协议支持（摄像头预览必需，RTSP 在独立模块中）
     implementation 'com.google.android.exoplayer:exoplayer-rtsp:2.19.1'
+    // HLS（.m3u8）：网络电视直播源基本都是 HLS，缺这个模块会报
+    // IllegalStateException: No suitable media source factory found for content type: 2
+    implementation 'com.google.android.exoplayer:exoplayer-hls:2.19.1'
+    // DASH（.mpd）：部分直播源使用
+    implementation 'com.google.android.exoplayer:exoplayer-dash:2.19.1'
 
     // ==================== 测试库 ====================
     testImplementation 'junit:junit:4.13.2'
