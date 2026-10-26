@@ -38,6 +38,7 @@ import com.networktool.app.activity.tool.OnvifActivity;
 import com.networktool.app.activity.tool.PingActivity;
 import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.activity.tool.RtspPlayerActivity;
+import com.networktool.app.activity.tool.RtspUrlGeneratorActivity;
 import com.networktool.app.activity.tool.SadpActivity;
 import com.networktool.app.activity.tool.SavedNetworkActivity;
 import com.networktool.app.activity.tool.SpeedTestActivity;
@@ -335,8 +336,8 @@ public class ToolsFragment extends Fragment
         favoriteSection.setVisibility(View.VISIBLE);
         if (favoriteTitle != null) {
             favoriteTitle.setText("我的常用 · " + favorites.size() + "/" + MAX_FAVORITES);
-            // 强调色跟随主题（切主题后重新渲染即生效）
-            favoriteTitle.setTextColor(ThemeManager.getAccessibleThemeColor(requireContext()));
+            // 用主题的正文色（浅色主题下为黑色），深色主题下自动变浅，避免不可读
+            favoriteTitle.setTextColor(ThemeManager.getOnSurfaceColor(requireContext()));
         }
         if (favoriteHint != null) {
             favoriteHint.setText(favorites.size() >= MAX_FAVORITES
@@ -606,6 +607,10 @@ public class ToolsFragment extends Fragment
 
     private void onBrowser(ToolItem tool) {
         open(WebViewActivity.class);
+    }
+
+    private void onRtspGenerator(ToolItem tool) {
+        open(RtspUrlGeneratorActivity.class);
     }
 
     private void onRtspPlayer(ToolItem tool) {

@@ -7,6 +7,13 @@
         <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
+    <!-- 列表页主标题：比 Headline 小一号，避免占满标题行 -->
+    <style name="TextAppearance.NetworkTool.PageTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
     <style name="TextAppearance.NetworkTool.Title" parent="TextAppearance.Material3.TitleMedium">
         <item name="android:textSize">16sp</item>
         <item name="android:textStyle">bold</item>

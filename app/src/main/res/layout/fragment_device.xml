@@ -31,7 +31,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="正在扫描"
-                android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+                android:textAppearance="@style/TextAppearance.NetworkTool.PageTitle" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/scanButton"

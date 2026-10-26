@@ -194,6 +194,12 @@
 
         
         <activity
+            android:name="com.networktool.app.activity.tool.RtspUrlGeneratorActivity"
+            android:exported="false"
+            android:parentActivityName="com.networktool.app.activity.MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name="com.networktool.app.activity.tool.RtspPlayerActivity"
             android:exported="true"
             android:parentActivityName="com.networktool.app.activity.MainActivity"

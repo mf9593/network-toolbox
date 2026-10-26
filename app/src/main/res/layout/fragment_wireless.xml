@@ -35,7 +35,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="无线列表"
-                android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
+                android:textAppearance="@style/TextAppearance.NetworkTool.PageTitle" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/scanEntryButton"

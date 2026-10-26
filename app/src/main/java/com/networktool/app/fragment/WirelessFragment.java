@@ -629,7 +629,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         }
         if (sb.length() > start) {
             // 时间和「扫描中」用更小更淡的样式，不抢主标题
-            sb.setSpan(new android.text.style.RelativeSizeSpan(0.6f), start, sb.length(),
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.72f), start, sb.length(),
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             sb.setSpan(new android.text.style.ForegroundColorSpan(
                             ThemeManager.getOnSurfaceVariantColor(requireContext())),

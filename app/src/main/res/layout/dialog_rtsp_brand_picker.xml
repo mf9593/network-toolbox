@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 品牌选择底部弹窗：搜索 + 列表 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_sheet_browser_menu"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/page_margin"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/page_margin">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="选择品牌"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/brandSearchLayout"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:hint="搜索品牌（如 hikvision）"
+        app:endIconMode="clear_text"
+        app:startIconDrawable="@drawable/ic_search">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/brandSearchInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:singleLine="true" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <TextView
+        android:id="@+id/brandCountText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/brandList"
+        android:layout_width="match_parent"
+        android:layout_height="380dp"
+        android:layout_marginTop="@dimen/space_1"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/space_3" />
+
+</LinearLayout>
