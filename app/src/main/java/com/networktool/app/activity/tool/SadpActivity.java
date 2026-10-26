@@ -122,7 +122,7 @@ public class SadpActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_sadp);
+        setContentView(R.layout.activity_device_debug);
 
         setupStatusBar();
 
@@ -170,7 +170,7 @@ public class SadpActivity extends AppCompatActivity {
         toolbar = findViewById(R.id.toolbar);
         tabLayout = findViewById(R.id.tabLayout);
         deviceTabContent = findViewById(R.id.deviceTabContent);
-        rtspPreviewTabContent = findViewById(R.id.rtspPreviewTabContent);
+        rtspPreviewTabContent = findViewById(R.id.rtspTabContent);
         
         recyclerView = findViewById(R.id.recyclerView);
         emptyView = findViewById(R.id.emptyView);
@@ -189,6 +189,12 @@ public class SadpActivity extends AppCompatActivity {
         videoViewContainer = findViewById(R.id.videoViewContainer);
         rtspLoadingProgress = findViewById(R.id.rtspLoadingProgress);
         rtspStatusText = findViewById(R.id.rtspStatusText);
+
+        // 共用布局里 ONVIF 专用的按钮，SADP 页隐藏
+        View manualAdd = findViewById(R.id.addManualButton);
+        if (manualAdd != null) manualAdd.setVisibility(View.GONE);
+        View clearAll = findViewById(R.id.clearButton);
+        if (clearAll != null) clearAll.setVisibility(View.GONE);
 
         ThemeManager.setupResultCard(findViewById(R.id.infoCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.scanCard), this);

@@ -143,7 +143,7 @@ public class OnvifActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_onvif);
+        setContentView(R.layout.activity_device_debug);
 
         // 设置沉浸式状态栏
         setupStatusBar();
@@ -194,8 +194,8 @@ public class OnvifActivity extends AppCompatActivity {
      */
     private void initTabs() {
         tabLayout = findViewById(R.id.tabLayout);
-        onvifLayout = findViewById(R.id.onvifDeviceLayout);
-        rtspInputLayout = findViewById(R.id.rtspInputLayout);
+        onvifLayout = findViewById(R.id.deviceTabContent);
+        rtspInputLayout = findViewById(R.id.rtspTabContent);
 
         // 默认显示Onvif设备页
         onvifLayout.setVisibility(View.VISIBLE);
@@ -261,6 +261,17 @@ public class OnvifActivity extends AppCompatActivity {
         // Onvif相关
         recyclerView = findViewById(R.id.recyclerView);
         emptyView = findViewById(R.id.emptyView);
+        // 概览卡 / 操作卡沿用主页卡片底色，避免和其余页面有色差
+        ThemeManager.setupResultCard(findViewById(R.id.infoCard), this);
+        ThemeManager.setupResultCard(findViewById(R.id.scanCard), this);
+        // 主操作按钮跟随主题色（扫描 / 播放）
+        for (int id : new int[]{R.id.scanButton, R.id.rtspPlayButton}) {
+            View button = findViewById(id);
+            if (button instanceof com.google.android.material.button.MaterialButton) {
+                ThemeManager.applyPrimaryButton(
+                        (com.google.android.material.button.MaterialButton) button);
+            }
+        }
         scanButton = findViewById(R.id.scanButton);
         addManualButton = findViewById(R.id.addManualButton);
         clearButton = findViewById(R.id.clearButton);
