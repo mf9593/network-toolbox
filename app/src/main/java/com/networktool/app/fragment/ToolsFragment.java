@@ -258,6 +258,7 @@ public class ToolsFragment extends Fragment
         camera.add(new ToolItem("ONVIF 调试", R.drawable.ic_webcam, "发现并调试 ONVIF 摄像头", this::onOnvifConsole));
         camera.add(new ToolItem("SADP 调试", R.drawable.ic_cctv, "海康设备发现与配置", this::onSadpDebug));
         camera.add(new ToolItem("RTSP 预览", R.drawable.ic_rtsp, "播放 RTSP 视频流", this::onRtspPlayer));
+        camera.add(new ToolItem("RTSP 地址生成器", R.drawable.ic_rtsp, "按品牌模板生成摄像头 RTSP 地址", this::onRtspGenerator));
         camera.add(new ToolItem("电视直播", R.drawable.ic_live_tv, "加载自定义直播源文件", this::onLiveTv));
         camera.add(new ToolItem("投屏", R.drawable.ic_cast, "投屏图片/视频/直播源到电视", this::onCast));
         categories.add(new Category("摄像头与流媒体", camera));
