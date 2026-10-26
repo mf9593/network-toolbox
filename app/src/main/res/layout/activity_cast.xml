@@ -8,9 +8,10 @@
     android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:navigationIcon="@drawable/ic_arrow_back"
         app:navigationIconTint="?attr/colorOnSurface"
@@ -33,7 +34,7 @@
                 android:id="@+id/deviceCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="14dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 
@@ -103,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                app:cardCornerRadius="14dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 

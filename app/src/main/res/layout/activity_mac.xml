@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/space_3"
             android:hint="MAC 地址（如 00:1A:2B:3C:4D:5E）"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/macEditText"

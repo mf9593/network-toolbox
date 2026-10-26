@@ -120,8 +120,20 @@ public class LanPeerAdapter extends RecyclerView.Adapter<LanPeerAdapter.PeerView
             }
         }
 
-        // 卡片背景跟随主题色（90%白+10%主题色）
-        holder.itemView.setBackgroundColor(ThemeManager.getSurfaceColor(holder.itemView.getContext()));
+        // 卡片背景跟随主题色：必须走 setCardBackgroundColor，
+        // 直接 setBackgroundColor 会把卡片的圆角/描边背景整个替换掉，变成直角
+        Context cardCtx = holder.itemView.getContext();
+        if (holder.itemView instanceof com.google.android.material.card.MaterialCardView) {
+            com.google.android.material.card.MaterialCardView card =
+                    (com.google.android.material.card.MaterialCardView) holder.itemView;
+            card.setCardBackgroundColor(ThemeManager.getSurfaceColor(cardCtx));
+            card.setRadius(16 * cardCtx.getResources().getDisplayMetrics().density);
+            card.setStrokeWidth(Math.round(cardCtx.getResources().getDisplayMetrics().density));
+            card.setStrokeColor((ThemeManager.getOnSurfaceVariantColor(cardCtx) & 0x00FFFFFF)
+                    | 0x33000000);
+        } else {
+            holder.itemView.setBackgroundColor(ThemeManager.getSurfaceColor(cardCtx));
+        }
 
         // 点击事件
         holder.itemView.setOnClickListener(v -> {

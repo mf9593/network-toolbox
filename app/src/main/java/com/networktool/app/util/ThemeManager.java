@@ -419,6 +419,77 @@ public class ThemeManager {
                 isDarkMode(context) ? 0xFF3A4248 : 0xFFD8DEE5);
     }
 
+
+    /**
+     * 统一给「筛选型」ChipGroup 上色：未选中背景透明（只留一圈淡描边），
+     * 选中时填充主题色。这样切换主题色后所有页面的 chip 都跟着变。
+     */
+    public static void styleFilterChips(Context context,
+                                        com.google.android.material.chip.ChipGroup group) {
+        if (context == null || group == null) return;
+        try {
+            int themeColor = getThemeColor();
+            int contrastColor = getContrastColor(themeColor);
+            int outline = getOutlineVariantColor(context);
+            int uncheckedText = getOnSurfaceVariantColor(context);
+
+            int[][] states = new int[][]{
+                    new int[]{android.R.attr.state_checked},
+                    new int[]{-android.R.attr.state_checked}
+            };
+            // 未选中：完全透明；选中：主题色
+            android.content.res.ColorStateList background =
+                    new android.content.res.ColorStateList(states,
+                            new int[]{themeColor, android.graphics.Color.TRANSPARENT});
+            android.content.res.ColorStateList text =
+                    new android.content.res.ColorStateList(states,
+                            new int[]{contrastColor, uncheckedText});
+            android.content.res.ColorStateList stroke =
+                    new android.content.res.ColorStateList(states,
+                            new int[]{themeColor, outline});
+            float density = context.getResources().getDisplayMetrics().density;
+
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View child = group.getChildAt(i);
+                if (child instanceof com.google.android.material.chip.Chip) {
+                    com.google.android.material.chip.Chip chip =
+                            (com.google.android.material.chip.Chip) child;
+                    chip.setChipBackgroundColor(background);
+                    chip.setTextColor(text);
+                    chip.setChipStrokeColor(stroke);
+                    chip.setChipStrokeWidth(density);
+                    chip.setCheckedIconTint(android.content.res.ColorStateList.valueOf(contrastColor));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 统一给「快捷入口型」chip 上色：背景透明 + 淡描边 */
+    public static void styleAssistChips(Context context,
+                                        com.google.android.material.chip.ChipGroup group) {
+        if (context == null || group == null) return;
+        try {
+            int outline = getOutlineVariantColor(context);
+            int textColor = getOnSurfaceVariantColor(context);
+            float density = context.getResources().getDisplayMetrics().density;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View child = group.getChildAt(i);
+                if (child instanceof com.google.android.material.chip.Chip) {
+                    com.google.android.material.chip.Chip chip =
+                            (com.google.android.material.chip.Chip) child;
+                    chip.setChipBackgroundColor(android.content.res.ColorStateList.valueOf(
+                            android.graphics.Color.TRANSPARENT));
+                    chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(outline));
+                    chip.setChipStrokeWidth(density);
+                    chip.setTextColor(textColor);
+                    chip.setChipIconTint(android.content.res.ColorStateList.valueOf(textColor));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     /**
      * 解析主题属性颜色
      */

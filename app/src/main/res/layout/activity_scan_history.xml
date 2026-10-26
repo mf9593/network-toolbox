@@ -10,9 +10,10 @@
 
     <!-- 标题栏 -->
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:title="扫一扫历史记录"
         app:titleTextColor="?attr/colorOnSurface"

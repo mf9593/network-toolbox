@@ -11,7 +11,7 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:background="@android:color/transparent"
         android:elevation="0dp"
         app:title="ONVIF调试"
@@ -25,7 +25,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="8dp"
-        app:cardCornerRadius="12dp"
+        app:cardCornerRadius="@dimen/card_corner"
         app:cardElevation="0dp">
 
         <LinearLayout
@@ -48,7 +48,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:hint="IP 或 IP:端口"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/ipEditText"
@@ -74,7 +74,7 @@
                     android:layout_weight="1"
                     android:layout_marginEnd="4dp"
                     android:hint="用户名"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/usernameEditText"
@@ -93,7 +93,7 @@
                     android:layout_weight="1"
                     android:layout_marginStart="4dp"
                     android:hint="密码"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/passwordEditText"
@@ -128,7 +128,7 @@
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="8dp"
         android:layout_marginBottom="8dp"
-        app:cardCornerRadius="12dp"
+        app:cardCornerRadius="@dimen/card_corner"
         app:cardElevation="0dp">
 
         <LinearLayout
@@ -161,7 +161,7 @@
                 android:layout_marginTop="8dp"
                 android:hint="Profile Token"
                 android:visibility="gone"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/tokenEditText"

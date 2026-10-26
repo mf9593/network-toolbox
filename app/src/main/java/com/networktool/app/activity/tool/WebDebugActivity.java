@@ -176,6 +176,8 @@ public class WebDebugActivity extends AppCompatActivity {
         urlEditText = findViewById(R.id.urlEditText);
         ruleEditText = findViewById(R.id.ruleEditText);
         methodChipGroup = findViewById(R.id.methodChipGroup);
+        // 请求方式 chip 跟随主题色（未选中透明，选中填主题色）
+        ThemeManager.styleFilterChips(this, methodChipGroup);
         parseButton = findViewById(R.id.parseButton);
         copyButton = findViewById(R.id.copyButton);
         resultCard = findViewById(R.id.resultCard);

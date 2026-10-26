@@ -322,12 +322,9 @@ public class WifiAdapter extends RecyclerView.Adapter<WifiAdapter.ViewHolder> {
         }
     }
 
+    /** 列表里的小标签：背景透明，只靠文字色区分层级 */
     private void setChipBackground(TextView chip, int color, int textColor) {
-        chip.setBackgroundResource(R.drawable.bg_chip_filled);
-        Drawable background = chip.getBackground();
-        if (background != null) {
-            background.mutate().setTint(color);
-        }
+        chip.setBackground(null);
         chip.setTextColor(textColor);
     }
 }

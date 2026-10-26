@@ -257,35 +257,8 @@ public class DeviceFragment extends Fragment {
     }
 
     private void styleChipGroup(ChipGroup group, Context context) {
-        if (group == null) return;
-        int themeColor = ThemeManager.getThemeColor();
-        int contrastColor = ThemeManager.getContrastColor(themeColor);
-        int uncheckedBackground = ThemeManager.getChipSurfaceColor(context);
-        int uncheckedText = ThemeManager.getOnSurfaceVariantColor(context);
-        int outline = ThemeManager.getOutlineVariantColor(context);
-
-        int[][] states = new int[][]{
-                new int[]{android.R.attr.state_checked},
-                new int[]{-android.R.attr.state_checked}
-        };
-        ColorStateList background = new ColorStateList(states,
-                new int[]{themeColor, uncheckedBackground});
-        ColorStateList text = new ColorStateList(states,
-                new int[]{contrastColor, uncheckedText});
-        ColorStateList stroke = new ColorStateList(states,
-                new int[]{themeColor, outline});
-
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child instanceof Chip) {
-                Chip chip = (Chip) child;
-                chip.setChipBackgroundColor(background);
-                chip.setTextColor(text);
-                chip.setChipStrokeColor(stroke);
-                chip.setChipStrokeWidth(dpToPx(1));
-                chip.setCheckedIconTint(ColorStateList.valueOf(contrastColor));
-            }
-        }
+        // 统一走 ThemeManager 的 chip 样式（未选中透明、选中主题色）
+        ThemeManager.styleFilterChips(context, group);
     }
 
     /** 排序方式弹窗：按 IP / 按名称，选择后持久化保存 */

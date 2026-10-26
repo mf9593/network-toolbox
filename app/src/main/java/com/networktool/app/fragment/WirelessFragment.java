@@ -153,13 +153,16 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         currentWifiCard = view.findViewById(R.id.currentWifiCard);
         // 标题栏已不使用信号图标（保留字段做空值保护）
         currentSignalIcon = null;
-        currentSsid = view.findViewById(R.id.currentSsid);
+        // 主标题固定为「无线列表」，连接状态统一放在副标题
+        currentSsid = null;
         currentIp = view.findViewById(R.id.currentIp);
-        currentMeta = view.findViewById(R.id.currentMeta);
+        // 标题栏只保留两行，网段/标准等细节不再单独占一行
+        currentMeta = null;
         openWifiSettingsButton = view.findViewById(R.id.openWifiSettingsButton);
         scanEntryButton = view.findViewById(R.id.scanEntryButton);
         scanButton = view.findViewById(R.id.scanButton);
-        frequencyFilterButton = view.findViewById(R.id.frequencyFilterButton);
+        // 频段筛选已改为标题栏下方的 chip，不再有独立按钮
+        frequencyFilterButton = null;
         standardFilterButton = view.findViewById(R.id.standardFilterButton);
         scanProgress = view.findViewById(R.id.scanProgress);
         wifiSummary = view.findViewById(R.id.wifiSummary);
@@ -188,8 +191,25 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     }
 
     private void setupFilters() {
-        if (frequencyFilterButton != null) {
-            frequencyFilterButton.setOnClickListener(v -> showFilterPopup(true));
+        // 频段筛选改成标题栏下方的 chip（和设备页 IP 版本一致）
+        com.google.android.material.chip.ChipGroup bandGroup =
+                getView() == null ? null : getView().findViewById(R.id.bandChipGroup);
+        if (bandGroup != null) {
+            ThemeManager.styleFilterChips(requireContext(), bandGroup);
+            bandGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
+                if (checkedIds == null || checkedIds.isEmpty()) return;
+                int id = checkedIds.get(0);
+                if (id == R.id.chipBand24) {
+                    frequencyFilter = "2.4GHz";
+                } else if (id == R.id.chipBand5) {
+                    frequencyFilter = "5GHz";
+                } else if (id == R.id.chipBand6) {
+                    frequencyFilter = "6GHz";
+                } else {
+                    frequencyFilter = "全部";
+                }
+                applyFilter();
+            });
         }
         if (standardFilterButton != null) {
             standardFilterButton.setOnClickListener(v -> showFilterPopup(false));
@@ -244,6 +264,18 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             frequencyFilterButton.setIconTint(ColorStateList.valueOf(color));
             frequencyFilterButton.setTextColor(color);
             frequencyFilterButton.setContentDescription("频段筛选：" + frequencyDisplayName());
+        }
+        if (scanEntryButton != null) {
+            scanEntryButton.setIconTint(ColorStateList.valueOf(accentColor));
+            scanEntryButton.setTextColor(accentColor);
+        }
+        if (scanButton != null) {
+            scanButton.setIconTint(ColorStateList.valueOf(accentColor));
+            scanButton.setTextColor(accentColor);
+        }
+        if (openWifiSettingsButton != null) {
+            openWifiSettingsButton.setIconTint(ColorStateList.valueOf(accentColor));
+            openWifiSettingsButton.setTextColor(accentColor);
         }
         if (standardFilterButton != null) {
             int color = "全部".equals(standardFilter) ? inactiveColor : accentColor;
@@ -543,8 +575,9 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
 
     private void updateScanUi() {
         if (!isAdded()) return;
+        // 图标按钮只切状态，不显示文字（文字会把 44dp 按钮撑开）
         scanButton.setEnabled(!scanning);
-        scanButton.setText(scanning ? "扫描中" : "扫描");
+        scanButton.setContentDescription(scanning ? "正在扫描" : "重新扫描");
         scanProgress.setVisibility(scanning ? View.VISIBLE : View.GONE);
         scanProgress.setIndeterminate(true);
         updateSummary();
@@ -553,25 +586,56 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     private void updateSummary() {
         if (!isAdded() || wifiSummary == null) return;
         if (scanning) {
+            updateTitle();
+            wifiSummary.setVisibility(View.VISIBLE);
             wifiSummary.setText("正在扫描附近 WiFi…");
             return;
         }
+        // 数量 + 刷新时间都在主标题上，副标题只留筛选状态
+        updateTitle();
+
         StringBuilder text = new StringBuilder();
-        text.append(wifiList.size()).append(" 个网络");
-        if (wifiList.size() != fullWifiList.size()) {
-            text.append(" / 共 ").append(fullWifiList.size());
-        }
         if (!"全部".equals(frequencyFilter)) {
-            text.append(" · ").append(frequencyDisplayName());
+            text.append(frequencyDisplayName());
         }
         if (!"全部".equals(standardFilter)) {
-            text.append(" · ").append(standardFilter);
+            if (text.length() > 0) text.append(" · ");
+            text.append(standardFilter);
         }
-        if (lastScanTime > 0) {
-            text.append(" · ").append(new SimpleDateFormat("HH:mm", Locale.getDefault())
+        if (text.length() == 0) {
+            wifiSummary.setVisibility(View.GONE);
+        } else {
+            wifiSummary.setVisibility(View.VISIBLE);
+            wifiSummary.setText(text.toString());
+        }
+    }
+
+    /** 主标题带上网络数量与刷新时间，例如「无线列表 · 12 个网络 · 19:48」 */
+    private void updateTitle() {
+        if (!isAdded() || getView() == null) return;
+        TextView title = getView().findViewById(R.id.wifiTitleText);
+        if (title == null) return;
+        int count = fullWifiList.isEmpty() ? wifiList.size() : fullWifiList.size();
+        String base = count <= 0 ? "无线列表" : "无线列表 · " + count + " 个网络";
+
+        android.text.SpannableStringBuilder sb =
+                new android.text.SpannableStringBuilder(base);
+        int start = sb.length();
+        if (scanning) {
+            sb.append(" · 扫描中…");
+        } else if (lastScanTime > 0) {
+            sb.append(" · ").append(new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(new Date(lastScanTime)));
         }
-        wifiSummary.setText(text.toString());
+        if (sb.length() > start) {
+            // 时间和「扫描中」用更小更淡的样式，不抢主标题
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.6f), start, sb.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(
+                            ThemeManager.getOnSurfaceVariantColor(requireContext())),
+                    start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        title.setText(sb);
     }
 
     private void updateEmptyState() {
@@ -625,20 +689,18 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     }
 
     private void updateCurrentConnection() {
-        if (!isAdded() || currentSsid == null) return;
+        if (!isAdded()) return;
         int themeColor = ThemeManager.getAccessibleThemeColor(requireContext());
         if (wifiManager == null) {
-            currentSsid.setText("WiFi 不可用");
-            currentIp.setText("当前设备不支持 WiFi 管理");
-            currentMeta.setText("--");
+            currentIp.setText("WiFi 不可用 · 当前设备不支持 WiFi 管理");
+            if (currentMeta != null) currentMeta.setText("--");
             setCurrentSignalIcon(R.drawable.ic_wifi_off,
                     ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 不可用");
             return;
         }
         if (!wifiManager.isWifiEnabled()) {
-            currentSsid.setText("WiFi 已关闭");
-            currentIp.setText("点击前往系统设置开启 WiFi");
-            currentMeta.setText("开启后可扫描附近网络");
+            currentIp.setText("WiFi 已关闭");
+            if (currentMeta != null) currentMeta.setText("开启后可扫描附近网络");
             setCurrentSignalIcon(R.drawable.ic_wifi_off,
                     ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 已关闭");
             return;
@@ -677,16 +739,14 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         String standard = getConnectionStandard(info);
         String band = getFrequencyBand(frequency);
 
-        currentSsid.setText("已连接：" + ssid);
-        currentIp.setText("IP " + ip + " · 点击可前往系统设置切换网络");
-        currentMeta.setText(band + " · " + standard + " · " + rssi + " dBm");
+        currentIp.setText("已连接 " + ssid + " · " + ip);
+        if (currentMeta != null) currentMeta.setText(band + " · " + standard + " · " + rssi + " dBm");
         setCurrentSignalIcon(signalIconRes(rssi), themeColor, "当前 WiFi 信号 " + rssi + " dBm");
     }
 
     private void showDisconnected(int themeColor) {
-        currentSsid.setText("未连接 WiFi");
-        currentIp.setText("点击前往系统设置连接网络");
-        currentMeta.setText("扫描附近网络或连接已知网络");
+        currentIp.setText("未连接 WiFi");
+        if (currentMeta != null) currentMeta.setText("扫描附近网络或连接已知网络");
         setCurrentSignalIcon(R.drawable.ic_signal_wifi_outline_0, themeColor, "WiFi 已开启，未连接网络");
     }
 

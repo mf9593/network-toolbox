@@ -8,9 +8,10 @@
     android:fitsSystemWindows="true">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:title="图标转换"
         app:titleTextColor="?attr/colorOnSurface"
@@ -61,7 +62,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                app:cardCornerRadius="12dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 
@@ -138,7 +139,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
                 android:layout_marginBottom="8dp"
-                app:cardCornerRadius="12dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 
@@ -171,7 +172,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                app:cardCornerRadius="12dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 
@@ -269,7 +270,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                app:cardCornerRadius="12dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 

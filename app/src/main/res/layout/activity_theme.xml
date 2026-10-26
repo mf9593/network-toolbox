@@ -51,7 +51,7 @@
                 android:id="@+id/currentColorSwatch"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                app:cardCornerRadius="14dp"
+                app:cardCornerRadius="@dimen/card_corner"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp" />
 

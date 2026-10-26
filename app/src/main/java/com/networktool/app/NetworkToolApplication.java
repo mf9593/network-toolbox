@@ -40,12 +40,58 @@ public class NetworkToolApplication extends Application {
 
         // 应用用户保存的深色模式设置
         ThemeManager.applyThemeMode();
+
+        // 页面显示时把布局里残留的默认强调色换成用户选的主题色
+        registerThemeTinter();
         
         // 仅注册全局崩溃捕获，不再记录网络/调试日志
         registerGlobalExceptionHandler();
 
         // 自动启动局域网聊天服务（如果允许被发现）
         startLanChatIfEnabled();
+    }
+
+
+    /** 页面每次显示时，让布局中的强调色跟随主题色（切换主题色后无需重启应用） */
+    private void registerThemeTinter() {
+        registerActivityLifecycleCallbacks(
+                new android.app.Application.ActivityLifecycleCallbacks() {
+                    @Override
+                    public void onActivityCreated(android.app.Activity activity,
+                                                  android.os.Bundle savedInstanceState) {
+                    }
+
+                    @Override
+                    public void onActivityStarted(android.app.Activity activity) {
+                    }
+
+                    @Override
+                    public void onActivityResumed(android.app.Activity activity) {
+                        if (activity == null) return;
+                        android.view.View decor = activity.getWindow() == null
+                                ? null : activity.getWindow().getDecorView();
+                        if (decor == null) return;
+                        decor.post(() -> com.networktool.app.util.ThemeAccentTinter
+                                .apply(activity.getWindow().getDecorView()));
+                    }
+
+                    @Override
+                    public void onActivityPaused(android.app.Activity activity) {
+                    }
+
+                    @Override
+                    public void onActivityStopped(android.app.Activity activity) {
+                    }
+
+                    @Override
+                    public void onActivitySaveInstanceState(android.app.Activity activity,
+                                                            android.os.Bundle outState) {
+                    }
+
+                    @Override
+                    public void onActivityDestroyed(android.app.Activity activity) {
+                    }
+                });
     }
 
     /**

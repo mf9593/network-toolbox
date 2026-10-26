@@ -122,23 +122,10 @@ public class TracerouteActivity extends AppCompatActivity {
         ThemeManager.applyPrimaryButton(startButton);
     }
 
-    /** 常见目标快捷标签：网关 / baidu.com / bing.com */
+    /** 常见目标快捷标签：baidu.com / bing.com */
     private void setupHostChips() {
-        Chip chipGateway = findViewById(R.id.chipGateway);
         Chip chipBaidu = findViewById(R.id.chipBaidu);
         Chip chipBing = findViewById(R.id.chipBing);
-
-        if (chipGateway != null) {
-            chipGateway.setOnClickListener(v -> {
-                String gateway = NetworkUtils.getGateway(this);
-                if (TextUtils.isEmpty(gateway)) {
-                    Toast.makeText(this, "未获取到网关地址", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                ipEditText.setText(gateway);
-                startTraceroute();
-            });
-        }
         if (chipBaidu != null) {
             chipBaidu.setOnClickListener(v -> {
                 ipEditText.setText("baidu.com");

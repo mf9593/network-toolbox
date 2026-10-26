@@ -49,12 +49,35 @@ import java.util.Map;
  */
 public class WifiDatabaseActivity extends AppCompatActivity {
 
+    /** 搜索框描边/提示/图标高亮跟随主题色（与工具页保持一致） */
+    private void applySearchBoxTheme() {
+        try {
+            int accent = ThemeManager.getAccessibleThemeColor(this);
+            int outline = ThemeManager.getOnSurfaceVariantColor(this);
+            com.google.android.material.textfield.TextInputLayout layout =
+                    findViewById(R.id.searchLayout);
+            if (layout != null) {
+                int[][] states = new int[][]{
+                        new int[]{android.R.attr.state_focused},
+                        new int[]{}
+                };
+                layout.setBoxStrokeColorStateList(new android.content.res.ColorStateList(
+                        states, new int[]{accent, outline}));
+                layout.setHintTextColor(new android.content.res.ColorStateList(
+                        states, new int[]{accent, outline}));
+                layout.setStartIconTintList(android.content.res.ColorStateList.valueOf(accent));
+                layout.setEndIconTintList(android.content.res.ColorStateList.valueOf(accent));
+            }
+            searchEditText.setHintTextColor(outline);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private MaterialToolbar toolbar;
     private RecyclerView recyclerView;
     private LinearLayout emptyView;
     private TextView countText;
     private EditText searchEditText;
-    private ImageButton clearSearchButton;
 
     private WifiDataManager wifiDataManager;
     private WifiDataAdapter adapter;
@@ -113,16 +136,13 @@ public class WifiDatabaseActivity extends AppCompatActivity {
         emptyView = findViewById(R.id.emptyView);
         countText = findViewById(R.id.countText);
         searchEditText = findViewById(R.id.searchEditText);
-        clearSearchButton = findViewById(R.id.clearSearchButton);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         int accentColor = ThemeManager.getAccessibleThemeColor(this);
         countText.setTextColor(accentColor);
         searchEditText.setTextColor(ThemeManager.getOnSurfaceColor(this));
-        searchEditText.setHintTextColor(ThemeManager.getOnSurfaceVariantColor(this));
-        clearSearchButton.setImageTintList(android.content.res.ColorStateList.valueOf(
-                ThemeManager.getOnSurfaceVariantColor(this)));
+        applySearchBoxTheme();
 
         // 搜索框监听
         searchEditText.addTextChangedListener(new TextWatcher() {
@@ -135,15 +155,11 @@ public class WifiDatabaseActivity extends AppCompatActivity {
             @Override
             public void afterTextChanged(Editable s) {
                 filterData(s.toString());
-                clearSearchButton.setVisibility(s.length() > 0 ? View.VISIBLE : View.GONE);
+
             }
         });
 
         // 清除搜索按钮
-        clearSearchButton.setOnClickListener(v -> {
-            searchEditText.setText("");
-            filterData("");
-        });
     }
 
     private void loadData() {

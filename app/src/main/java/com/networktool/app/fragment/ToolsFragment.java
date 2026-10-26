@@ -132,25 +132,59 @@ public class ToolsFragment extends Fragment
         recyclerView.setAdapter(adapter);
     }
 
-    /** 让搜索框的描边/提示/图标高亮跟随主题色（XML 的 ?attr 可能不随动态主题更新） */
+    /**
+     * 让搜索框的描边/提示/光标/选中高亮都跟随当前主题色。
+     *
+     * <p>XML 里的 ?attr/colorPrimary 只在主题创建时解析一次，用户切换主题色后
+     * 不会自动更新，所以这里用代码重新设置一遍，并且区分聚焦/未聚焦两种状态。</p>
+     */
     private void applySearchTheme(View view) {
         try {
             if (!isAdded()) return;
+            Context context = requireContext();
+            int accent = ThemeManager.getAccessibleThemeColor(context);
+            int outline = ThemeManager.getOnSurfaceVariantColor(context);
+            int onSurfaceVariant = ThemeManager.getOnSurfaceVariantColor(context);
+
             com.google.android.material.textfield.TextInputLayout layout =
                     view.findViewById(R.id.searchLayout);
-            int accent = ThemeManager.getAccessibleThemeColor(requireContext());
             if (layout != null) {
-                layout.setBoxStrokeColor(accent);
-                layout.setBoxStrokeColorStateList(
-                        android.content.res.ColorStateList.valueOf(accent));
-                layout.setDefaultHintTextColor(
-                        android.content.res.ColorStateList.valueOf(accent));
-                layout.setStartIconTintList(
-                        android.content.res.ColorStateList.valueOf(accent));
+                // 聚焦时用主题色描边，未聚焦用淡描边
+                int[][] states = new int[][]{
+                        new int[]{android.R.attr.state_focused},
+                        new int[]{}
+                };
+                layout.setBoxStrokeColorStateList(new android.content.res.ColorStateList(
+                        states, new int[]{accent, outline}));
+                // 提示文字：聚焦时主题色，其余时候次级文字色
+                layout.setHintTextColor(new android.content.res.ColorStateList(
+                        states, new int[]{accent, onSurfaceVariant}));
+                layout.setStartIconTintList(android.content.res.ColorStateList.valueOf(accent));
+                layout.setEndIconTintList(android.content.res.ColorStateList.valueOf(accent));
             }
+
             if (searchEdit != null) {
-                searchEdit.setTextColor(ThemeManager.getOnSurfaceColor(requireContext()));
-                searchEdit.setHintTextColor(android.content.res.ColorStateList.valueOf(accent));
+                searchEdit.setTextColor(ThemeManager.getOnSurfaceColor(context));
+                searchEdit.setHintTextColor(onSurfaceVariant);
+                // 长按选中的高亮色
+                searchEdit.setHighlightColor((accent & 0x00FFFFFF) | 0x33000000);
+                applyCursorColor(searchEdit, accent);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 光标颜色跟随主题色（Android 10 及以上可直接取到光标 drawable） */
+    private void applyCursorColor(android.widget.EditText editText, int color) {
+        try {
+            if (editText == null) return;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                android.graphics.drawable.Drawable cursor = editText.getTextCursorDrawable();
+                if (cursor != null) {
+                    cursor = cursor.mutate();
+                    cursor.setTint(color);
+                    editText.setTextCursorDrawable(cursor);
+                }
             }
         } catch (Throwable ignored) {
         }
@@ -301,6 +335,8 @@ public class ToolsFragment extends Fragment
         favoriteSection.setVisibility(View.VISIBLE);
         if (favoriteTitle != null) {
             favoriteTitle.setText("我的常用 · " + favorites.size() + "/" + MAX_FAVORITES);
+            // 强调色跟随主题（切主题后重新渲染即生效）
+            favoriteTitle.setTextColor(ThemeManager.getAccessibleThemeColor(requireContext()));
         }
         if (favoriteHint != null) {
             favoriteHint.setText(favorites.size() >= MAX_FAVORITES
@@ -343,7 +379,8 @@ public class ToolsFragment extends Fragment
                 new LinearLayout.LayoutParams(dpToPx(22), dpToPx(22));
         icon.setLayoutParams(iconParams);
         icon.setImageResource(tool.getIconResId());
-        icon.setColorFilter(ThemeManager.getThemeColor(), android.graphics.PorterDuff.Mode.SRC_IN);
+        icon.setColorFilter(ThemeManager.getAccessibleThemeColor(context),
+                android.graphics.PorterDuff.Mode.SRC_IN);
         content.addView(icon);
 
         TextView name = new TextView(context);
@@ -500,6 +537,12 @@ public class ToolsFragment extends Fragment
     @Override
     public void onResume() {
         super.onResume();
+        // 主题色可能在别的页面被改过，回到工具页时重新套用一遍
+        if (getView() != null) {
+            applySearchTheme(getView());
+            // 布局里写死的强调色也换成本地主题色
+            com.networktool.app.util.ThemeAccentTinter.apply(getView());
+        }
         if (adapter != null) {
             rebuildList();
         }

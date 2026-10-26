@@ -8,9 +8,10 @@
     android:background="?attr/colorSurface">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:title="端口扫描"
         app:titleTextColor="?attr/colorOnSurface"

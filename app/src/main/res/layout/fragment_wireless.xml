@@ -7,15 +7,14 @@
     android:background="?android:attr/colorBackground"
     android:orientation="vertical">
 
-    <!-- 标题栏：当前网络 + 操作按钮同行，不再用卡片包裹 -->
+    <!-- 标题栏：和设备搜索页保持同一套排布（主标题+按钮同行，副标题独占一行） -->
     <LinearLayout
         android:id="@+id/currentWifiCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clickable="true"
         android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="@dimen/page_margin"
         android:paddingTop="@dimen/space_3"
         android:paddingEnd="@dimen/space_2"
@@ -27,132 +26,151 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/wifiTitleText"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/space_1"
                 android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/currentSsid"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="未连接 WiFi"
-                    android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
-
-                <TextView
-                    android:id="@+id/currentIp"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="点击前往系统设置连接网络"
-                    android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
-
-                <TextView
-                    android:id="@+id/currentMeta"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:text="--"
-                    android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-            </LinearLayout>
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="无线列表"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/scanEntryButton"
                 style="@style/Widget.NetworkTool.Button.TextButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:contentDescription="扫一扫"
-                android:minWidth="48dp"
-                android:padding="12dp"
+                android:minWidth="44dp"
+                android:padding="10dp"
                 app:icon="@drawable/ic_scan_qr"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/standardFilterButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="标准筛选"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_tune"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/scanButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="重新扫描"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_refresh"
                 app:iconGravity="textStart"
                 app:iconPadding="0dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/openWifiSettingsButton"
                 style="@style/Widget.NetworkTool.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:paddingStart="@dimen/space_2"
-                android:paddingEnd="@dimen/space_2"
-                android:text="设置" />
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="系统无线设置"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_settings"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
 
         </LinearLayout>
 
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_3"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="@dimen/page_margin"
-        android:paddingEnd="@dimen/space_1">
+        <TextView
+            android:id="@+id/currentIp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="正在读取无线网络信息…"
+            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
 
         <TextView
             android:id="@+id/wifiSummary"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:ellipsize="end"
-            android:maxLines="2"
+            android:maxLines="1"
             android:text="正在扫描…"
-            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/frequencyFilterButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:contentDescription="筛选频段"
-            android:minWidth="0dp"
-            android:paddingStart="@dimen/space_2"
-            android:paddingEnd="@dimen/space_2"
-            android:text="频段"
-            android:textSize="12sp"
-            app:icon="@drawable/ic_filter"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/standardFilterButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:contentDescription="筛选标准"
-            android:minWidth="0dp"
-            android:paddingStart="@dimen/space_2"
-            android:paddingEnd="@dimen/space_2"
-            android:text="标准"
-            android:textSize="12sp"
-            app:icon="@drawable/ic_tune"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/scanButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:minWidth="0dp"
-            android:paddingStart="@dimen/space_2"
-            android:paddingEnd="@dimen/space_2"
-            android:text="扫描"
-            app:icon="@drawable/ic_refresh"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp" />
+            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
 
     </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="@dimen/page_margin"
+        android:paddingEnd="@dimen/page_margin"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/space_2"
+                android:text="频段"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/bandChipGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:checkedChip="@id/chipBandAll"
+                app:chipSpacingHorizontal="@dimen/space_2"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBandAll"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="全部" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBand24"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2.4 GHz" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBand5"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="5 GHz" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBand6"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="6 GHz" />
+
+            </com.google.android.material.chip.ChipGroup>
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/scanProgress"

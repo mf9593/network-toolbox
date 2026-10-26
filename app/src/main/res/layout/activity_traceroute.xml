@@ -8,9 +8,10 @@
     android:background="?attr/colorSurface">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:title="路由跟踪"
         app:titleTextColor="?attr/colorOnSurface"
@@ -90,23 +91,15 @@
                         app:singleLine="true">
 
                         <com.google.android.material.chip.Chip
-                            android:id="@+id/chipGateway"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="网关"
-                            app:chipIcon="@drawable/ic_router" />
-
-                        <com.google.android.material.chip.Chip
                             android:id="@+id/chipBaidu"
-                            style="@style/Widget.Material3.Chip.Assist"
+                            style="@style/Widget.NetworkTool.Chip"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="baidu.com" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/chipBing"
-                            style="@style/Widget.Material3.Chip.Assist"
+                            style="@style/Widget.NetworkTool.Chip"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="bing.com" />

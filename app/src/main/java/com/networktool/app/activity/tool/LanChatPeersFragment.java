@@ -403,6 +403,8 @@ public class LanChatPeersFragment extends Fragment implements LanChatManager.OnP
 
         // 有好友时显示排序栏
         sortCardView.setVisibility(allPeers != null && !allPeers.isEmpty() ? View.VISIBLE : View.GONE);
+        // 排序 chip 跟随主题色（未选中透明，选中填主题色）
+        ThemeManager.styleFilterChips(requireContext(), sortChipGroup);
 
         sortChipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds == null || checkedIds.isEmpty()) return;
@@ -506,22 +508,33 @@ public class LanChatPeersFragment extends Fragment implements LanChatManager.OnP
     private void applyCurrentFilter() {
         if (adapter == null) return;
 
-        String query = searchInput != null ? searchInput.getText().toString() : "";
+        String rawQuery = searchInput != null ? searchInput.getText().toString() : "";
+        String query = rawQuery == null ? "" : rawQuery.trim().toLowerCase();
+        boolean searching = !query.isEmpty();
         List<LanChatManager.LanPeer> result = new ArrayList<>();
         for (LanChatManager.LanPeer peer : allPeers) {
             // 房间筛选
             if (currentFilterMode == FilterMode.ROOM_ONLY && !peer.isRoom()) {
                 continue;
             }
-            // 搜索筛选（对空字段做保护）
-            if (!query.isEmpty()) {
-                String displayName = peer.getDisplayName() == null ? "" : peer.getDisplayName();
+            // 搜索筛选：名称 / 房间名 / IP / UID 都能匹配（对空字段做保护）
+            if (searching) {
+                String displayName = peer.getDisplayName() == null
+                        ? "" : peer.getDisplayName().toLowerCase();
+                String roomName = peer.getRoomName() == null
+                        ? "" : peer.getRoomName().toLowerCase();
+                String userName = peer.getUserName() == null
+                        ? "" : peer.getUserName().toLowerCase();
                 String ip = peer.getIp() == null ? "" : peer.getIp();
-                if (!displayName.toLowerCase().contains(query.toLowerCase())
-                        && !ip.contains(query)
-                        && !String.valueOf(peer.getUid()).contains(query)) {
-                    continue;
-                }
+                String roomCode = peer.getRoomCode() == null
+                        ? "" : peer.getRoomCode().toLowerCase();
+                boolean hit = displayName.contains(query)
+                        || roomName.contains(query)
+                        || userName.contains(query)
+                        || roomCode.contains(query)
+                        || ip.contains(query)
+                        || String.valueOf(peer.getUid()).contains(query);
+                if (!hit) continue;
             }
             result.add(peer);
         }
@@ -533,6 +546,10 @@ public class LanChatPeersFragment extends Fragment implements LanChatManager.OnP
         }
         if (peerRecyclerView != null) {
             peerRecyclerView.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        }
+        // 搜索时不需要排序栏，避免和结果列表抢空间
+        if (sortCardView != null) {
+            sortCardView.setVisibility(searching || isEmpty ? View.GONE : View.VISIBLE);
         }
     }
 

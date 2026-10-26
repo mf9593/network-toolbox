@@ -13,9 +13,10 @@
     android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:background="@android:color/transparent"
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?attr/actionBarSize"
         android:elevation="0dp"
         app:navigationIconTint="?attr/colorOnSurface"
         app:title="设备调试"
@@ -55,7 +56,7 @@
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="12dp"
             android:layout_marginTop="10dp"
-            app:cardCornerRadius="18dp">
+            app:cardCornerRadius="@dimen/card_corner">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -121,7 +122,7 @@
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="12dp"
             android:layout_marginTop="8dp"
-            app:cardCornerRadius="18dp">
+            app:cardCornerRadius="@dimen/card_corner">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -257,7 +258,7 @@
                     style="@style/Widget.NetworkTool.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:cardCornerRadius="18dp">
+                    app:cardCornerRadius="@dimen/card_corner">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -306,7 +307,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    app:cardCornerRadius="18dp">
+                    app:cardCornerRadius="@dimen/card_corner">
 
                     <LinearLayout
                         android:layout_width="match_parent"

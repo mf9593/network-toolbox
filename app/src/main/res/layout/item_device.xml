@@ -23,7 +23,7 @@
             style="@style/Widget.NetworkTool.Card.Small"
             android:layout_width="44dp"
             android:layout_height="44dp"
-            app:cardCornerRadius="12dp">
+            app:cardCornerRadius="@dimen/card_corner">
 
             <ImageView
                 android:id="@+id/iconImage"

@@ -877,13 +877,13 @@ public class WebViewActivity extends AppCompatActivity {
         sheet.show();
     }
 
-    /** 组装底部网格菜单：每行 4 个，图标在上文字在下 */
+    /** 组装底部网格菜单：4 列等宽 GridLayout，点击水波纹用网格自带的矩形波纹 */
     private View buildMoreSheetView(java.util.List<SheetAction> actions,
                                     com.google.android.material.bottomsheet.BottomSheetDialog sheet) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int padH = dp(16);
-        root.setPadding(padH, dp(14), padH, dp(10));
+        int padH = dp(14);
+        root.setPadding(padH, dp(14), padH, dp(6));
         root.setBackgroundResource(R.drawable.bg_sheet_browser_menu);
 
         TextView title = new TextView(this);
@@ -891,33 +891,30 @@ public class WebViewActivity extends AppCompatActivity {
         title.setTextSize(14f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setTextColor(ThemeManager.getOnSurfaceColor(this));
-        title.setPadding(dp(4), 0, 0, dp(10));
+        title.setPadding(dp(6), 0, 0, dp(8));
         root.addView(title);
 
         final int columns = 4;
-        LinearLayout row = null;
+        android.widget.GridLayout grid = new android.widget.GridLayout(this);
+        grid.setColumnCount(columns);
+        grid.setRowCount((actions.size() + columns - 1) / columns);
+        grid.setAlignmentMode(android.widget.GridLayout.ALIGN_BOUNDS);
+        grid.setUseDefaultMargins(false);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        root.addView(grid, gridParams);
+
         for (int i = 0; i < actions.size(); i++) {
-            if (i % columns == 0) {
-                row = new LinearLayout(this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT);
-                rowParams.topMargin = dp(6);
-                root.addView(row, rowParams);
-            }
-            row.addView(buildSheetCell(actions.get(i), sheet));
-        }
-        // 最后一行用占位补满，保证每格等宽
-        if (row != null) {
-            int filled = actions.size() % columns;
-            if (filled != 0) {
-                for (int i = filled; i < columns; i++) {
-                    View spacer = new View(this);
-                    spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-                    row.addView(spacer);
-                }
-            }
+            android.widget.GridLayout.LayoutParams cellParams =
+                    new android.widget.GridLayout.LayoutParams();
+            // 宽度 0 + 列权重 1 → 四列严格等宽，左右自然对齐
+            cellParams.width = 0;
+            cellParams.height = dp(72);
+            cellParams.columnSpec = android.widget.GridLayout.spec(i % columns, 1, 1f);
+            cellParams.rowSpec = android.widget.GridLayout.spec(i / columns);
+            cellParams.setMargins(dp(2), dp(2), dp(2), dp(2));
+            grid.addView(buildSheetCell(actions.get(i), sheet), cellParams);
         }
         return root;
     }
@@ -926,17 +923,11 @@ public class WebViewActivity extends AppCompatActivity {
                                 com.google.android.material.bottomsheet.BottomSheetDialog sheet) {
         LinearLayout cell = new LinearLayout(this);
         cell.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams cellParams = new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        cellParams.setMarginStart(dp(4));
-        cellParams.setMarginEnd(dp(4));
-        cell.setLayoutParams(cellParams);
-        cell.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        cell.setPadding(0, dp(10), 0, dp(10));
-        // 不要整块背景色，只留点击水波纹；格子之间靠外边距拉开
+        cell.setGravity(android.view.Gravity.CENTER);
+        // 用系统自带 selectableItemBackground（有边界、跟随格子形状的波纹），
+        // 不要 Borderless 那种一大圈圆形波纹
         android.util.TypedValue ripple = new android.util.TypedValue();
-        getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
-                ripple, true);
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true);
         cell.setBackgroundResource(ripple.resourceId);
         cell.setClickable(true);
         cell.setFocusable(true);
