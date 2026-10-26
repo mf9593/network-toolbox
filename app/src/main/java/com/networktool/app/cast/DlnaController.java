@@ -22,12 +22,24 @@ public final class DlnaController {
     private DlnaController() {
     }
 
-    /** 投一个媒体地址到设备并开始播放 */
+    /** 投一个媒体地址到设备并开始播放（沿用默认 MIME） */
     public static String cast(DlnaDevice device, String url, String title, MediaType type) {
+        return cast(device, url, title, type, null);
+    }
+
+    /**
+     * 投一个媒体地址到设备并开始播放，并声明真实 MIME 类型。
+     *
+     * <p>很多电视是按 protocolInfo 里的 MIME 决定用哪个解码器的，之前一律写
+     * video/mp4，投 MKV/AVI 时会拿到 mp4 解码器直接播不出来；这里改成按文件
+     * 真实类型声明，兼容性明显好一些。</p>
+     */
+    public static String cast(DlnaDevice device, String url, String title, MediaType type,
+                             String mimeType) {
         if (device == null || !device.isReady()) {
             return "未选择可用的投屏设备";
         }
-        String metadata = buildMetadata(url, title, type);
+        String metadata = buildMetadata(url, title, type, mimeType);
         String error = send(device, "SetAVTransportURI",
                 "<InstanceID>0</InstanceID>"
                         + "<CurrentURI>" + escape(url) + "</CurrentURI>"
@@ -142,12 +154,13 @@ public final class DlnaController {
     }
 
     /** 组装 DIDL-Lite 元数据（很多电视缺少这个就不识别） */
-    private static String buildMetadata(String url, String title, MediaType type) {
+    private static String buildMetadata(String url, String title, MediaType type, String mimeType) {
         String safeTitle = title == null || title.trim().isEmpty() ? "网络工具箱" : title;
         String upnpClass = type == MediaType.IMAGE
                 ? "object.item.imageItem" : "object.item.videoItem";
-        String protocol = type == MediaType.IMAGE
-                ? "http-get:*:image/jpeg:*" : "http-get:*:video/mp4:*";
+        String defaultMime = type == MediaType.IMAGE ? "image/jpeg" : "video/mp4";
+        String mime = mimeType == null || mimeType.trim().isEmpty() ? defaultMime : mimeType.trim();
+        String protocol = "http-get:*:" + mime + ":*";
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\""
                 + " xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
                 + " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"

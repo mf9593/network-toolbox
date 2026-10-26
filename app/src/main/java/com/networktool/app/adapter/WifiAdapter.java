@@ -139,8 +139,9 @@ public class WifiAdapter extends RecyclerView.Adapter<WifiAdapter.ViewHolder> {
         }
 
         // 3. 组之间按代表（最强）信号排序
+        // dBm 数值越大（越接近 0）信号越强，所以要按降序排
         groupEntries.sort((a, b) -> Integer.compare(
-                a.getValue().get(0).getLevel(), b.getValue().get(0).getLevel()));
+                b.getValue().get(0).getLevel(), a.getValue().get(0).getLevel()));
 
         // 4. 生成展示行
         for (Map.Entry<String, List<WifiInfoModel>> entry : groupEntries) {

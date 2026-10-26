@@ -304,6 +304,20 @@ public class CastActivity extends BaseToolActivity {
         });
     }
 
+    /** 去掉网址里的查询串，便于按扩展名猜类型 */
+    private String stripQuery(String url) {
+        if (url == null) return null;
+        int cut = url.indexOf('?');
+        return cut > 0 ? url.substring(0, cut) : url;
+    }
+
+    /** 拿不到有效 MIME 时返回 null，交给 DLNA 用默认值 */
+    private String normalizeMime(String mime) {
+        if (mime == null || mime.trim().isEmpty()) return null;
+        if ("application/octet-stream".equalsIgnoreCase(mime.trim())) return null;
+        return mime.trim();
+    }
+
     private String queryDisplayName(Uri uri) {
         String name = null;
         try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
@@ -335,16 +349,20 @@ public class CastActivity extends BaseToolActivity {
         final String finalUrl;
         final String title;
         final DlnaController.MediaType mediaType;
+        final String mimeType;
 
         if (!url.isEmpty()) {
             finalUrl = url;
             title = "网络工具箱投屏";
             mediaType = DlnaController.MediaType.VIDEO;
+            mimeType = normalizeMime(CastFileServer.guessContentType(stripQuery(url)));
         } else if (localFile != null && fileServer != null && fileServer.isRunning()) {
             finalUrl = fileServer.getUrl(CastFileServer.getLocalIpAddress());
             title = localFileName == null ? "网络工具箱投屏" : localFileName;
             mediaType = CastFileServer.isImageType(localFileType)
                     ? DlnaController.MediaType.IMAGE : DlnaController.MediaType.VIDEO;
+            mimeType = normalizeMime(localFileType != null
+                    ? localFileType : CastFileServer.guessContentType(localFileName));
         } else {
             Toast.makeText(this, "请输入链接，或先选择本地图片/视频", Toast.LENGTH_SHORT).show();
             return;
@@ -353,7 +371,7 @@ public class CastActivity extends BaseToolActivity {
         statusText.setText("正在投屏到 " + selectedDevice.getDisplayName() + " …");
         castButton.setEnabled(false);
         executor.execute(() -> {
-            String error = DlnaController.cast(selectedDevice, finalUrl, title, mediaType);
+            String error = DlnaController.cast(selectedDevice, finalUrl, title, mediaType, mimeType);
             runOnUiThread(() -> {
                 castButton.setEnabled(true);
                 if (error == null) {
@@ -361,7 +379,7 @@ public class CastActivity extends BaseToolActivity {
                             + "\n地址：" + finalUrl);
                 } else {
                     statusText.setText("投屏失败：" + error
-                            + "\n提示：电视可能不支持该格式，或需要先打开投屏/多屏互动功能。");
+                            + "\n提示：电视多为 MP4(H.264)+AAC；MKV/H.265/10bit 常播不了，可先转成 MP4 再投。");
                 }
             });
         });
