@@ -57,6 +57,10 @@ public class RtspPlayer {
     private SurfaceHolder attachedHolder;
     private String inputUrl;
     private int transport = RTSP_TRANSPORT_TCP;
+    /** 当前是否强制 RTP over TCP（失败后会自动翻转重试一次） */
+    private boolean forceTcpTransport = true;
+    /** 本次播放是否已经自动切换过传输 */
+    private boolean transportRetried;
     private String hwdec = "mediacodec";
     private int volume = 100;
     /** 音量增强倍数（1.0 = 不增强） */
@@ -162,8 +166,24 @@ public class RtspPlayer {
                     ? error.getMessage() : error.toString();
             if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
             writeBreadcrumb("ExoPlayer 错误: " + msg);
+            if (error != null) {
+                StringBuilder detail = new StringBuilder("code=").append(error.errorCode);
+                Throwable cause = error.getCause();
+                int depth = 0;
+                while (cause != null && depth++ < 4) {
+                    detail.append(" | ").append(cause.getClass().getSimpleName())
+                            .append(": ").append(cause.getMessage());
+                    cause = cause.getCause();
+                }
+                writeBreadcrumb("错误详情: " + detail);
+            }
             cancelRenderTimeout();
             prepared = false;
+            // RTSP 常见的 SETUP 传输不支持，先自动切换 RTP 传输重试一次
+            if (retryWithAltTransport()) {
+                probeRtspCause();
+                return;
+            }
             notifyEvent(EVENT_ERROR, "播放失败：" + msg);
             probeRtspCause();
         }
@@ -246,6 +266,8 @@ public class RtspPlayer {
 
     public void setRtspTransport(int transport) {
         this.transport = transport;
+        this.forceTcpTransport = transport == RTSP_TRANSPORT_TCP;
+        this.transportRetried = false;
     }
 
     /**
@@ -380,6 +402,10 @@ public class RtspPlayer {
             notifyEvent(EVENT_ERROR, "播放地址为空");
             return;
         }
+        // 换地址时重置「传输重试」标记
+        if (currentUrl == null || !inputUrl.equals(currentUrl)) {
+            transportRetried = false;
+        }
         // 已在播放同一地址则跳过
         if (prepared && !paused && inputUrl.equals(currentUrl)) return;
         // 暂停中恢复
@@ -465,11 +491,11 @@ public class RtspPlayer {
             if ("rtsp".equalsIgnoreCase(scheme) || "rtsps".equalsIgnoreCase(scheme)) {
                 // 相机预览默认走 TCP 内联传输（UDP 常被 NAT/防火墙拦截）
                 RtspMediaSource rtspSource = new RtspMediaSource.Factory()
-                        .setForceUseRtpTcp(true)
+                        .setForceUseRtpTcp(forceTcpTransport)
                         .setUserAgent("NetworkToolbox/2.1.0")
                         .createMediaSource(mediaItem);
                 exoPlayer.setMediaSource(rtspSource);
-                writeBreadcrumb("RTSP 源已创建（TCP 内联）");
+                writeBreadcrumb("RTSP 源已创建（RTP " + (forceTcpTransport ? "TCP 内联" : "UDP") + "）");
             } else {
                 exoPlayer.setMediaItem(mediaItem);
                 writeBreadcrumb("渐进源已设置");
@@ -680,6 +706,29 @@ public class RtspPlayer {
         String message = t.getMessage();
         if (message == null || message.isEmpty()) message = t.getClass().getSimpleName();
         notifyEvent(EVENT_ERROR, "播放失败：" + message);
+    }
+
+    /**
+     * RTSP 失败后自动切换 RTP 传输（TCP 内联 ⇄ UDP）重试一次。
+     * 不少摄像头只支持其中一种，SETUP 阶段会直接回 461 Unsupported Transport。
+     *
+     * @return true 表示已安排重试
+     */
+    private boolean retryWithAltTransport() {
+        if (transportRetried || released || inputUrl == null) return false;
+        String lower = inputUrl.toLowerCase(java.util.Locale.ROOT);
+        if (!lower.startsWith("rtsp://") && !lower.startsWith("rtsps://")) return false;
+        if (exoPlayer == null) return false;
+        transportRetried = true;
+        forceTcpTransport = !forceTcpTransport;
+        writeBreadcrumb("RTP 传输切换为 " + (forceTcpTransport ? "TCP(内联)" : "UDP") + "，重试播放");
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                if (!released) startInternal();
+            } catch (Throwable ignored) {
+            }
+        }, 500);
+        return true;
     }
 
     /** 播放失败后发一次 RTSP DESCRIBE 预检，把失败原因写进面包屑（子线程） */
