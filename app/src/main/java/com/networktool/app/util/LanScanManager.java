@@ -101,6 +101,8 @@ public class LanScanManager {
     private final Context context;
     private final String gateway;
     private final String subnetPrefix;
+    /** 本次扫描的目标主机地址（按真实子网掩码推导，/16~/23 的网段也能覆盖到） */
+    private final List<String> targetHosts = new ArrayList<>();
     private String scanSpeed;
     private String scanMode;
     private long discoveryTime;
@@ -114,6 +116,89 @@ public class LanScanManager {
     
     // 设备列表和名称缓存
     private final List<DeviceInfo> deviceList = new ArrayList<>();
+
+    /** 最近一次扫描到的设备快照，供主页「局域网设备」直接展示，避免重复扫描 */
+    private static volatile List<DeviceInfo> cachedDevices = new ArrayList<>();
+
+    private static final String PREF_SCAN_CACHE = "lan_scan_cache";
+    /** 上一次落盘的快照指纹，避免每次刷新都写盘 */
+    private static String lastSnapshotSignature;
+    private static final String KEY_SCAN_CACHE = "devices";
+
+    /**
+     * 取上次扫描到的设备快照（可能为空：从未扫描过）
+     */
+    public static List<DeviceInfo> getCachedDevices() {
+        return new ArrayList<>(cachedDevices);
+    }
+
+    /**
+     * 设备页把「当前展示的列表」同步给主页快照。
+     * 设备页会对标题做本地识别（路由器网关、本机设备、路由器品牌等），
+     * 主页直接读快照才能和设备页保持一致；标题或描述变化时顺带落盘。
+     */
+    public static void syncCachedDevices(Context context, List<DeviceInfo> devices) {
+        if (devices == null) return;
+        List<DeviceInfo> snapshot = new ArrayList<>(devices);
+        StringBuilder signature = new StringBuilder();
+        for (DeviceInfo device : snapshot) {
+            signature.append(device.getIp()).append('#')
+                    .append(device.getTitle()).append('#')
+                    .append(device.getDescription()).append(';');
+        }
+        cachedDevices = snapshot;
+        if (signature.toString().equals(lastSnapshotSignature)) {
+            return;
+        }
+        lastSnapshotSignature = signature.toString();
+        persistDevices(context, snapshot);
+    }
+
+    /** 把扫描结果落到 SharedPreferences，进程重启后主页仍能显示上次扫描结果 */
+    private void persistCachedDevices() {
+        persistDevices(context, deviceList);
+    }
+
+    private static void persistDevices(Context context, List<DeviceInfo> devices) {
+        if (context == null || devices == null) return;
+        try {
+            org.json.JSONArray array = new org.json.JSONArray();
+            for (DeviceInfo device : devices) {
+                org.json.JSONObject item = new org.json.JSONObject();
+                item.put("ip", device.getIp());
+                item.put("title", device.getTitle());
+                item.put("desc", device.getDescription());
+                item.put("icon", device.getIconType());
+                array.put(item);
+            }
+            context.getSharedPreferences(PREF_SCAN_CACHE, Context.MODE_PRIVATE)
+                    .edit().putString(KEY_SCAN_CACHE, array.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 读取上次扫描结果的持久化快照 */
+    public static List<DeviceInfo> loadPersistedDevices(Context context) {
+        List<DeviceInfo> list = new ArrayList<>();
+        if (context == null) return list;
+        try {
+            String json = context.getSharedPreferences(PREF_SCAN_CACHE, Context.MODE_PRIVATE)
+                    .getString(KEY_SCAN_CACHE, null);
+            if (json == null || json.isEmpty()) return list;
+            org.json.JSONArray array = new org.json.JSONArray(json);
+            for (int i = 0; i < array.length(); i++) {
+                org.json.JSONObject item = array.getJSONObject(i);
+                DeviceInfo device = new DeviceInfo();
+                device.setIp(item.optString("ip"));
+                device.setTitle(item.optString("title"));
+                device.setDescription(item.optString("desc"));
+                device.setIconType(item.optInt("icon"));
+                list.add(device);
+            }
+        } catch (Exception ignored) {
+        }
+        return list;
+    }
     private final Map<String, String> deviceNames = new HashMap<>();
     private final Map<String, Integer> devicePriorities = new HashMap<>();
     private final Map<String, Boolean> scannedIps = new HashMap<>();
@@ -169,9 +254,81 @@ public class LanScanManager {
             this.subnetPrefix = "192.168.1.";
         }
 
+        buildTargetHosts(isValidIpv4(localIp) ? localIp : gateway);
+
         loadScanSpeed();
         loadScanMode();
         loadRouterList();
+    }
+
+    /**
+     * 按本机 IP 的真实子网掩码生成扫描目标。
+     *
+     * <p>以前固定扫 xxx.xxx.xxx.1~255，遇到 /23、/22 这类网段（例如 192.168.0.0/23）
+     * 就会漏掉另一半地址段里的设备，有线网络尤其明显。现在优先按掩码枚举主机，
+     * 主机数超过上限（1024）时退回只扫本机所在 /24，避免扫描过久。</p>
+     */
+    private void buildTargetHosts(String localIp) {
+        targetHosts.clear();
+        int prefixLength = 24;
+        long ipValue = ipToLong(localIp);
+        if (ipValue > 0) {
+            prefixLength = prefixLengthForIp(localIp);
+        }
+        int hostBits = 32 - prefixLength;
+        long hostCount = hostBits >= 0 ? (1L << hostBits) - 2 : 254;
+        if (hostBits < 0 || hostCount <= 0 || hostCount > 1024) {
+            // 掩码过大（如 /16）或拿不到掩码：只扫本机所在 /24
+            String prefix = isValidIpv4(localIp)
+                    ? localIp.substring(0, localIp.lastIndexOf('.') + 1)
+                    : subnetPrefix;
+            for (int i = 1; i <= 254; i++) {
+                targetHosts.add(prefix + i);
+            }
+            return;
+        }
+        long mask = prefixLength == 0 ? 0 : (0xFFFFFFFFL << hostBits) & 0xFFFFFFFFL;
+        long network = ipValue & mask;
+        for (long i = 1; i <= hostCount; i++) {
+            targetHosts.add(longToIp(network + i));
+        }
+    }
+
+    /** 找到本机地址对应的子网掩码前缀长度（拿不到就按 /24） */
+    private static int prefixLengthForIp(String localIp) {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface networkInterface = interfaces.nextElement();
+                if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
+                for (java.net.InterfaceAddress address : networkInterface.getInterfaceAddresses()) {
+                    java.net.InetAddress inetAddress = address.getAddress();
+                    if (inetAddress instanceof java.net.Inet4Address
+                            && localIp.equals(inetAddress.getHostAddress())) {
+                        int prefix = address.getNetworkPrefixLength();
+                        if (prefix > 0 && prefix <= 32) return prefix;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 24;
+    }
+
+    private long ipToLong(String ip) {
+        if (!isValidIpv4(ip)) return -1;
+        String[] parts = ip.split("\\.");
+        long value = 0;
+        for (String part : parts) {
+            value = (value << 8) | (Integer.parseInt(part) & 0xFF);
+        }
+        return value;
+    }
+
+    private String longToIp(long value) {
+        return ((value >> 24) & 0xFF) + "." + ((value >> 16) & 0xFF) + "."
+                + ((value >> 8) & 0xFF) + "." + (value & 0xFF);
     }
 
     private boolean isValidIpv4(String ip) {
@@ -443,15 +600,15 @@ public class LanScanManager {
         final AtomicInteger progress = new AtomicInteger(0);
         final CountDownLatch latch = new CountDownLatch(255);
         
-        for (int i = 1; i <= 255; i++) {
+        for (String host : targetHosts) {
             if (!isScanning) {
                 for (int j = 0; j < latch.getCount(); j++) {
                     latch.countDown();
                 }
                 break;
             }
-            
-            final String ip = subnetPrefix + i;
+
+            final String ip = host;
             
             pingExecutor.execute(() -> {
                 try {
@@ -1195,6 +1352,52 @@ public class LanScanManager {
     }
 
     /**
+     * 从 UPnP 的 SERVER 头里取「产品名」。
+     *
+     * <p>UPnP 规范格式为 {@code OS/版本 UPnP/版本 产品/版本}，例如
+     * {@code vxWorks/5.5 UPnP/1.0 TL-WDR5660千兆版/5.0} 应得到
+     * {@code TL-WDR5660千兆版}。旧实现直接按 "/" 切分取最后一段，
+     * 结果只拿到版本号 "5.0"。</p>
+     */
+    private static String parseUpnpServerName(String server) {
+        if (server == null) return "SSDP设备";
+        String text = server.trim();
+        if (text.isEmpty()) return "SSDP设备";
+
+        String candidate = null;
+
+        // ① 优先取 "UPnP/版本" 之后的产品段
+        int upnpIndex = text.toUpperCase(java.util.Locale.ROOT).indexOf("UPNP/");
+        if (upnpIndex >= 0) {
+            String after = text.substring(upnpIndex + 5).trim();
+            int space = after.indexOf(' ');
+            if (space >= 0) {
+                candidate = after.substring(space + 1).trim();
+            }
+        }
+        // ② 没有 UPnP 段时退回整串
+        if (candidate == null || candidate.isEmpty()) {
+            candidate = text;
+        }
+
+        // 去掉产品名尾巴上的 "/版本"
+        int slash = candidate.indexOf('/');
+        if (slash > 0) {
+            candidate = candidate.substring(0, slash).trim();
+        }
+        // 去掉修饰性符号（部分是 "Linux, UPnP/1.0, Private Upnp SDK" 这种写法）
+        candidate = candidate.replaceAll("^[,\\s]+", "").replaceAll("[,\\s]+$", "").trim();
+
+        // 只剩纯版本号 / 纯 upnp 字样就没意义，退回整串 Server
+        if (candidate.isEmpty()
+                || candidate.matches("^[0-9.]+$")
+                || "upnp".equalsIgnoreCase(candidate)) {
+            return text;
+        }
+        return candidate;
+    }
+
+    /**
      * NetBIOS 设备搜索（并行扫描，超时控制）
      */
     private void searchNetBiosDevices() {
@@ -1202,9 +1405,15 @@ public class LanScanManager {
         int concurrency = 20;  // 最多20个并发
         final Semaphore semaphore = new Semaphore(concurrency);
         final AtomicInteger progress = new AtomicInteger(0);
-        final CountDownLatch latch = new CountDownLatch(scanRange);
-        
-        for (int i = 1; i <= scanRange; i++) {
+        // 目标按真实子网生成，最多取前 scanRange 个，避免大网段扫太久
+        List<String> netBiosTargets = new ArrayList<>(targetHosts);
+        if (netBiosTargets.size() > scanRange) {
+            netBiosTargets = new ArrayList<>(netBiosTargets.subList(0, scanRange));
+        }
+        final int netBiosTotal = netBiosTargets.size();
+        final CountDownLatch latch = new CountDownLatch(netBiosTotal);
+
+        for (String host : netBiosTargets) {
             if (!isScanning) {
                 // 如果扫描被停止，释放所有剩余的latch
                 for (int j = 0; j < latch.getCount(); j++) {
@@ -1213,9 +1422,8 @@ public class LanScanManager {
                 break;
             }
             
-            final String ip = subnetPrefix + i;
-            final int index = i;
-            
+            final String ip = host;
+
             try {
                 semaphore.acquire();
             } catch (InterruptedException e) {
@@ -1307,57 +1515,120 @@ public class LanScanManager {
     }
     
     private String parseNetBiosName(byte[] buffer, int length) {
-        if (length < 57) return null;
+        String name = parseNbstatComputerName(buffer, length);
+        if (name == null || name.isEmpty()) {
+            DebugLogger.logDiscovery("NetBIOS", "解析失败",
+                    "报文长度=" + length + "，未找到 NBSTAT 计算机名");
+            return null;
+        }
+        DebugLogger.logDiscovery("NetBIOS", "解析名称", name);
+        return name;
+    }
 
+    /**
+     * 解析 NBSTAT（节点状态应答）里的计算机名。
+     *
+     * <p>应答结构：12 字节头 → 问题区 → 若干资源记录（Answer）。
+     * NBSTAT 记录的 RDATA 是「1 字节名称数量 + N×(15 字节名称 + 1 字节后缀 + 2 字节标志）」。
+     * 旧实现按固定偏移 57/73 硬读，压缩指针或问题区长度不同的报文就会读空，
+     * 于是日志里有「收到响应」却没有标题。</p>
+     */
+    private String parseNbstatComputerName(byte[] buffer, int length) {
+        if (buffer == null || length < 12) return null;
         try {
-            // NetBIOS响应包结构：
-            // 偏移57-72：NetBIOS名称（可能是计算机名或工作组名）
-            // 偏移73-88：第二个NetBIOS名称（如果有）
-            StringBuilder name = new StringBuilder();
-            for (int i = 57; i < 72 && i < length; i++) {
-                char c = (char) buffer[i];
-                if (c >= 32 && c < 127) {
-                    name.append(c);
-                }
+            int qdCount = readUShort(buffer, 4, length);
+            int anCount = readUShort(buffer, 6, length);
+            int offset = 12;
+
+            // 跳过问题区
+            for (int i = 0; i < qdCount && offset < length; i++) {
+                offset = skipDnsName(buffer, offset, length);
+                offset += 4; // QTYPE + QCLASS
             }
 
-            String result = name.toString().trim();
-            
-            // 过滤常见的工作组名
-            if (result.isEmpty()) {
-                return null;
-            }
-            
-            // 常见的工作组名列表
-            String[] workgroupNames = {
-                "WORKGROUP", "WORKGROUP", "MSHOME", "HOME", "DOMAIN",
-                "WORK", "HOME", "LAN", "NETWORK", "LOCAL"
-            };
-            
-            for (String workgroup : workgroupNames) {
-                if (result.equalsIgnoreCase(workgroup)) {
-                    // 如果是工作组名，尝试获取第二个名称（可能是计算机名）
-                    StringBuilder secondName = new StringBuilder();
-                    for (int i = 73; i < 88 && i < length; i++) {
-                        char c = (char) buffer[i];
-                        if (c >= 32 && c < 127) {
-                            secondName.append(c);
+            String best = null;
+            int bestScore = -1;
+            for (int i = 0; i < anCount && offset + 10 <= length; i++) {
+                offset = skipDnsName(buffer, offset, length);
+                if (offset + 10 > length) break;
+                int type = readUShort(buffer, offset, length);
+                int rdLength = readUShort(buffer, offset + 8, length);
+                int rdataStart = offset + 10;
+                if (rdLength <= 0 || rdataStart + rdLength > length) break;
+
+                if (type == 0x0021) { // NBSTAT
+                    int nameCount = buffer[rdataStart] & 0xFF;
+                    int pos = rdataStart + 1;
+                    for (int n = 0; n < nameCount && pos + 18 <= rdataStart + rdLength; n++, pos += 18) {
+                        String name = decodeNetBiosName(buffer, pos);
+                        if (name == null || name.isEmpty()) continue;
+                        int suffix = buffer[pos + 15] & 0xFF;
+                        int flags = readUShort(buffer, pos + 16, length);
+                        boolean group = (flags & 0x8000) != 0;
+                        int score;
+                        if (group) {
+                            score = 0;              // 工作组/域，仅在别无选择时用
+                        } else if (suffix == 0x00) {
+                            score = 3;              // 工作站名，最准
+                        } else if (suffix == 0x20) {
+                            score = 2;              // 文件服务名
+                        } else {
+                            score = 1;
+                        }
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = name;
                         }
                     }
-                    String secondResult = secondName.toString().trim();
-                    if (!secondResult.isEmpty() && !isWorkgroupName(secondResult)) {
-                        return secondResult;
-                    }
-                    return null; // 只返回工作组名，不显示
                 }
+                offset = rdataStart + rdLength;
             }
-            
-            return result;
+
+            if (best == null) return null;
+            // 只拿到工作组名时不当作标题
+            if (isWorkgroupName(best) && bestScore <= 0) return null;
+            return best;
         } catch (Exception e) {
             return null;
         }
     }
-    
+
+    /** 读取无符号 16 位整数 */
+    private int readUShort(byte[] buffer, int offset, int length) {
+        if (offset < 0 || offset + 1 >= length) return 0;
+        return ((buffer[offset] & 0xFF) << 8) | (buffer[offset + 1] & 0xFF);
+    }
+
+    /** 跳过 DNS 名字（含压缩指针），返回名字之后的偏移 */
+    private int skipDnsName(byte[] buffer, int offset, int length) {
+        while (offset < length) {
+            int len = buffer[offset] & 0xFF;
+            if (len == 0) {
+                offset++;
+                break;
+            }
+            if ((len & 0xC0) == 0xC0) { // 压缩指针
+                offset += 2;
+                break;
+            }
+            offset += len + 1;
+        }
+        return offset;
+    }
+
+    /** 15 字节 NetBIOS 名称：ASCII、右补空格或 \0 */
+    private String decodeNetBiosName(byte[] buffer, int offset) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 15; i++) {
+            int value = buffer[offset + i] & 0xFF;
+            if (value == 0) break;
+            if (value < 32 || value >= 127) continue;
+            sb.append((char) value);
+        }
+        String name = sb.toString().trim();
+        return name.isEmpty() ? null : name;
+    }
+
     /**
      * 判断是否是常见的工作组名
      */
@@ -1452,9 +1723,7 @@ public class LanScanManager {
                         } else if (responseStr.contains("DLNA")) {
                             name = "【投屏】DLNA设备";
                         } else if (server != null) {
-                            // Server 形如 "Linux/5.0 UPnP/1.0 Product/1.0"，取产品段
-                            String[] parts = server.split("[/]");
-                            name = parts.length >= 3 ? parts[parts.length - 1].trim() : server;
+                            name = parseUpnpServerName(server);
                         }
                     }
 
@@ -1548,6 +1817,8 @@ public class LanScanManager {
                         name = "【电脑】Windows设备(IPv6)";
                     } else if (server != null && server.contains("DLNA")) {
                         name = "【投屏】DLNA设备(IPv6)";
+                    } else if (server != null) {
+                        name = parseUpnpServerName(server);
                     }
 
                     addDeviceWithPriority(deviceIp != null ? deviceIp : senderIp, name, DeviceInfo.ICON_SSDP, PRIORITY_SSDP);
@@ -2028,6 +2299,7 @@ public class LanScanManager {
                             listener.onDeviceUpdated(device);
                         }
                     }
+                    cachedDevices = new ArrayList<>(deviceList);
                     return;
                 }
             }
@@ -2052,6 +2324,7 @@ public class LanScanManager {
             deviceNames.put(finalIp, finalTitle);
             scannedIps.put(finalIp, true);
             
+            cachedDevices = new ArrayList<>(deviceList);
             if (listener != null) {
                 listener.onDeviceFound(device);
             }
@@ -2295,6 +2568,8 @@ public class LanScanManager {
             return NetworkUtils.compareIp(a.getIp(), b.getIp());
         });
         
+        cachedDevices = new ArrayList<>(deviceList);
+        persistCachedDevices();
         if (listener != null) {
             mainHandler.post(() -> listener.onScanComplete(deviceList.size()));
         }

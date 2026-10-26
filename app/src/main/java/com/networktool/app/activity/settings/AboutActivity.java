@@ -81,10 +81,18 @@ public class AboutActivity extends AppCompatActivity {
             openSourceUrlText.setOnClickListener(v -> openInWebView(repoUrl, "开源地址"));
         }
 
-        // 开源工具引用 - 点击跳转内置浏览器
+        // 开源组件与许可 - 直接展示实际使用的组件与版本
         TextView openSourceToolsText = findViewById(R.id.openSourceToolsText);
-        openSourceToolsText.setText("Apache License 2.0\nAndroidX · Material Components · ExoPlayer · OkHttp · Jsoup · Gson · ZXing");
-        openSourceToolsText.setOnClickListener(v -> showOpenSourceInfoDialog());
+        openSourceToolsText.setText("本应用以 Apache License 2.0 开源，使用了以下开源组件：\n\n"
+                + "• AndroidX（AppCompat、Core、ConstraintLayout、RecyclerView、"
+                + "ViewPager2、SwipeRefreshLayout、CoordinatorLayout）— Apache-2.0\n"
+                + "• Material Components 1.11.0 — Apache-2.0\n"
+                + "• OkHttp 4.12.0（含 Okio 3.6.0）— Apache-2.0\n"
+                + "• Gson 2.10.1 — Apache-2.0\n"
+                + "• Jsoup 1.15.3 — MIT\n"
+                + "• AndroidSVG 1.4 — Apache-2.0\n"
+                + "• ZXing Core 3.5.2、ZXing Android Embedded 4.3.0 — Apache-2.0\n"
+                + "• ExoPlayer 2.19.1（core / ui / rtsp）— Apache-2.0");
 
         TextView sponsorListText = findViewById(R.id.sponsorListText);
         sponsorListText.setText("感谢每一位使用和支持网络工具箱的用户");
@@ -92,26 +100,6 @@ public class AboutActivity extends AppCompatActivity {
         // 重置数据
         View resetButton = findViewById(R.id.resetDataButton);
         resetButton.setOnClickListener(v -> showResetDataDialog());
-    }
-
-    private void showOpenSourceInfoDialog() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("开源组件与协议")
-                .setMessage("应用协议：Apache License 2.0\n\n"
-                        + "主要开源组件：\n"
-                        + "• AndroidX / Material Components（Apache-2.0）\n"
-                        + "• OkHttp（Apache-2.0）\n"
-                        + "• Jsoup（MIT）\n"
-                        + "• Gson（Apache-2.0）\n"
-                        + "• ZXing（Apache-2.0）\n"
-                        + "• AndroidSVG（Apache-2.0）\n"
-                        + "• Jaxen（BSD 风格）\n"
-                        + "• ExoPlayer 播放内核（Apache-2.0）\n"
-                        + "• ExoPlayer UI 组件（Apache-2.0）\n\n"
-                        + "注意：ExoPlayer 采用 Apache-2.0 许可，与项目方向一致。\n"
-                        + "完整许可见项目根目录 LICENSE 和 THIRD_PARTY_NOTICES.md。")
-                .setPositiveButton("知道了", null)
-                .show();
     }
 
     private void openInWebView(String url, String title) {

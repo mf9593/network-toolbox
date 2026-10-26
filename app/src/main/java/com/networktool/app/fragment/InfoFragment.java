@@ -45,11 +45,6 @@ import com.networktool.app.R;
 import com.networktool.app.activity.MainActivity;
 import com.networktool.app.activity.settings.PrivacyPolicyActivity;
 import com.networktool.app.activity.settings.UserAgreementActivity;
-import com.networktool.app.activity.tool.DnsActivity;
-import com.networktool.app.activity.tool.MacActivity;
-import com.networktool.app.activity.tool.PingActivity;
-import com.networktool.app.activity.tool.PortScanActivity;
-import com.networktool.app.activity.tool.SpeedTestActivity;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.UrlOpenHelper;
@@ -76,7 +71,6 @@ public class InfoFragment extends Fragment {
     private MaterialCardView metricsCard;
     private MaterialCardView signalCard;
     private MaterialCardView networkInfoCard;
-    private MaterialCardView quickToolsCard;
     private MaterialCardView batteryCard;
     private TextView batteryPercent;
     private TextView batteryVoltage;
@@ -89,11 +83,22 @@ public class InfoFragment extends Fragment {
     private TextView wifiIp;
     private TextView wifiSignal;
     private TextView wifiAction;
+    private TextView wifiFrequency;
+    private com.networktool.app.view.HeroRingDrawable heroRingDrawable;
     private TextView signalCurrent;
     private TextView gatewayValue;
     private TextView dnsValue;
     private TextView frequencyValue;
     private TextView linkSpeedValue;
+
+    private MaterialCardView statLatencyCard;
+    private MaterialCardView statSpeedCard;
+    private MaterialCardView statDevicesCard;
+
+    private TextView statLatencyValue;
+    private TextView statSpeedValue;
+    private TextView statDevicesValue;
+    private LinearLayout homeDeviceContainer;
 
     private LinearLayout detailContainer;
     private SignalStrengthView signalChart;
@@ -102,16 +107,6 @@ public class InfoFragment extends Fragment {
     private View metricDns;
     private View metricFrequency;
     private View metricSpeed;
-    private ImageView quickPingIcon;
-    private ImageView quickDnsIcon;
-    private ImageView quickSpeedIcon;
-    private ImageView quickPortIcon;
-    private ImageView quickMacIcon;
-    private TextView quickPingText;
-    private TextView quickDnsText;
-    private TextView quickSpeedText;
-    private TextView quickPortText;
-    private TextView quickMacText;
 
     private WifiManager wifiManager;
     private ConnectivityManager connectivityManager;
@@ -136,6 +131,23 @@ public class InfoFragment extends Fragment {
         }
     };
     private BroadcastReceiver batteryReceiver;
+
+    /** 主页「局域网设备」与「延迟」的定时刷新（5 秒） */
+    private final Runnable homeRefreshTimer = new Runnable() {
+        @Override
+        public void run() {
+            loadHomeDevices();
+            measureGatewayLatency();
+            mainHandler.postDelayed(this, HOME_REFRESH_INTERVAL_MS);
+        }
+    };
+
+    /** 主页卡片刷新间隔 */
+    private static final long HOME_REFRESH_INTERVAL_MS = 5000L;
+    /** 上一次渲染的设备列表指纹，内容没变就不重建视图，避免闪烁 */
+    private String homeDevicesSignature;
+    /** 延迟测量是否进行中，避免定时器叠加 ping 进程 */
+    private boolean latencyMeasuring;
 
     private final List<Integer> rssiHistory = new ArrayList<>();
     private final Runnable rssiTimer = new Runnable() {
@@ -168,9 +180,16 @@ public class InfoFragment extends Fragment {
     public void onResume() {
         super.onResume();
         applyThemeColors();
+        if (heroRingDrawable != null) {
+            heroRingDrawable.start();
+        }
         refreshInfo();
+        loadHomeDevices();
+        measureGatewayLatency();
         collectRssi();
         mainHandler.post(rssiTimer);
+        mainHandler.removeCallbacks(homeRefreshTimer);
+        mainHandler.postDelayed(homeRefreshTimer, HOME_REFRESH_INTERVAL_MS);
         // 电池信息：2 秒轮询 + 系统电池广播双重驱动，避免电量/充电功率停在初次进入时的数值
         mainHandler.removeCallbacks(batteryTimer);
         mainHandler.post(batteryTimer);
@@ -180,8 +199,12 @@ public class InfoFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
+        if (heroRingDrawable != null) {
+            heroRingDrawable.stop();
+        }
         mainHandler.removeCallbacks(rssiTimer);
         mainHandler.removeCallbacks(batteryTimer);
+        mainHandler.removeCallbacks(homeRefreshTimer);
         unregisterBatteryReceiver();
     }
 
@@ -217,10 +240,8 @@ public class InfoFragment extends Fragment {
     private void initViews(View view) {
         refreshLayout = view.findViewById(R.id.refreshLayout);
         wifiCard = view.findViewById(R.id.wifiCard);
-        metricsCard = view.findViewById(R.id.metricsCard);
         signalCard = view.findViewById(R.id.signalCard);
         networkInfoCard = view.findViewById(R.id.networkInfoCard);
-        quickToolsCard = view.findViewById(R.id.quickToolsCard);
         batteryCard = view.findViewById(R.id.batteryCard);
         batteryPercent = view.findViewById(R.id.batteryPercent);
         batteryVoltage = view.findViewById(R.id.batteryVoltage);
@@ -228,34 +249,47 @@ public class InfoFragment extends Fragment {
         batteryTemperature = view.findViewById(R.id.batteryTemperature);
         heroContent = view.findViewById(R.id.heroContent);
 
+        // 三格指标 + 局域网设备 + 顶部更多
+        statLatencyValue = view.findViewById(R.id.statLatencyValue);
+        statSpeedValue = view.findViewById(R.id.statSpeedValue);
+        statDevicesValue = view.findViewById(R.id.statDevicesValue);
+        homeDeviceContainer = view.findViewById(R.id.homeDeviceContainer);
+
+        statLatencyCard = view.findViewById(R.id.statLatency);
+        statSpeedCard = view.findViewById(R.id.statSpeed);
+        statDevicesCard = view.findViewById(R.id.statDevices);
+
+        View statLatency = view.findViewById(R.id.statLatency);
+        if (statLatency != null) statLatency.setOnClickListener(v -> measureGatewayLatency());
+        View statSpeedView = view.findViewById(R.id.statSpeed);
+        if (statSpeedView != null) statSpeedView.setOnClickListener(v -> switchMainPage(2));
+        View statDevicesView = view.findViewById(R.id.statDevices);
+        if (statDevicesView != null) statDevicesView.setOnClickListener(v -> switchMainPage(1));
+        View homeDeviceAll = view.findViewById(R.id.homeDeviceAll);
+        if (homeDeviceAll != null) homeDeviceAll.setOnClickListener(v -> switchMainPage(1));
+        View homeMore = view.findViewById(R.id.homeMore);
+        if (homeMore != null) {
+            homeMore.setOnClickListener(v -> {
+                try {
+                    startActivity(new Intent(requireContext(),
+                            com.networktool.app.activity.settings.AboutActivity.class));
+                } catch (Exception ignored) {
+                }
+            });
+        }
+
         wifiLogo = view.findViewById(R.id.wifiLogo);
         wifiTitle = view.findViewById(R.id.wifiTitle);
         wifiIp = view.findViewById(R.id.wifiIp);
         wifiSignal = view.findViewById(R.id.wifiSignal);
         wifiAction = view.findViewById(R.id.wifiAction);
+        wifiFrequency = view.findViewById(R.id.wifiFrequency);
         signalCurrent = view.findViewById(R.id.signalCurrent);
-        gatewayValue = view.findViewById(R.id.gatewayValue);
-        dnsValue = view.findViewById(R.id.dnsValue);
-        frequencyValue = view.findViewById(R.id.frequencyValue);
-        linkSpeedValue = view.findViewById(R.id.linkSpeedValue);
+        // 「关键指标」卡片（网关/DNS/频率/速率）已移除：速率在顶部三格、频段在 Hero 卡右侧，
+        // 因此这里不再查找对应控件，相关字段保持 null，引用处均已做空判断。
 
         detailContainer = view.findViewById(R.id.detailContainer);
         signalChart = view.findViewById(R.id.signalChart);
-
-        metricGateway = view.findViewById(R.id.metricGateway);
-        metricDns = view.findViewById(R.id.metricDns);
-        metricFrequency = view.findViewById(R.id.metricFrequency);
-        metricSpeed = view.findViewById(R.id.metricSpeed);
-        quickPingIcon = view.findViewById(R.id.quickPingIcon);
-        quickDnsIcon = view.findViewById(R.id.quickDnsIcon);
-        quickSpeedIcon = view.findViewById(R.id.quickSpeedIcon);
-        quickPortIcon = view.findViewById(R.id.quickPortIcon);
-        quickMacIcon = view.findViewById(R.id.quickMacIcon);
-        quickPingText = view.findViewById(R.id.quickPingText);
-        quickDnsText = view.findViewById(R.id.quickDnsText);
-        quickSpeedText = view.findViewById(R.id.quickSpeedText);
-        quickPortText = view.findViewById(R.id.quickPortText);
-        quickMacText = view.findViewById(R.id.quickMacText);
     }
 
     private void initManagers() {
@@ -275,30 +309,161 @@ public class InfoFragment extends Fragment {
         wifiCard.setOnClickListener(v -> openRouter());
         wifiAction.setOnClickListener(v -> openRouter());
 
-        metricGateway.setOnClickListener(v -> copyText(textOf(gatewayValue), "网关"));
-        metricDns.setOnClickListener(v -> copyText(textOf(dnsValue), "DNS"));
-        metricFrequency.setOnClickListener(v -> copyText(textOf(frequencyValue), "频率"));
-        metricSpeed.setOnClickListener(v -> copyText(textOf(linkSpeedValue), "协商速率"));
-
-        view(R.id.quickPing, PingActivity.class);
-        view(R.id.quickDns, DnsActivity.class);
-        view(R.id.quickSpeed, SpeedTestActivity.class);
-        view(R.id.quickPort, PortScanActivity.class);
-        view(R.id.quickMac, MacActivity.class);
+        if (metricGateway != null) metricGateway.setOnClickListener(v -> copyText(textOf(gatewayValue), "网关"));
+        if (metricDns != null) metricDns.setOnClickListener(v -> copyText(textOf(dnsValue), "DNS"));
+        if (metricFrequency != null) metricFrequency.setOnClickListener(v -> copyText(textOf(frequencyValue), "频率"));
+        if (metricSpeed != null) metricSpeed.setOnClickListener(v -> copyText(textOf(linkSpeedValue), "协商速率"));
     }
 
-    private void view(int id, Class<?> target) {
-        View view = getView();
-        if (view == null) return;
-        View button = view.findViewById(id);
-        if (button != null) {
-            button.setOnClickListener(v -> {
-                try {
-                    startActivity(new Intent(requireContext(), target));
-                } catch (Exception e) {
-                    showToast("无法打开该工具");
+    /** ping 一次网关估算延迟（子线程执行，结果回主线程） */
+    private void measureGatewayLatency() {
+        if (statLatencyValue == null || !isAdded() || latencyMeasuring) return;
+        String gateway = (currentGateway != null && !currentGateway.isEmpty())
+                ? currentGateway : NetworkUtils.getGateway(requireContext());
+        if (gateway == null || gateway.isEmpty()) {
+            statLatencyValue.setText("--");
+            return;
+        }
+        latencyMeasuring = true;
+        statLatencyValue.setText("…");
+        new Thread(() -> {
+            long cost = -1;
+            try {
+                // 取 ping 输出里的 time=xx ms，避免把进程启动开销也算进延迟
+                Process process = new ProcessBuilder("ping", "-c", "1", "-W", "1", gateway)
+                        .redirectErrorStream(true).start();
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    java.util.regex.Matcher matcher = java.util.regex.Pattern
+                            .compile("time[=<]\\s*([0-9.]+)").matcher(line);
+                    if (matcher.find()) {
+                        try {
+                            cost = Math.round(Double.parseDouble(matcher.group(1)));
+                        } catch (Exception ignored) {
+                        }
+                        break;
+                    }
+                }
+                process.waitFor();
+                process.destroy();
+            } catch (Exception ignored) {
+            }
+            final long result = cost;
+            latencyMeasuring = false;
+            if (!isAdded()) return;
+            mainHandler.post(() -> {
+                if (statLatencyValue != null) {
+                    statLatencyValue.setText(result >= 0 ? result + " ms" : "--");
                 }
             });
+        }, "home-latency").start();
+    }
+
+    /** 主页「局域网设备」：读取上次扫描结果，最多展示 3 条 */
+    private void loadHomeDevices() {
+        if (homeDeviceContainer == null || !isAdded()) return;
+        try {
+            java.util.List<com.networktool.app.model.DeviceInfo> devices =
+                    com.networktool.app.util.LanScanManager.getCachedDevices();
+            if (devices.isEmpty()) {
+                // 进程刚重启时内存快照是空的，用上次扫描落盘的记录兜底
+                devices = com.networktool.app.util.LanScanManager
+                        .loadPersistedDevices(requireContext());
+            }
+            StringBuilder signature = new StringBuilder();
+            for (com.networktool.app.model.DeviceInfo device : devices) {
+                signature.append(device.getIp()).append('#')
+                        .append(device.getTitle()).append('#')
+                        .append(device.getDescription()).append(';');
+            }
+            String currentSignature = signature.toString();
+            if (currentSignature.equals(homeDevicesSignature)
+                    && homeDeviceContainer.getChildCount() > 0) {
+                return;
+            }
+            homeDevicesSignature = currentSignature;
+            homeDeviceContainer.removeAllViews();
+            if (statDevicesValue != null) {
+                statDevicesValue.setText(devices.isEmpty() ? "--" : devices.size() + " 台");
+            }
+            if (devices.isEmpty()) {
+                TextView hint = new TextView(requireContext());
+                hint.setText("还没有扫描记录，点「全部」去扫描局域网设备");
+                hint.setTextSize(12f);
+                hint.setTextColor(ThemeManager.getOnSurfaceVariantColor(requireContext()));
+                hint.setBackgroundResource(R.drawable.bg_chip);
+                hint.setPadding((int) dp(14), (int) dp(14), (int) dp(14), (int) dp(14));
+                homeDeviceContainer.addView(hint);
+                return;
+            }
+            int count = Math.min(3, devices.size());
+            for (int i = 0; i < count; i++) {
+                addHomeDeviceRow(devices.get(i));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void addHomeDeviceRow(com.networktool.app.model.DeviceInfo device) {
+        try {
+            View row = LayoutInflater.from(requireContext())
+                    .inflate(R.layout.item_home_device, homeDeviceContainer, false);
+            TextView title = row.findViewById(R.id.homeDeviceTitle);
+            TextView subtitle = row.findViewById(R.id.homeDeviceSubtitle);
+            TextView dot = row.findViewById(R.id.homeDeviceDot);
+            ImageView icon = row.findViewById(R.id.homeDeviceIcon);
+
+            title.setText(device.getTitle());
+            String desc = device.getDescription();
+            subtitle.setText(device.getIp() + " · "
+                    + (desc != null && !desc.isEmpty() ? desc : "在线"));
+            icon.setImageResource(homeDeviceIcon(device.getIconType()));
+            icon.setColorFilter(ThemeManager.getAccessibleThemeColor(requireContext()));
+            dot.setTextColor(ThemeManager.getSuccessColor(requireContext()));
+            try {
+                ((com.google.android.material.card.MaterialCardView) row)
+                        .setCardBackgroundColor(ThemeManager.getSurfaceColor(requireContext()));
+            } catch (Exception ignored) {
+            }
+            row.setOnClickListener(v -> switchMainPage(1));
+            homeDeviceContainer.addView(row);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 设备类型 → 图标（与设备页保持一致） */
+    private int homeDeviceIcon(int iconType) {
+        switch (iconType) {
+            case com.networktool.app.model.DeviceInfo.ICON_ROUTER:
+                return R.drawable.ic_router;
+            case com.networktool.app.model.DeviceInfo.ICON_CAMERA:
+                return R.drawable.ic_camera;
+            case com.networktool.app.model.DeviceInfo.ICON_PHONE:
+                return R.drawable.ic_phone;
+            case com.networktool.app.model.DeviceInfo.ICON_PRINTER:
+                return R.drawable.ic_printer;
+            case com.networktool.app.model.DeviceInfo.ICON_DLNA:
+                return R.drawable.ic_dlna;
+            case com.networktool.app.model.DeviceInfo.ICON_NVR:
+                return R.drawable.ic_nvr;
+            case com.networktool.app.model.DeviceInfo.ICON_ONVIF:
+                return R.drawable.ic_onvif;
+            case com.networktool.app.model.DeviceInfo.ICON_ARP:
+                return R.drawable.ic_arp;
+            default:
+                return R.drawable.ic_computer;
+        }
+    }
+
+    /** 切换到主页面的某个分页（0 首页 / 1 设备 / 2 无线 / 3 工具 / 4 设置） */
+    private void switchMainPage(int page) {
+        try {
+            if (getActivity() instanceof com.networktool.app.activity.MainActivity) {
+                ((com.networktool.app.activity.MainActivity) getActivity()).selectPage(page);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -317,45 +482,51 @@ public class InfoFragment extends Fragment {
         } catch (Exception ignored) {
         }
 
-        GradientDrawable gradient = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{themeColor, ThemeManager.darkenColor(themeColor, 0.78f)});
-        gradient.setCornerRadius(dp(20));
-        heroContent.setBackground(gradient);
+        // Hero 背景：左侧星空 + 右侧旋转星环 + 主题色渐变
+        heroRingDrawable = new com.networktool.app.view.HeroRingDrawable(
+                themeColor,
+                ThemeManager.darkenColor(themeColor, 0.7f),
+                dp(20),
+                getResources().getDisplayMetrics().density);
+        heroContent.setBackground(heroRingDrawable);
+        if (isResumed()) {
+            heroRingDrawable.start();
+        }
 
+        if (wifiSignal != null) {
+            GradientDrawable pill = new GradientDrawable();
+            pill.setColor(withAlpha(contrastColor, 0x26));
+            pill.setCornerRadius(dp(20));
+            wifiSignal.setBackground(pill);
+        }
+        if (wifiFrequency != null) {
+            // 频段同样用一层浅胶囊兜底，保证压在星环/渐变上也清楚
+            GradientDrawable frequencyPill = new GradientDrawable();
+            frequencyPill.setColor(withAlpha(contrastColor, 0x1F));
+            frequencyPill.setCornerRadius(dp(20));
+            wifiFrequency.setBackground(frequencyPill);
+        }
         wifiTitle.setTextColor(contrastColor);
         wifiIp.setTextColor(withAlpha(contrastColor, 0xD9));
         wifiSignal.setTextColor(contrastColor);
         wifiAction.setTextColor(withAlpha(contrastColor, 0xC0));
         wifiLogo.setColorFilter(contrastColor);
 
-        metricsCard.setCardBackgroundColor(surfaceColor);
-        signalCard.setCardBackgroundColor(surfaceColor);
-        networkInfoCard.setCardBackgroundColor(surfaceColor);
-        quickToolsCard.setCardBackgroundColor(surfaceColor);
-        if (batteryCard != null) {
-            batteryCard.setCardBackgroundColor(surfaceColor);
+        // 主页所有卡片统一底色
+        for (MaterialCardView card : new MaterialCardView[]{
+                signalCard, networkInfoCard, batteryCard,
+                statLatencyCard, statSpeedCard, statDevicesCard}) {
+            if (card != null) card.setCardBackgroundColor(surfaceColor);
         }
 
-        gatewayValue.setTextColor(onSurfaceColor);
-        dnsValue.setTextColor(onSurfaceColor);
-        frequencyValue.setTextColor(onSurfaceColor);
-        linkSpeedValue.setTextColor(onSurfaceColor);
+        if (gatewayValue != null) gatewayValue.setTextColor(onSurfaceColor);
+        if (dnsValue != null) dnsValue.setTextColor(onSurfaceColor);
+        if (frequencyValue != null) frequencyValue.setTextColor(onSurfaceColor);
+        if (linkSpeedValue != null) linkSpeedValue.setTextColor(onSurfaceColor);
         signalCurrent.setTextColor(onSurfaceVariant);
         if (signalChart != null) {
             signalChart.updateThemeColors();
         }
-
-        quickPingIcon.setColorFilter(accentColor);
-        quickDnsIcon.setColorFilter(accentColor);
-        quickSpeedIcon.setColorFilter(accentColor);
-        quickPortIcon.setColorFilter(accentColor);
-        quickMacIcon.setColorFilter(accentColor);
-        quickPingText.setTextColor(onSurfaceVariant);
-        quickDnsText.setTextColor(onSurfaceVariant);
-        quickSpeedText.setTextColor(onSurfaceVariant);
-        quickPortText.setTextColor(onSurfaceVariant);
-        quickMacText.setTextColor(onSurfaceVariant);
 
         refreshLayout.setColorSchemeColors(accentColor);
         refreshLayout.setProgressBackgroundColorSchemeColor(surfaceColor);
@@ -639,6 +810,9 @@ public class InfoFragment extends Fragment {
                 : ipv4 + " · " + standard);
         wifiSignal.setText(rssi + " dBm");
         wifiSignal.setTextColor(contrastColor);
+        if (statSpeedValue != null) {
+            statSpeedValue.setText(linkSpeed > 0 ? linkSpeed + " Mbps" : "--");
+        }
 
         if (unknownSsid) {
             wifiAction.setVisibility(View.VISIBLE);
@@ -797,10 +971,11 @@ public class InfoFragment extends Fragment {
     }
 
     private void setMetricValues(String gateway, String dns, int frequency, int linkSpeed) {
-        gatewayValue.setText(safe(gateway));
-        dnsValue.setText(safe(dns));
-        frequencyValue.setText(frequency > 0 ? getFrequencyBand(frequency) : "--");
-        linkSpeedValue.setText(linkSpeed > 0 ? linkSpeed + " Mbps" : "--");
+        if (gatewayValue != null) gatewayValue.setText(safe(gateway));
+        if (dnsValue != null) dnsValue.setText(safe(dns));
+        if (frequencyValue != null) frequencyValue.setText(frequency > 0 ? getFrequencyBand(frequency) : "--");
+        if (linkSpeedValue != null) linkSpeedValue.setText(linkSpeed > 0 ? linkSpeed + " Mbps" : "--");
+        if (wifiFrequency != null) wifiFrequency.setText(frequency > 0 ? getFrequencyBand(frequency) : "--");
     }
 
     private void buildDetails(String[][] rows) {
@@ -856,6 +1031,8 @@ public class InfoFragment extends Fragment {
             if (info == null) return;
             int rssi = info.getRssi();
             if (rssi <= -120) return;
+            // Hero 卡上的信号值与频段也跟着实时刷新（原来只在进入页面时取一次）
+            updateHeroSignal(info, rssi);
             rssiHistory.add(rssi);
             while (rssiHistory.size() > 20) {
                 rssiHistory.remove(0);
@@ -865,6 +1042,31 @@ public class InfoFragment extends Fragment {
                 signalCurrent.setText(rssi + " dBm");
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Hero 卡右侧的信号值与频段跟着轮询实时刷新。
+     * 之前只有进入页面时取一次，信号变化后数字会一直停在旧值。
+     */
+    private void updateHeroSignal(android.net.wifi.WifiInfo info, int rssi) {
+        if (!isWifiNetwork) return;
+        int contrastColor = ThemeManager.getContrastColor(ThemeManager.getThemeColor());
+        if (wifiSignal != null) {
+            wifiSignal.setText(rssi + " dBm");
+            wifiSignal.setTextColor(contrastColor);
+        }
+        if (wifiFrequency != null) {
+            int frequency = 0;
+            try {
+                frequency = info.getFrequency();
+            } catch (Exception ignored) {
+            }
+            wifiFrequency.setText(frequency > 0 ? getFrequencyBand(frequency) : "--");
+            wifiFrequency.setTextColor(contrastColor);
+        }
+        if (wifiLogo != null) {
+            updateSignalIcon(rssi);
         }
     }
 

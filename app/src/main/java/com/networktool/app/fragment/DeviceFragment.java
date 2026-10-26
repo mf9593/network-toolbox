@@ -708,6 +708,13 @@ public class DeviceFragment extends Fragment {
         adapter.notifyDataSetChanged();
         updateSummary();
         updateEmptyState();
+        // 把设备页「当前展示的列表」同步给主页快照，
+        // 主页的标题、顺序、数量才会和设备页完全一致
+        try {
+            com.networktool.app.util.LanScanManager.syncCachedDevices(
+                    requireContext(), new ArrayList<>(filteredDeviceList));
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean matchesFilter(DeviceInfo device) {

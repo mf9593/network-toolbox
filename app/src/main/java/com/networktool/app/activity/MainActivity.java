@@ -61,6 +61,32 @@ public class MainActivity extends AppCompatActivity {
         }
         viewPager.setCurrentItem(lastPage, false);
 
+        // 调试用：把当前界面画到 PNG，便于在虚拟屏（screencap 不可用）时验收 UI
+        // adb shell am start -n com.networktool.app/.activity.MainActivity --ez debug_screenshot true --ei debug_page 0
+        if (com.networktool.app.BuildConfig.DEBUG
+                && getIntent().getBooleanExtra("debug_screenshot", false)) {
+            int page = getIntent().getIntExtra("debug_page", -1);
+            if (page >= 0 && page < PAGE_COUNT) {
+                viewPager.setCurrentItem(page, false);
+            }
+            String path = getFilesDir().getAbsolutePath() + "/shot_" + Math.max(page, 0) + ".png";
+            // 可选：--ei debug_shot_delay 3000 指定延迟截图时间（用于验证动画帧）
+            long shotDelay = getIntent().getIntExtra("debug_shot_delay", 2200);
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                    .postDelayed(() -> {
+                        // 先滚到顶部再截，保证截到首屏内容
+                        android.view.View scroll = findScrollableView(getWindow().getDecorView());
+                        if (scroll instanceof androidx.core.widget.NestedScrollView) {
+                            ((androidx.core.widget.NestedScrollView) scroll)
+                                    .fullScroll(android.view.View.FOCUS_UP);
+                        } else if (scroll instanceof android.widget.ScrollView) {
+                            ((android.widget.ScrollView) scroll).fullScroll(android.view.View.FOCUS_UP);
+                        }
+                        new android.os.Handler(android.os.Looper.getMainLooper())
+                                .postDelayed(() -> captureWindowTo(path), 500);
+                    }, shotDelay);
+        }
+
         // 调试用：不点界面直接触发一次「检查更新」，结果写 logcat
         // adb shell am start -n com.networktool.app/.activity.MainActivity --ez debug_check_update true
         if (com.networktool.app.BuildConfig.DEBUG
@@ -188,6 +214,42 @@ public class MainActivity extends AppCompatActivity {
     public void selectPage(int position) {
         if (viewPager != null && position >= 0 && position < PAGE_COUNT) {
             viewPager.setCurrentItem(position, true);
+        }
+    }
+
+    /** 调试用：递归找可滚动容器 */
+    private android.view.View findScrollableView(android.view.View view) {
+        if (view instanceof androidx.core.widget.NestedScrollView || view instanceof android.widget.ScrollView) {
+            return view;
+        }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View found = findScrollableView(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /** 调试用：把 DecorView 画到 PNG（虚拟屏上 screencap 抓不到时靠这个验收） */
+    private void captureWindowTo(String path) {
+        try {
+            android.view.View root = getWindow().getDecorView();
+            if (root.getWidth() <= 0 || root.getHeight() <= 0) {
+                android.util.Log.e("Screenshot", "视图尺寸为 0，跳过");
+                return;
+            }
+            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                    root.getWidth(), root.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+            root.draw(canvas);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(path);
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+            out.close();
+            android.util.Log.d("Screenshot", "已保存 " + path + " " + bitmap.getWidth() + "x" + bitmap.getHeight());
+        } catch (Exception e) {
+            android.util.Log.e("Screenshot", "截图失败: " + e.getMessage());
         }
     }
 

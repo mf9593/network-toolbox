@@ -18,7 +18,47 @@
             android:padding="@dimen/page_margin"
             android:paddingBottom="@dimen/space_6">
 
-            <!-- 当前网络 Hero 卡片 -->
+            <!-- 顶部标题行：名称 + 副标题 + 关于 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/space_1"
+                android:paddingBottom="@dimen/space_3">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="网络工具箱"
+                        android:textAppearance="@style/TextAppearance.NetworkTool.Title"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="网络概览"
+                        android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/homeMore"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="关于"
+                    android:padding="@dimen/space_2"
+                    android:src="@drawable/ic_about"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+
+            <!-- 当前网络 Hero 卡片：小标题 + 网络类型 + 运营商/IP + 状态胶囊 -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/wifiCard"
                 style="@style/Widget.NetworkTool.Card"
@@ -44,8 +84,8 @@
 
                         <ImageView
                             android:id="@+id/wifiLogo"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
                             android:contentDescription="网络类型"
                             android:src="@drawable/ic_signal_wifi_0_bar"
                             app:tint="?attr/colorOnPrimary" />
@@ -58,14 +98,23 @@
                             android:orientation="vertical">
 
                             <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:alpha="0.75"
+                                android:text="当前网络"
+                                android:textColor="?attr/colorOnPrimary"
+                                android:textSize="11sp" />
+
+                            <TextView
                                 android:id="@+id/wifiTitle"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
                                 android:text="正在获取网络信息"
                                 android:textColor="?attr/colorOnPrimary"
-                                android:textSize="22sp"
+                                android:textSize="21sp"
                                 android:textStyle="bold" />
 
                             <TextView
@@ -73,26 +122,44 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
+                                android:alpha="0.85"
                                 android:ellipsize="end"
                                 android:maxLines="2"
                                 android:text="请稍候…"
                                 android:textColor="?attr/colorOnPrimary"
-                                android:textSize="13sp" />
-
+                                android:textSize="12sp" />
                         </LinearLayout>
 
-                        <!-- 信号强度 dBm 只在下面的「信号强度」卡片里展示，顶部标题卡片不显示 -->
-                        <TextView
-                            android:id="@+id/wifiSignal"
+                        <!-- 状态胶囊：WiFi 下显示信号强度，有线/移动显示连接状态；下面显示频段 -->
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="@dimen/space_2"
-                            android:text="--"
-                            android:textColor="?attr/colorOnPrimary"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:visibility="gone" />
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
 
+                            <TextView
+                                android:id="@+id/wifiSignal"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="4dp"
+                                android:text="--"
+                                android:textColor="?attr/colorOnPrimary"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/wifiFrequency"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="3dp"
+                                android:text="--"
+                                android:textColor="?attr/colorOnPrimary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <TextView
@@ -100,181 +167,166 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_3"
+                        android:alpha="0.72"
                         android:ellipsize="end"
                         android:maxLines="1"
                         android:text="路由器后台"
                         android:textColor="?attr/colorOnPrimary"
                         android:textSize="12sp" />
-
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 关键指标 -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/metricsCard"
-                style="@style/Widget.NetworkTool.Card"
+            <!-- 三格关键指标：延迟 / 速率 / 设备（三个独立小卡片） -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_3">
+                android:layout_marginTop="@dimen/space_3"
+                android:orientation="horizontal">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/statLatency"
+                    style="@style/Widget.NetworkTool.Card.Small"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rippleColor="@android:color/transparent">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingVertical="@dimen/space_3">
 
-                        <LinearLayout
-                            android:id="@+id/metricGateway"
-                            android:layout_width="0dp"
-                            android:layout_height="@dimen/metric_height"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="@dimen/card_padding">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="延迟"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="网关"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                            <TextView
-                                android:id="@+id/gatewayValue"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:text="--"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Metric" />
-
-                        </LinearLayout>
-
-                        <View
-                            android:layout_width="1dp"
-                            android:layout_height="match_parent"
-                            android:background="?attr/colorOutlineVariant" />
-
-                        <LinearLayout
-                            android:id="@+id/metricDns"
-                            android:layout_width="0dp"
-                            android:layout_height="@dimen/metric_height"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="@dimen/card_padding">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="DNS"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                            <TextView
-                                android:id="@+id/dnsValue"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:text="--"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Metric" />
-
-                        </LinearLayout>
-
+                        <TextView
+                            android:id="@+id/statLatencyValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="--"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Metric"
+                            android:textSize="16sp" />
                     </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="?attr/colorOutlineVariant" />
+                <View
+                    android:layout_width="@dimen/space_2"
+                    android:layout_height="1dp" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/statSpeed"
+                    style="@style/Widget.NetworkTool.Card.Small"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rippleColor="@android:color/transparent">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingVertical="@dimen/space_3">
 
-                        <LinearLayout
-                            android:id="@+id/metricFrequency"
-                            android:layout_width="0dp"
-                            android:layout_height="@dimen/metric_height"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="@dimen/card_padding">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="速率"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="频率"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                            <TextView
-                                android:id="@+id/frequencyValue"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:text="--"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Metric" />
-
-                        </LinearLayout>
-
-                        <View
-                            android:layout_width="1dp"
-                            android:layout_height="match_parent"
-                            android:background="?attr/colorOutlineVariant" />
-
-                        <LinearLayout
-                            android:id="@+id/metricSpeed"
-                            android:layout_width="0dp"
-                            android:layout_height="@dimen/metric_height"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="@dimen/card_padding">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="协商速率"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                            <TextView
-                                android:id="@+id/linkSpeedValue"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:ellipsize="end"
-                                android:maxLines="1"
-                                android:text="--"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Metric" />
-
-                        </LinearLayout>
-
+                        <TextView
+                            android:id="@+id/statSpeedValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="--"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Metric"
+                            android:textSize="16sp" />
                     </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                </LinearLayout>
+                <View
+                    android:layout_width="@dimen/space_2"
+                    android:layout_height="1dp" />
 
-            </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/statDevices"
+                    style="@style/Widget.NetworkTool.Card.Small"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rippleColor="@android:color/transparent">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingVertical="@dimen/space_3">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="设备"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+
+                        <TextView
+                            android:id="@+id/statDevicesValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="--"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Metric"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+            </LinearLayout>
+
+            <!-- 局域网设备：展示上次扫描结果的前 3 条，点「全部」进入设备页 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_4"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/space_1">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="局域网设备"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+                <TextView
+                    android:id="@+id/homeDeviceAll"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="@dimen/space_1"
+                    android:text="全部"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/homeDeviceContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_2"
+                android:orientation="vertical" />
 
             <!-- 信号曲线：仅 WiFi 时显示 -->
             <com.google.android.material.card.MaterialCardView
@@ -348,183 +400,6 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_2"
                         android:orientation="vertical" />
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- 快捷工具 -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/quickToolsCard"
-                style="@style/Widget.NetworkTool.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_3">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/card_padding">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="快捷工具"
-                        android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_3"
-                        android:orientation="horizontal">
-
-                        <LinearLayout
-                            android:id="@+id/quickPing"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="@dimen/space_2">
-
-                            <ImageView
-                                android:id="@+id/quickPingIcon"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:contentDescription="Ping"
-                                android:src="@drawable/ic_ping" />
-
-                            <TextView
-                                android:id="@+id/quickPingText"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="Ping"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/quickDns"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="@dimen/space_2">
-
-                            <ImageView
-                                android:id="@+id/quickDnsIcon"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:contentDescription="DNS"
-                                android:src="@drawable/ic_dns" />
-
-                            <TextView
-                                android:id="@+id/quickDnsText"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="DNS"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/quickSpeed"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="@dimen/space_2">
-
-                            <ImageView
-                                android:id="@+id/quickSpeedIcon"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:contentDescription="测速"
-                                android:src="@drawable/ic_speed" />
-
-                            <TextView
-                                android:id="@+id/quickSpeedText"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="测速"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/quickPort"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="@dimen/space_2">
-
-                            <ImageView
-                                android:id="@+id/quickPortIcon"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:contentDescription="端口扫描"
-                                android:src="@drawable/ic_port_scan" />
-
-                            <TextView
-                                android:id="@+id/quickPortText"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="端口"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/quickMac"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:orientation="vertical"
-                            android:padding="@dimen/space_2">
-
-                            <ImageView
-                                android:id="@+id/quickMacIcon"
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:contentDescription="MAC 查询"
-                                android:src="@drawable/ic_mac" />
-
-                            <TextView
-                                android:id="@+id/quickMacText"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="MAC"
-                                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
-                        </LinearLayout>
-
-                    </LinearLayout>
 
                 </LinearLayout>
 

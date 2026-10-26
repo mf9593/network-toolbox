@@ -165,6 +165,7 @@ public class RtspPlayer {
             cancelRenderTimeout();
             prepared = false;
             notifyEvent(EVENT_ERROR, "播放失败：" + msg);
+            probeRtspCause();
         }
     };
 
@@ -453,7 +454,12 @@ public class RtspPlayer {
             } catch (Throwable ignored) {}
 
             // 加载流：按协议分流（RTSP 需专用 MediaSource，渐进源不支持 rtsp:// 协议）
-            Uri uri = Uri.parse(inputUrl);
+            // 先整理地址：把 ?username=&password= 搬到 userInfo，否则服务器会返回 401
+            String playUrl = com.networktool.app.util.RtspDiagnostics.normalizeUrl(inputUrl);
+            if (playUrl != null && !playUrl.equals(inputUrl)) {
+                writeBreadcrumb("RTSP 地址已整理（账号密码移入 URL 鉴权位）");
+            }
+            Uri uri = Uri.parse(playUrl);
             MediaItem mediaItem = MediaItem.fromUri(uri);
             String scheme = uri.getScheme();
             if ("rtsp".equalsIgnoreCase(scheme) || "rtsps".equalsIgnoreCase(scheme)) {
@@ -674,6 +680,21 @@ public class RtspPlayer {
         String message = t.getMessage();
         if (message == null || message.isEmpty()) message = t.getClass().getSimpleName();
         notifyEvent(EVENT_ERROR, "播放失败：" + message);
+    }
+
+    /** 播放失败后发一次 RTSP DESCRIBE 预检，把失败原因写进面包屑（子线程） */
+    private void probeRtspCause() {
+        final String url = currentUrl;
+        if (url == null || released) return;
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        if (!lower.startsWith("rtsp://") && !lower.startsWith("rtsps://")) return;
+        new Thread(() -> {
+            try {
+                String result = com.networktool.app.util.RtspDiagnostics.describe(url, 2500);
+                writeBreadcrumb("RTSP 预检: " + result);
+            } catch (Exception ignored) {
+            }
+        }, "rtsp-probe").start();
     }
 
     private void notifyEvent(int event, String message) {

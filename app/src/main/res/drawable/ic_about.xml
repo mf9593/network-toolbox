@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 关于软件：圆角方框 + 实心「i」，20dp 下也看得清；着色由调用方 tint 控制 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
     <path
-        android:pathData="M15.375 11.738q1.75-.263 3.25-.738q.5-.2.938.125t.437.85v7.15q0 .625-.363 1.138T18.7 21q-1.425.475-3.187.738T12 22t-3.512-.262T5.3 21q-.575-.225-.937-.737T4 19.124v-7.15q0-.525.438-.85T5.375 11q1.5.475 3.25.738T12 12t3.375-.262M18 19v-5.75q-1.25.35-2.887.55T12 14t-3.113-.2T6 13.25V19q1.25.45 2.875.725T12 20t3.125-.275T18 19M14.825 3.175Q16 4.35 16 6t-1.175 2.825T12 10T9.175 8.825T8 6t1.175-2.825T12 2t2.825 1.175m-1.412 4.238Q14 6.825 14 6t-.587-1.412T12 4t-1.412.588T10 6t.588 1.413T12 8t1.413-.587M12 16.624"
-        android:fillColor="#FF000000" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7,2.6H17A4.4,4.4 0 0 1 21.4,7V17A4.4,4.4 0 0 1 17,21.4H7A4.4,4.4 0 0 1 2.6,17V7A4.4,4.4 0 0 1 7,2.6Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,6.1A1.45,1.45 0 1 1 12,9A1.45,1.45 0 1 1 12,6.1Z M12,10.6A1.4,1.4 0 0 1 13.4,12V15.9A1.4,1.4 0 0 1 10.6,15.9V12A1.4,1.4 0 0 1 12,10.6Z" />
 </vector>

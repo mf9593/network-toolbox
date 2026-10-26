@@ -62,6 +62,8 @@ public class ToolsFragment extends Fragment
     private static final String PREFS_NAME = "tools_prefs";
     private static final String KEY_RECENT = "recent_tools";
     private static final String KEY_FAVORITES = "favorite_tools";
+    /** 常用工具上限 */
+    private static final int MAX_FAVORITES = 5;
 
     private RecyclerView recyclerView;
     private TextInputEditText searchEdit;
@@ -72,7 +74,10 @@ public class ToolsFragment extends Fragment
 
     private final List<Category> categories = new ArrayList<>();
     private final List<ToolItem> displayItems = new ArrayList<>();
-    private final LinkedHashSet<String> favorites = new LinkedHashSet<>();
+    /** 常用（收藏）工具标题，顺序即展示顺序，最多 {@link #MAX_FAVORITES} 个 */
+    private final List<String> favorites = new ArrayList<>();
+    /** 「我的常用」区里实际渲染的条目（与分类区对象区分，便于长按区分行为） */
+    private final List<ToolItem> favoriteSectionItems = new ArrayList<>();
     private final LinkedHashSet<String> recent = new LinkedHashSet<>();
 
     @Override
@@ -88,6 +93,7 @@ public class ToolsFragment extends Fragment
         loadStoredSets();
         initViews(view);
         buildCatalog();
+        seedDefaultFavorites();
         setupSearch();
         rebuildList();
     }
@@ -230,8 +236,8 @@ public class ToolsFragment extends Fragment
         List<ToolItem> output = new ArrayList<>();
 
         if (query.isEmpty()) {
-            // 分类中始终展示完整工具列表；收藏只通过卡片右上角星标表示，
-            // 不再额外插入“最近使用/我的收藏”区，避免工具重复或点击后从分类中消失。
+            // 顶部「我的常用」：收藏的工具集中在最前面，可长按调整顺序或移除
+            output.addAll(buildFavoriteSection());
             for (Category category : categories) {
                 if (category.tools.isEmpty()) continue;
                 output.add(ToolItem.header(category.title));
@@ -255,10 +261,73 @@ public class ToolsFragment extends Fragment
         displayItems.clear();
         displayItems.addAll(output);
         adapter.setItems(output);
-        adapter.setFavorites(favorites);
+        adapter.setFavorites(new LinkedHashSet<>(favorites));
         if (emptyView != null) {
             emptyView.setVisibility(output.isEmpty() ? View.VISIBLE : View.GONE);
         }
+    }
+
+    /** 首次安装时给「我的常用」预置几个高频工具，避免一片空白 */
+    private void seedDefaultFavorites() {
+        if (prefs == null || prefs.contains(KEY_FAVORITES)) return;
+        String[] defaults = {"Ping", "端口扫描", "IP 扫描", "DNS 优选", "局域网聊天"};
+        for (String title : defaults) {
+            if (findTool(title) != null && !favorites.contains(title)) {
+                favorites.add(title);
+            }
+        }
+        saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
+    }
+
+    /** 构建顶部「我的常用」区：收藏的工具 + 数量提示 */
+    private List<ToolItem> buildFavoriteSection() {
+        List<ToolItem> section = new ArrayList<>();
+        favoriteSectionItems.clear();
+        section.add(ToolItem.header("我的常用"
+                + (favorites.isEmpty() ? "" : " · " + favorites.size() + "/" + MAX_FAVORITES)));
+        for (String title : favorites) {
+            ToolItem tool = findTool(title);
+            if (tool == null) continue;
+            ToolItem item = new ToolItem(tool.getTitle(), tool.getIconResId(),
+                    tool.getDescription(), tool.getClickListener());
+            favoriteSectionItems.add(item);
+            section.add(item);
+        }
+        if (favorites.size() < MAX_FAVORITES) {
+            section.add(ToolItem.header(favorites.isEmpty()
+                    ? "长按任意工具即可加入常用，最多 " + MAX_FAVORITES + " 个"
+                    : "长按「我的常用」里的工具可上移 / 下移 / 移除 · 还可再加 "
+                            + (MAX_FAVORITES - favorites.size()) + " 个"));
+        }
+        return section;
+    }
+
+    /** 常用区条目的长按菜单：上移 / 下移 / 移出常用 */
+    private void showFavoriteActions(String title) {
+        if (title == null) return;
+        int index = favorites.indexOf(title);
+        if (index < 0) return;
+        List<String> actions = new ArrayList<>();
+        if (index > 0) actions.add("上移");
+        if (index < favorites.size() - 1) actions.add("下移");
+        actions.add("移出常用");
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(title)
+                .setItems(actions.toArray(new String[0]), (dialog, which) -> {
+                    String action = actions.get(which);
+                    int current = favorites.indexOf(title);
+                    if ("上移".equals(action) && current > 0) {
+                        java.util.Collections.swap(favorites, current, current - 1);
+                    } else if ("下移".equals(action) && current >= 0
+                            && current < favorites.size() - 1) {
+                        java.util.Collections.swap(favorites, current, current + 1);
+                    } else if ("移出常用".equals(action)) {
+                        favorites.remove(title);
+                    }
+                    saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
+                    rebuildList();
+                })
+                .show();
     }
 
     private boolean matches(ToolItem tool, String query) {
@@ -291,14 +360,23 @@ public class ToolsFragment extends Fragment
     @Override
     public void onToolLongClick(ToolItem tool) {
         if (tool == null) return;
-        if (favorites.contains(tool.getTitle())) {
-            favorites.remove(tool.getTitle());
-            showToast("已取消收藏：" + tool.getTitle());
-        } else {
-            favorites.add(tool.getTitle());
-            showToast("已收藏：" + tool.getTitle());
+        if (favoriteSectionItems.contains(tool)) {
+            showFavoriteActions(tool.getTitle());
+            return;
         }
-        saveSet(KEY_FAVORITES, favorites);
+        String title = tool.getTitle();
+        if (favorites.contains(title)) {
+            favorites.remove(title);
+            showToast("已移出常用：" + title);
+        } else {
+            if (favorites.size() >= MAX_FAVORITES) {
+                showToast("常用最多 " + MAX_FAVORITES + " 个，先在「我的常用」里移出一个");
+                return;
+            }
+            favorites.add(title);
+            showToast("已加入常用：" + title);
+        }
+        saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
         rebuildList();
     }
 
