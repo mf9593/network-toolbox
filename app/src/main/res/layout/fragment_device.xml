@@ -7,91 +7,91 @@
     android:background="?android:attr/colorBackground"
     android:orientation="vertical">
 
+    <!-- 标题栏：主标题与操作按钮同行，副标题独占一行完整显示 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="@dimen/page_margin"
         android:paddingTop="@dimen/space_3"
         android:paddingEnd="@dimen/space_2"
         android:paddingBottom="@dimen/space_1">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/deviceSummary"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="正在扫描"
                 android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
 
-            <TextView
-                android:id="@+id/deviceSubtitle"
-                android:layout_width="match_parent"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/scanButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="正在发现局域网设备…"
-                android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+                android:minWidth="0dp"
+                android:paddingStart="@dimen/space_2"
+                android:paddingEnd="@dimen/space_2"
+                android:text="扫描"
+                app:icon="@drawable/ic_scan"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sortButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="排序方式"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_sort"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/filterButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="筛选协议"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_filter"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingsButton"
+                style="@style/Widget.NetworkTool.Button.TextButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="扫描设置"
+                android:minWidth="44dp"
+                android:padding="10dp"
+                app:icon="@drawable/ic_settings"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
 
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/scanButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="wrap_content"
+        <TextView
+            android:id="@+id/deviceSubtitle"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingStart="@dimen/space_2"
-            android:paddingEnd="@dimen/space_2"
-            android:text="扫描"
-            app:icon="@drawable/ic_scan"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/sortButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="排序方式"
-            android:minWidth="48dp"
-            android:padding="12dp"
-            app:icon="@drawable/ic_sort"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/filterButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="筛选协议"
-            android:minWidth="48dp"
-            android:padding="12dp"
-            app:icon="@drawable/ic_filter"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/settingsButton"
-            style="@style/Widget.NetworkTool.Button.TextButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="扫描设置"
-            android:minWidth="48dp"
-            android:padding="12dp"
-            app:icon="@drawable/ic_settings"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp" />
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:text="正在发现局域网设备…"
+            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
 
     </LinearLayout>
 

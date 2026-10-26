@@ -78,7 +78,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     private final List<WifiInfoModel> wifiList = new ArrayList<>();
     private final List<WifiInfoModel> fullWifiList = new ArrayList<>();
 
-    private MaterialCardView currentWifiCard;
+    private View currentWifiCard;
     private ImageView currentSignalIcon;
     private TextView currentSsid;
     private TextView currentIp;
@@ -303,7 +303,6 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         int surfaceColor = ThemeManager.getSurfaceColor(requireContext());
         int onSurfaceVariant = ThemeManager.getOnSurfaceVariantColor(requireContext());
 
-        currentWifiCard.setCardBackgroundColor(surfaceColor);
         currentSignalIcon.setColorFilter(accentColor);
 
         openWifiSettingsButton.setTextColor(accentColor);
