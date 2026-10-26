@@ -168,6 +168,8 @@ dependencies {
     implementation 'com.google.android.exoplayer:exoplayer-hls:2.19.1'
     // DASH（.mpd）：部分直播源使用
     implementation 'com.google.android.exoplayer:exoplayer-dash:2.19.1'
+    // RTMP 流（rtmp:// 直播源）
+    implementation 'com.google.android.exoplayer:extension-rtmp:2.19.1'
 
     // ==================== 测试库 ====================
     testImplementation 'junit:junit:4.13.2'

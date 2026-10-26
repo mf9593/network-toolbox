@@ -187,7 +187,16 @@ public class OnvifDeviceAdapter extends RecyclerView.Adapter<OnvifDeviceAdapter.
             if (info.length() > 0) info.append(" ");
             info.append(device.getModel());
         }
-        holder.infoText.setText(info.toString());
+        if (info.length() == 0) {
+            // 没有厂商/型号时，至少把设备类型说清楚（电脑、录像机、摄像头…）
+            String type = device.getDeviceType();
+            info.append(type == null || type.isEmpty() ? "未知类型" : type);
+        }
+        if (device.isCamera()) {
+            holder.infoText.setText(info.toString());
+        } else {
+            holder.infoText.setText(info + " · 非摄像头，可能不支持 ONVIF 预览");
+        }
 
         // 显示认证状态
         boolean authed = device.isAuthenticated();

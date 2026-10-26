@@ -828,7 +828,112 @@ public class RtspPlayerActivity extends AppCompatActivity {
                 updatePlayPauseIcon();
                 Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show();
                 break;
+
+            case 1200: // RTSP 预检结果：告诉用户真实失败原因
+                if (statusText != null) statusText.setText("失败原因：" + msg);
+                if (msg != null && msg.contains("401")) {
+                    if (urlHasCredentials()) {
+                        showReasonDialog("账号或密码不正确（服务器返回 401）", msg);
+                    } else {
+                        showAuthDialog(msg);
+                    }
+                } else {
+                    showReasonDialog("无法播放这个地址", msg);
+                }
+                break;
         }
+    }
+
+
+    /** 地址里是否已经带了账号密码 */
+    private boolean urlHasCredentials() {
+        if (TextUtils.isEmpty(streamUrl)) return false;
+        try {
+            java.net.URI uri = new java.net.URI(
+                    com.networktool.app.util.RtspDiagnostics.normalizeUrl(streamUrl));
+            String userInfo = uri.getUserInfo();
+            return userInfo != null && !userInfo.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 服务器要账号密码：弹窗让用户补上，确认后带鉴权重试 */
+    private void showAuthDialog(String reason) {
+        if (isFinishing() || isDestroyed()) return;
+        View content = getLayoutInflater().inflate(R.layout.dialog_rtsp_auth, null);
+        android.widget.EditText userInput = content.findViewById(R.id.userInput);
+        android.widget.EditText passwordInput = content.findViewById(R.id.passwordInput);
+        android.widget.TextView hint = content.findViewById(R.id.authHint);
+        if (hint != null) hint.setText(reason);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("需要登录信息")
+                .setView(content)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("重试", (dialog, which) -> {
+                    String user = userInput.getText() == null ? ""
+                            : userInput.getText().toString().trim();
+                    String password = passwordInput.getText() == null ? ""
+                            : passwordInput.getText().toString();
+                    if (user.isEmpty()) {
+                        Toast.makeText(this, "请输入用户名", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String url = buildUrlWithCredentials(streamUrl, user, password);
+                    if (url == null) {
+                        Toast.makeText(this, "地址格式无法加入账号", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    streamUrl = url;
+                    if (rtspUrlEditText != null) rtspUrlEditText.setText(url);
+                    startPlayback();
+                })
+                .show();
+    }
+
+    /** 把 user:pass@ 插到地址里（已有则替换） */
+    private String buildUrlWithCredentials(String url, String user, String password) {
+        try {
+            java.net.URI uri = new java.net.URI(
+                    com.networktool.app.util.RtspDiagnostics.normalizeUrl(url));
+            String host = uri.getHost();
+            if (host == null) return null;
+            int port = uri.getPort() > 0 ? uri.getPort() : 554;
+            String path = uri.getRawPath() == null || uri.getRawPath().isEmpty()
+                    ? "/" : uri.getRawPath();
+            String query = uri.getRawQuery();
+            StringBuilder sb = new StringBuilder();
+            sb.append(uri.getScheme()).append("://")
+                    .append(java.net.URLEncoder.encode(user, "UTF-8")).append(':')
+                    .append(java.net.URLEncoder.encode(password == null ? "" : password, "UTF-8"))
+                    .append('@').append(host);
+            if (port > 0) sb.append(':').append(port);
+            sb.append(path);
+            if (query != null && !query.isEmpty()) sb.append('?').append(query);
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 非鉴权类失败：把原因完整展示出来，方便判断是端口不通还是路径不对 */
+    private void showReasonDialog(String title, String reason) {
+        if (isFinishing() || isDestroyed()) return;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setMessage(reason + "\n\n地址：" + streamUrl)
+                .setNegativeButton("关闭", null)
+                .setNeutralButton("复制地址", (dialog, which) -> {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null && streamUrl != null) {
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("RTSP", streamUrl));
+                        Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setPositiveButton("重试", (dialog, which) -> startPlayback())
+                .show();
     }
 
     /**
@@ -1022,19 +1127,51 @@ public class RtspPlayerActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        // 停止播放并释放资源
+        // 正在播放时，返回键先回到 RTSP 输入页（取消全屏 → 退出播放），
+        // 再按一次才真正离开页面；之前是直接结束 Activity，看起来就像“返回跳到了主页”。
+        boolean playingView = playerContainer != null
+                && playerContainer.getVisibility() == View.VISIBLE
+                && (inputLayout == null || inputLayout.getVisibility() != View.VISIBLE);
+        if (playingView) {
+            if (isFullscreen) {
+                toggleFullscreen();
+            }
+            releasePlayer();
+            showInputPage();
+            return;
+        }
+        releasePlayer();
+        hideHandler.removeCallbacksAndMessages(null);
+        super.onBackPressed();
+    }
+
+    /** 停止并释放播放器 */
+    private void releasePlayer() {
+        hideHandler.removeCallbacks(hideRunnable);
         if (nodePlayer != null) {
             try {
                 nodePlayer.stop();
                 nodePlayer.release();
-                nodePlayer = null;
             } catch (Exception e) {
                 Log.e(TAG, "停止失败: " + e.getMessage(), e);
             }
+            nodePlayer = null;
         }
-        hideHandler.removeCallbacksAndMessages(null);
-        // 调用父类方法退出Activity
-        super.onBackPressed();
+        isPlaying = false;
+    }
+
+    /** 回到 RTSP 地址输入页 */
+    private void showInputPage() {
+        if (playerContainer != null) {
+            playerContainer.setVisibility(View.GONE);
+        }
+        if (inputLayout != null) {
+            inputLayout.setVisibility(View.VISIBLE);
+        }
+        if (loadingProgress != null) {
+            loadingProgress.setVisibility(View.GONE);
+        }
+        stopInfoUpdates();
     }
 
     @Override

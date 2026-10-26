@@ -44,6 +44,8 @@ public class RtspPlayer {
     public static final int EVENT_STOPPED = 1004;
     public static final int EVENT_ERROR = 1000;
     public static final int EVENT_ENDED = 1102;
+    /** 播放失败后的 RTSP 预检结果（例如 401 需要账号密码） */
+    public static final int EVENT_DIAGNOSTIC = 1200;
 
     public interface Delegate {
         void onEventCallback(RtspPlayer player, int event, String message);
@@ -509,6 +511,13 @@ public class RtspPlayer {
                         .createMediaSource(mediaItem);
                 exoPlayer.setMediaSource(rtspSource);
                 writeBreadcrumb("RTSP 源已创建（RTP " + (forceTcpTransport ? "TCP 内联" : "UDP") + "）");
+            } else if ("rtmp".equalsIgnoreCase(scheme) || "rtmps".equalsIgnoreCase(scheme)) {
+                // RTMP 必须用专用 DataSource，默认的 DefaultDataSource 不支持 rtmp 协议
+                MediaSource rtmpSource = new com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(
+                        new com.google.android.exoplayer2.ext.rtmp.RtmpDataSource.Factory())
+                        .createMediaSource(mediaItem);
+                exoPlayer.setMediaSource(rtmpSource);
+                writeBreadcrumb("RTMP 源已创建");
             } else if (isHlsUrl(playUrl)) {
                 // HLS（.m3u8）需要显式创建 HlsMediaSource：DefaultMediaSourceFactory
                 // 在没有 HLS 模块或扩展名不标准时会报 No suitable media source factory
@@ -773,6 +782,8 @@ public class RtspPlayer {
             try {
                 String result = com.networktool.app.util.RtspDiagnostics.describe(url, 2500);
                 writeBreadcrumb("RTSP 预检: " + result);
+                // 直接把原因反馈给界面，方便用户补账号密码或检查端口
+                notifyEvent(EVENT_DIAGNOSTIC, result);
             } catch (Exception ignored) {
             }
         }, "rtsp-probe").start();

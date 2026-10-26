@@ -182,6 +182,15 @@ public class OnvifUtil {
                 device.setUuid(addressList.item(0).getTextContent());
             }
 
+            // 解析Types：判断这台设备到底是摄像头、录像机还是普通电脑
+            // Windows 电脑也会应答 WS-Discovery（pub:Computer），以前一律显示成“摄像头”会误导
+            NodeList typesList = doc.getElementsByTagNameNS(
+                    "http://schemas.xmlsoap.org/ws/2005/04/discovery", "Types");
+            if (typesList.getLength() > 0) {
+                String types = typesList.item(0).getTextContent();
+                device.setDeviceType(resolveDeviceType(types));
+            }
+
             // 解析Scopes（提取name/hardware/location）
             NodeList scopesList = doc.getElementsByTagNameNS("http://schemas.xmlsoap.org/ws/2005/04/discovery", "Scopes");
             if (scopesList.getLength() > 0) {
@@ -208,6 +217,25 @@ public class OnvifUtil {
             Log.w(TAG, "解析Discovery响应失败: " + e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 把 WS-Discovery 的 Types 翻译成用户能看懂的类型。
+     * 常见值：dn:NetworkVideoTransmitter（摄像头/编码器）、dn:NetworkVideoStorage（NVR）、
+     * dn:NetworkVideoDisplay（解码器/监视器）、pub:Computer（Windows 电脑）。
+     */
+    private static String resolveDeviceType(String types) {
+        if (types == null || types.isEmpty()) return null;
+        String lower = types.toLowerCase();
+        if (lower.contains("networkvideotransmitter")) return "摄像头";
+        if (lower.contains("networkvideostorage") || lower.contains("networkvideorecording")) {
+            return "硬盘录像机";
+        }
+        if (lower.contains("networkvideodisplay")) return "视频监视器";
+        if (lower.contains("pub:computer") || lower.endsWith(":computer")) return "电脑";
+        if (lower.contains("printer")) return "打印机";
+        if (lower.contains("networkvideoencoder")) return "视频编码器";
+        return "未知设备";
     }
 
     // ========== 设备信息 ==========

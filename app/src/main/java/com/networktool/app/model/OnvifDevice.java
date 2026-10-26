@@ -65,6 +65,9 @@ public class OnvifDevice {
     /* 设备唯一标识符（UUID） */
     private String uuid;
 
+    /** WS-Discovery 里声明的设备类型（摄像头 / 录像机 / 电脑 …），用于避免把电脑当成摄像头 */
+    private String deviceType;
+
     public String getName() {
         return name;
     }
@@ -247,9 +250,31 @@ public class OnvifDevice {
         if (model != null && !model.isEmpty()) {
             return model;
         }
+        if (manufacturer != null && !manufacturer.isEmpty()) {
+            return manufacturer;
+        }
+        // 电脑/录像机这类设备没有 name 作用域，用类型兜底，别再一律显示成“摄像头”
+        if (deviceType != null && !deviceType.isEmpty()) {
+            return deviceType;
+        }
         if (ipAddress != null && !ipAddress.isEmpty()) {
             return ipAddress;
         }
         return "未知设备";
+    }
+
+    public String getDeviceType() {
+        return deviceType;
+    }
+
+    public void setDeviceType(String deviceType) {
+        this.deviceType = deviceType;
+    }
+
+    /** 是否是摄像头/编码器这类视频源（电脑、显示器不算） */
+    public boolean isCamera() {
+        if (deviceType == null) return true;
+        return deviceType.contains("摄像头") || deviceType.contains("录像机")
+                || deviceType.contains("编码器") || deviceType.contains("视频");
     }
 }
