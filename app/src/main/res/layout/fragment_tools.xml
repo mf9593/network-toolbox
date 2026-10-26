@@ -31,6 +31,57 @@
 
     </com.google.android.material.textfield.TextInputLayout>
 
+    <!-- 我的常用：横向排列的小卡片（长按卡片可上移/下移/移出） -->
+    <LinearLayout
+        android:id="@+id/favoriteSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/page_margin"
+            android:paddingTop="@dimen/space_2"
+            android:paddingEnd="@dimen/page_margin"
+            android:paddingBottom="@dimen/space_1">
+
+            <TextView
+                android:id="@+id/favoriteTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="我的常用"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+            <TextView
+                android:id="@+id/favoriteHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="长按可调整顺序"
+                android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/favoriteStrip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/space_3"
+                android:paddingEnd="@dimen/space_3"
+                android:paddingBottom="@dimen/space_1" />
+        </HorizontalScrollView>
+    </LinearLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

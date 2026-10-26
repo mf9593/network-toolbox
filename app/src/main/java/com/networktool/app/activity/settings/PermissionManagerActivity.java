@@ -255,15 +255,25 @@ public class PermissionManagerActivity extends AppCompatActivity {
             openPermissionSettings();
             return;
         }
+        // 先跳「本应用」的所有文件访问页（Android 11+ 才有这个精确入口）
         try {
-            Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
             intent.setData(Uri.parse("package:" + getPackageName()));
             startActivityForResult(intent, REQUEST_ALL_FILES_CODE);
-            Toast.makeText(this, "请打开「允许访问所有文件」", Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            // 部分机型没有这个页面，退回到应用详情页
-            openPermissionSettings();
+            Toast.makeText(this, "请打开「允许管理所有文件」", Toast.LENGTH_LONG).show();
+            return;
+        } catch (Exception ignored) {
         }
+        // 再退到「所有文件访问权限」列表页
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+            startActivityForResult(intent, REQUEST_ALL_FILES_CODE);
+            Toast.makeText(this, "请找到「网络工具箱」并打开权限", Toast.LENGTH_LONG).show();
+            return;
+        } catch (Exception ignored) {
+        }
+        // 最后退到应用详情页
+        openPermissionSettings();
     }
 
     private void openPermissionSettings() {

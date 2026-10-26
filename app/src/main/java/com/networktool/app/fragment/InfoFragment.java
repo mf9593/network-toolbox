@@ -70,6 +70,8 @@ public class InfoFragment extends Fragment {
     private MaterialCardView wifiCard;
     private MaterialCardView metricsCard;
     private MaterialCardView signalCard;
+    /** 信号强度标题行（标题移到卡片外，需要跟着卡片一起显隐） */
+    private android.view.View signalLabelRow;
     private MaterialCardView networkInfoCard;
     private MaterialCardView batteryCard;
     private TextView batteryPercent;
@@ -241,6 +243,7 @@ public class InfoFragment extends Fragment {
         refreshLayout = view.findViewById(R.id.refreshLayout);
         wifiCard = view.findViewById(R.id.wifiCard);
         signalCard = view.findViewById(R.id.signalCard);
+        signalLabelRow = view.findViewById(R.id.signalLabelRow);
         networkInfoCard = view.findViewById(R.id.networkInfoCard);
         batteryCard = view.findViewById(R.id.batteryCard);
         batteryPercent = view.findViewById(R.id.batteryPercent);
@@ -832,6 +835,7 @@ public class InfoFragment extends Fragment {
 
         updateSignalIcon(rssi);
         signalCard.setVisibility(View.VISIBLE);
+        if (signalLabelRow != null) signalLabelRow.setVisibility(View.VISIBLE);
         signalCurrent.setText(rssi + " dBm");
         collectRssi();
 
@@ -870,6 +874,7 @@ public class InfoFragment extends Fragment {
         wifiIp.setText(ipv4 + " · 以太网");
         wifiSignal.setText("有线");
         signalCard.setVisibility(View.GONE);
+        if (signalLabelRow != null) signalLabelRow.setVisibility(View.GONE);
         if (gateway != null && !"0.0.0.0".equals(gateway)) {
             wifiAction.setVisibility(View.VISIBLE);
             wifiAction.setText("路由器后台 · " + gateway + "  ›");
@@ -910,6 +915,7 @@ public class InfoFragment extends Fragment {
         wifiIp.setText(ipv4 + " · 蜂窝网络");
         wifiSignal.setText("移动");
         signalCard.setVisibility(View.GONE);
+        if (signalLabelRow != null) signalLabelRow.setVisibility(View.GONE);
         wifiAction.setVisibility(View.GONE);
         wifiCard.setOnClickListener(null);
 
@@ -940,6 +946,7 @@ public class InfoFragment extends Fragment {
         wifiIp.setText(ipv4);
         wifiSignal.setText("已连接");
         signalCard.setVisibility(View.GONE);
+        if (signalLabelRow != null) signalLabelRow.setVisibility(View.GONE);
         wifiAction.setVisibility(View.GONE);
         wifiCard.setOnClickListener(null);
 
@@ -961,6 +968,7 @@ public class InfoFragment extends Fragment {
         wifiIp.setText("请检查 Wi-Fi 或移动数据");
         wifiSignal.setText("无信号");
         signalCard.setVisibility(View.GONE);
+        if (signalLabelRow != null) signalLabelRow.setVisibility(View.GONE);
         wifiAction.setVisibility(View.GONE);
         wifiCard.setOnClickListener(null);
 

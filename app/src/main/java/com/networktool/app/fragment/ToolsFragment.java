@@ -9,6 +9,9 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -76,8 +79,11 @@ public class ToolsFragment extends Fragment
     private final List<ToolItem> displayItems = new ArrayList<>();
     /** 常用（收藏）工具标题，顺序即展示顺序，最多 {@link #MAX_FAVORITES} 个 */
     private final List<String> favorites = new ArrayList<>();
-    /** 「我的常用」区里实际渲染的条目（与分类区对象区分，便于长按区分行为） */
-    private final List<ToolItem> favoriteSectionItems = new ArrayList<>();
+    /** 顶部「我的常用」横向小卡片容器 */
+    private LinearLayout favoriteSection;
+    private LinearLayout favoriteStrip;
+    private TextView favoriteTitle;
+    private TextView favoriteHint;
     private final LinkedHashSet<String> recent = new LinkedHashSet<>();
 
     @Override
@@ -102,6 +108,10 @@ public class ToolsFragment extends Fragment
         recyclerView = view.findViewById(R.id.recyclerView);
         searchEdit = view.findViewById(R.id.searchEdit);
         emptyView = view.findViewById(R.id.emptyView);
+        favoriteSection = view.findViewById(R.id.favoriteSection);
+        favoriteStrip = view.findViewById(R.id.favoriteStrip);
+        favoriteTitle = view.findViewById(R.id.favoriteTitle);
+        favoriteHint = view.findViewById(R.id.favoriteHint);
         applySearchTheme(view);
 
         gridLayoutManager = new GridLayoutManager(requireContext(), toolGridSpanCount());
@@ -236,8 +246,7 @@ public class ToolsFragment extends Fragment
         List<ToolItem> output = new ArrayList<>();
 
         if (query.isEmpty()) {
-            // 顶部「我的常用」：收藏的工具集中在最前面，可长按调整顺序或移除
-            output.addAll(buildFavoriteSection());
+            // 常用工具在顶部以横向小卡片单独展示，网格里保持完整分类
             for (Category category : categories) {
                 if (category.tools.isEmpty()) continue;
                 output.add(ToolItem.header(category.title));
@@ -257,6 +266,8 @@ public class ToolsFragment extends Fragment
                 }
             }
         }
+
+        renderFavoriteStrip(query.isEmpty());
 
         displayItems.clear();
         displayItems.addAll(output);
@@ -279,27 +290,86 @@ public class ToolsFragment extends Fragment
         saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
     }
 
-    /** 构建顶部「我的常用」区：收藏的工具 + 数量提示 */
-    private List<ToolItem> buildFavoriteSection() {
-        List<ToolItem> section = new ArrayList<>();
-        favoriteSectionItems.clear();
-        section.add(ToolItem.header("我的常用"
-                + (favorites.isEmpty() ? "" : " · " + favorites.size() + "/" + MAX_FAVORITES)));
+    /** 渲染顶部「我的常用」横向小卡片；搜索时隐藏，避免占用结果区域 */
+    private void renderFavoriteStrip(boolean show) {
+        if (favoriteSection == null || favoriteStrip == null) return;
+        favoriteStrip.removeAllViews();
+        if (!show || favorites.isEmpty()) {
+            favoriteSection.setVisibility(View.GONE);
+            return;
+        }
+        favoriteSection.setVisibility(View.VISIBLE);
+        if (favoriteTitle != null) {
+            favoriteTitle.setText("我的常用 · " + favorites.size() + "/" + MAX_FAVORITES);
+        }
+        if (favoriteHint != null) {
+            favoriteHint.setText(favorites.size() >= MAX_FAVORITES
+                    ? "长按可调整" : "长按可调整 · 还能加 "
+                            + (MAX_FAVORITES - favorites.size()) + " 个");
+        }
+
         for (String title : favorites) {
             ToolItem tool = findTool(title);
             if (tool == null) continue;
-            ToolItem item = new ToolItem(tool.getTitle(), tool.getIconResId(),
-                    tool.getDescription(), tool.getClickListener());
-            favoriteSectionItems.add(item);
-            section.add(item);
+            favoriteStrip.addView(buildFavoriteCard(tool));
         }
-        if (favorites.size() < MAX_FAVORITES) {
-            section.add(ToolItem.header(favorites.isEmpty()
-                    ? "长按任意工具即可加入常用，最多 " + MAX_FAVORITES + " 个"
-                    : "长按「我的常用」里的工具可上移 / 下移 / 移除 · 还可再加 "
-                            + (MAX_FAVORITES - favorites.size()) + " 个"));
-        }
-        return section;
+    }
+
+    /** 单张常用小卡片：图标在上、名称在下，点击进入工具，长按弹出调整菜单 */
+    private View buildFavoriteCard(ToolItem tool) {
+        Context context = requireContext();
+        com.google.android.material.card.MaterialCardView card =
+                new com.google.android.material.card.MaterialCardView(context);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                dpToPx(78), LinearLayout.LayoutParams.WRAP_CONTENT);
+        cardParams.setMarginEnd(dpToPx(8));
+        card.setLayoutParams(cardParams);
+        card.setRadius(dpToPx(14));
+        card.setCardElevation(0f);
+        card.setStrokeWidth(dpToPx(1));
+        // 描边用低透明度前景色，浅色/深色主题都协调
+        card.setStrokeColor((ThemeManager.getOnSurfaceVariantColor(context) & 0x00FFFFFF) | 0x33000000);
+        card.setCardBackgroundColor(ThemeManager.getSurfaceColor(context));
+        card.setClickable(true);
+        card.setFocusable(true);
+
+        LinearLayout content = new LinearLayout(context);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dpToPx(8), dpToPx(10), dpToPx(8), dpToPx(10));
+
+        ImageView icon = new ImageView(context);
+        LinearLayout.LayoutParams iconParams =
+                new LinearLayout.LayoutParams(dpToPx(22), dpToPx(22));
+        icon.setLayoutParams(iconParams);
+        icon.setImageResource(tool.getIconResId());
+        icon.setColorFilter(ThemeManager.getThemeColor(), android.graphics.PorterDuff.Mode.SRC_IN);
+        content.addView(icon);
+
+        TextView name = new TextView(context);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = dpToPx(6);
+        name.setLayoutParams(nameParams);
+        name.setText(tool.getTitle());
+        name.setTextSize(11f);
+        name.setGravity(android.view.Gravity.CENTER);
+        name.setMaxLines(1);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setTextColor(ThemeManager.getOnSurfaceVariantColor(context));
+        content.addView(name);
+
+        card.addView(content);
+        card.setOnClickListener(v -> onToolClick(tool));
+        card.setOnLongClickListener(v -> {
+            showFavoriteActions(tool.getTitle());
+            return true;
+        });
+        return card;
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     /** 常用区条目的长按菜单：上移 / 下移 / 移出常用 */
@@ -360,10 +430,6 @@ public class ToolsFragment extends Fragment
     @Override
     public void onToolLongClick(ToolItem tool) {
         if (tool == null) return;
-        if (favoriteSectionItems.contains(tool)) {
-            showFavoriteActions(tool.getTitle());
-            return;
-        }
         String title = tool.getTitle();
         if (favorites.contains(title)) {
             favorites.remove(title);

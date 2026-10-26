@@ -9,6 +9,7 @@ import com.networktool.app.model.DeviceInfo;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -788,8 +789,9 @@ public class LanScanManager {
                 if (response.body() == null) return null;
                 String content = response.body().string();
                 Document doc = Jsoup.parse(content);
-                String title = doc.title();
                 String server = response.header("Server");
+                // 标题：<title> 为空时依次退到 og:site_name / h1 / 厂商特征 / Server
+                String title = extractHttpPageTitle(doc, content, server);
                 // 记录原始 HTML 与解析出的标题，便于核对标题截取是否正确
                 StringBuilder raw = new StringBuilder();
                 raw.append("HTTP ").append(response.code()).append(" ")
@@ -802,10 +804,7 @@ public class LanScanManager {
                 if (title != null && !title.isEmpty()) {
                     return new String[]{title, server};
                 }
-                if (server != null && !server.isEmpty()) {
-                    return new String[]{"HTTP Server (" + server + ")", server};
-                }
-                return new String[]{"", ""};
+                return new String[]{"网页管理界面", server};
             }
         } catch (Exception e) {
             // 端口不可达或非HTTP
@@ -1349,6 +1348,98 @@ public class LanScanManager {
                 try { socket.close(); } catch (Exception e) {}
             }
         }
+    }
+
+    /**
+     * 从网页里提取设备标题。
+     *
+     * <p>不少路由/录像机/NAS 的首页 {@code <title></title>} 是空的（标题由 JS 动态写入），
+     * 直接取 doc.title() 会得到空串，设备就变成「HTTP Server」。这里按可靠度依次回退：
+     * {@code <title>} → {@code og:site_name} / {@code application-name} 等 meta →
+     * 首个 {@code <h1>} → 页面特征串识别厂商型号 → Server 头产品名。</p>
+     */
+    private String extractHttpPageTitle(Document doc, String content, String server) {
+        if (doc != null) {
+            String title = doc.title();
+            if (title != null && !title.trim().isEmpty()) return title.trim();
+
+            String[] metaSelectors = {
+                    "meta[property=og:site_name]", "meta[name=og:site_name]",
+                    "meta[name=application-name]", "meta[name=apple-mobile-web-app-title]",
+                    "meta[property=og:title]", "meta[name=twitter:title]"
+            };
+            for (String selector : metaSelectors) {
+                try {
+                    Element meta = doc.selectFirst(selector);
+                    if (meta != null) {
+                        String value = meta.attr("content");
+                        if (value != null && !value.trim().isEmpty()) return value.trim();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            try {
+                Element h1 = doc.selectFirst("h1");
+                if (h1 != null) {
+                    String text = h1.text();
+                    if (text != null && !text.trim().isEmpty() && text.trim().length() <= 40) {
+                        return text.trim();
+                    }
+                }
+                Element logoAlt = doc.selectFirst("img[alt]");
+                if (logoAlt != null) {
+                    String alt = logoAlt.attr("alt");
+                    if (alt != null && !alt.trim().isEmpty() && alt.trim().length() <= 30) {
+                        return alt.trim();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        String brand = detectWebUiBrand(content);
+        if (brand != null) return brand;
+
+        // Server 头兜底：取产品名（"Boa/0.94.14rc21" → Boa）
+        if (server != null && !server.trim().isEmpty()) {
+            String product = server.split("[ /]")[0].trim();
+            if (!product.isEmpty()) return "网页管理界面 (" + product + ")";
+        }
+        return "网页管理界面";
+    }
+
+    /** 用页面特征串判断 Web 管理界面属于哪家设备（命中就返回可读名称） */
+    private String detectWebUiBrand(String content) {
+        if (content == null || content.isEmpty()) return null;
+        String lower = content.toLowerCase(java.util.Locale.ROOT);
+        String[][] signatures = {
+                {"hikvision", "海康威视设备"},
+                {"dahua", "大华设备"},
+                {"seetong", "视洞(Seetong)设备"},
+                {"xmeye", "雄迈(XMEye)设备"},
+                {"tplink", "TP-LINK 设备"},
+                {"tplogin", "TP-LINK 设备"},
+                {"miwifi", "小米路由"},
+                {"huawei", "华为设备"},
+                {"ruijie", "锐捷设备"},
+                {"hik", "海康威视设备"},
+                {"uniview", "宇视设备"},
+                {"nvr", "网络录像机(NVR)"},
+                {"ipc", "网络摄像机(IPC)"},
+                {"synology", "群晖 NAS"},
+                {"qnap", "QNAP NAS"},
+                {"openwrt", "OpenWrt 路由"},
+                {"luci", "OpenWrt 路由"},
+                {"asus", "华硕路由"},
+                {"netgear", "网件设备"},
+                {"vstarcam", "威视达康设备"},
+                {"v380", "V380 摄像头"},
+        };
+        for (String[] signature : signatures) {
+            if (lower.contains(signature[0])) return signature[1];
+        }
+        return null;
     }
 
     /**

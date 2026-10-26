@@ -328,41 +328,43 @@
                 android:layout_marginTop="@dimen/space_2"
                 android:orientation="vertical" />
 
-            <!-- 信号曲线：仅 WiFi 时显示 -->
+            <!-- 信号强度：标题在卡片外，卡片只放曲线（仅 WiFi 时显示） -->
+            <LinearLayout
+                android:id="@+id/signalLabelRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_4"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/space_1">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="信号强度"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+                <TextView
+                    android:id="@+id/signalCurrent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="-- dBm"
+                    android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+            </LinearLayout>
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/signalCard"
                 style="@style/Widget.NetworkTool.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_3">
+                android:layout_marginTop="@dimen/space_2">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="@dimen/card_padding">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="信号强度"
-                            android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
-
-                        <TextView
-                            android:id="@+id/signalCurrent"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="-- dBm"
-                            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
-
-                    </LinearLayout>
 
                     <com.networktool.app.view.SignalStrengthView
                         android:id="@+id/signalChart"
@@ -374,25 +376,27 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 网络详情 -->
+            <!-- 网络详情：标题在卡片外 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_4"
+                android:paddingHorizontal="@dimen/space_1"
+                android:text="网络详情"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/networkInfoCard"
                 style="@style/Widget.NetworkTool.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_3">
+                android:layout_marginTop="@dimen/space_2">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="@dimen/card_padding">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="网络详情"
-                        android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
 
                     <LinearLayout
                         android:id="@+id/detailContainer"
@@ -405,26 +409,26 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 硬件信息：电池电量/电压/充电功率/温度 -->
+            <!-- 硬件信息：标题在卡片外，卡片只放电量/电压/功率/温度 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_4"
+                android:paddingHorizontal="@dimen/space_1"
+                android:text="硬件信息"
+                android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/batteryCard"
                 style="@style/Widget.NetworkTool.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_3">
+                android:layout_marginTop="@dimen/space_2">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:paddingHorizontal="@dimen/card_padding"
-                        android:paddingTop="@dimen/card_padding"
-                        android:text="硬件信息"
-                        android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
