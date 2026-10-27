@@ -179,6 +179,26 @@ public class RtspPlayer {
                     cause = cause.getCause();
                 }
                 writeBreadcrumb("错误详情: " + detail);
+
+                // 形如 IllegalArgumentException: null 的异常来自 ExoPlayer 内部断言，
+                // 消息里没有有效信息，只有堆栈能指出具体位置，逐行写入面包屑便于定位
+                Throwable deepest = error;
+                int guard = 0;
+                while (deepest.getCause() != null && deepest.getCause() != deepest && guard++ < 6) {
+                    deepest = deepest.getCause();
+                }
+                writeBreadcrumb("异常类型: " + deepest.getClass().getName()
+                        + (deepest.getMessage() == null ? "（无消息）" : ""));
+                int frames = 0;
+                for (StackTraceElement frame : deepest.getStackTrace()) {
+                    String className = frame.getClassName();
+                    if (className.startsWith("java.") || className.startsWith("android.")
+                            || className.startsWith("com.android.internal")) {
+                        continue;
+                    }
+                    writeBreadcrumb("  栈" + (++frames) + ": " + frame);
+                    if (frames >= 14) break;
+                }
             }
             cancelRenderTimeout();
             prepared = false;
@@ -784,6 +804,16 @@ public class RtspPlayer {
             try {
                 String result = com.networktool.app.util.RtspDiagnostics.describe(url, 2500);
                 writeBreadcrumb("RTSP 预检: " + result);
+                // 顺带把 SDP 关键行写进面包屑：能直接看出编码/传输是否被播放器支持
+                String sdp = com.networktool.app.util.RtspDiagnostics.sdpSummary(url, 2500);
+                if (sdp != null && !sdp.isEmpty()) {
+                    writeBreadcrumb("SDP: " + sdp);
+                }
+                // 原始报文：确认是否用 CRLF 分行、状态行是否规范
+                String raw = com.networktool.app.util.RtspDiagnostics.rawHead(url, 2500);
+                if (raw != null && !raw.isEmpty()) {
+                    writeBreadcrumb("原始响应: " + raw);
+                }
                 // 直接把原因反馈给界面，方便用户补账号密码或检查端口
                 notifyEvent(EVENT_DIAGNOSTIC, result);
             } catch (Exception ignored) {

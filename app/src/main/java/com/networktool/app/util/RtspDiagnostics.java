@@ -96,6 +96,10 @@ public final class RtspDiagnostics {
         String statusLine;
         /** WWW-Authenticate 头，用于判断 Basic / Digest */
         String authenticate;
+        /** 200 响应里的 SDP 正文（用于排查编解码器/传输不兼容） */
+        String sdp;
+        /** 诊断结论（面向用户的中文描述） */
+        String conclusion;
     }
 
     /**
@@ -109,11 +113,36 @@ public final class RtspDiagnostics {
      * @return 人类可读的诊断结论
      */
     public static String describe(String rawUrl, int timeoutMs) {
-        if (rawUrl == null || rawUrl.isEmpty()) return "地址为空";
+        return performProbe(rawUrl, timeoutMs).conclusion;
+    }
+
+    /**
+     * 抓取 SDP 摘要（m= 行、rtpmap、fmtp、control 等关键行）。
+     *
+     * <p>用于定位「服务器 200 OK 但播放器内部抛异常」的情况：SDP 里写的是哪种编码、
+     * 传输方式（TCP/UDP interleaved）以及 control 地址，能直接说明是不是编码/传输不兼容。</p>
+     *
+     * @return 单行摘要；取不到时返回空串
+     */
+    public static String sdpSummary(String rawUrl, int timeoutMs) {
+        ProbeResult result = performProbe(rawUrl, timeoutMs);
+        return result.sdp == null ? "" : summarizeSdp(result.sdp);
+    }
+
+    /** 执行 Basic → Digest 的两次 DESCRIBE 探测，返回结论与 SDP */
+    private static ProbeResult performProbe(String rawUrl, int timeoutMs) {
+        ProbeResult out = new ProbeResult();
+        if (rawUrl == null || rawUrl.isEmpty()) {
+            out.conclusion = "地址为空";
+            return out;
+        }
         try {
             URI uri = new URI(normalizeUrl(rawUrl));
             String host = uri.getHost();
-            if (host == null) return "地址无法解析";
+            if (host == null) {
+                out.conclusion = "地址无法解析";
+                return out;
+            }
             int port = uri.getPort() > 0 ? uri.getPort() : 554;
             String path = uri.getRawPath() == null ? "/" : uri.getRawPath();
 
@@ -128,7 +157,10 @@ public final class RtspDiagnostics {
 
             // ① Basic 先试
             ProbeResult result = sendDescribe(host, port, path, basicHeader(user, password), timeoutMs);
-            if (result == null || result.statusLine == null) return "服务器无响应";
+            if (result == null || result.statusLine == null) {
+                out.conclusion = "服务器无响应";
+                return out;
+            }
 
             if (result.statusLine.contains("401") && result.authenticate != null
                     && result.authenticate.toLowerCase(java.util.Locale.ROOT).contains("digest")
@@ -140,31 +172,139 @@ public final class RtspDiagnostics {
                     ProbeResult second = sendDescribe(host, port, path, digestHeader, timeoutMs);
                     if (second != null && second.statusLine != null) {
                         String line = second.statusLine;
+                        out.sdp = second.sdp != null ? second.sdp : result.sdp;
                         if (line.contains("200")) {
-                            return "200 OK（Digest 鉴权通过，地址与账号可用 → 失败在播放器/传输侧）";
+                            out.conclusion = "200 OK（Digest 鉴权通过，地址与账号可用 → 失败在播放器/传输侧）";
+                            return out;
                         }
                         if (line.contains("401")) {
-                            return line + "（Digest 鉴权仍未通过，账号密码或权限有问题）";
+                            out.conclusion = line + "（Digest 鉴权仍未通过，账号密码或权限有问题）";
+                            return out;
                         }
-                        return translate(line);
+                        out.conclusion = translate(line);
+                        return out;
                     }
                 }
-                return "401 需要 Digest 鉴权（预检未能完成第二次鉴权）";
+                out.conclusion = "401 需要 Digest 鉴权（预检未能完成第二次鉴权）";
+                return out;
             }
-            return translate(result.statusLine);
+            out.conclusion = translate(result.statusLine);
+            out.sdp = result.sdp;
+            return out;
         } catch (RuntimeException e) {
             Throwable cause = e.getCause();
             if (cause instanceof java.net.SocketTimeoutException) {
-                return "连接超时（端口不通或被防火墙拦截）";
+                out.conclusion = "连接超时（端口不通或被防火墙拦截）";
+            } else if (cause instanceof java.net.ConnectException) {
+                out.conclusion = "连接被拒绝（端口不对或设备未开启 RTSP）";
+            } else {
+                out.conclusion = "预检失败：" + (cause != null ? cause.getClass().getSimpleName()
+                        : e.getClass().getSimpleName());
             }
-            if (cause instanceof java.net.ConnectException) {
-                return "连接被拒绝（端口不对或设备未开启 RTSP）";
-            }
-            return "预检失败：" + (cause != null ? cause.getClass().getSimpleName()
-                    : e.getClass().getSimpleName());
+            return out;
         } catch (Exception e) {
-            return "预检失败：" + e.getClass().getSimpleName();
+            out.conclusion = "预检失败：" + e.getClass().getSimpleName();
+            return out;
         }
+    }
+
+    /**
+     * 抓取 DESCRIBE 响应的原始前若干字节，把回车/换行显式转义出来。
+     *
+     * <p>用于排查「服务器能返回 200 但播放器报 IllegalArgumentException（无消息）」：
+     * 这类异常通常源于报文没按 CRLF 分行或状态行不合规，只有看到原始字节才能确认。</p>
+     *
+     * @return 单行可读文本；失败返回空串
+     */
+    public static String rawHead(String rawUrl, int timeoutMs) {
+        if (rawUrl == null || rawUrl.isEmpty()) return "";
+        Socket socket = null;
+        try {
+            URI uri = new URI(normalizeUrl(rawUrl));
+            String host = uri.getHost();
+            if (host == null) return "";
+            int port = uri.getPort() > 0 ? uri.getPort() : 554;
+            String path = uri.getRawPath() == null ? "/" : uri.getRawPath();
+            String userInfo = uri.getUserInfo();
+            String user = null;
+            String password = null;
+            if (userInfo != null && !userInfo.isEmpty()) {
+                int colon = userInfo.indexOf(':');
+                user = colon >= 0 ? userInfo.substring(0, colon) : userInfo;
+                password = colon >= 0 ? userInfo.substring(colon + 1) : "";
+            }
+
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(host, port), timeoutMs);
+            socket.setSoTimeout(timeoutMs);
+            StringBuilder request = new StringBuilder();
+            request.append("DESCRIBE rtsp://").append(host).append(':').append(port)
+                    .append(path).append(" RTSP/1.0\r\n");
+            request.append("CSeq: 1\r\n");
+            request.append("User-Agent: NetworkToolbox/2.1.0\r\n");
+            request.append("Accept: application/sdp\r\n");
+            String authorization = basicHeader(user, password);
+            if (authorization != null) {
+                request.append("Authorization: ").append(authorization).append("\r\n");
+            }
+            request.append("\r\n");
+            OutputStream out = socket.getOutputStream();
+            out.write(request.toString().getBytes(StandardCharsets.UTF_8));
+            out.flush();
+
+            // 只读前面一段（状态行 + 头部），避免把整段 SDP 拖进来
+            byte[] buffer = new byte[600];
+            int offset = 0;
+            InputStream in = socket.getInputStream();
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            while (offset < buffer.length && System.currentTimeMillis() < deadline) {
+                int read;
+                try {
+                    read = in.read(buffer, offset, buffer.length - offset);
+                } catch (java.net.SocketTimeoutException e) {
+                    break;
+                }
+                if (read <= 0) break;
+                offset += read;
+                // 已经读到头部结束就够定位格式问题了
+                String tail = new String(buffer, 0, offset, StandardCharsets.UTF_8);
+                if (tail.contains("\r\n\r\n") || tail.contains("\n\n")) break;
+            }
+            if (offset <= 0) return "";
+            String text = new String(buffer, 0, offset, StandardCharsets.UTF_8);
+            return text.replace("\r", "\\r").replace("\n", "\\n");
+        } catch (Exception e) {
+            return "";
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    /** 把 SDP 压缩成一行关键信息（编码、传输、control 地址） */    private static String summarizeSdp(String sdp) {
+        StringBuilder summary = new StringBuilder();
+        int kept = 0;
+        for (String rawLine : sdp.split("\r?\n")) {
+            String line = rawLine.trim();
+            if (line.isEmpty()) continue;
+            String lower = line.toLowerCase(java.util.Locale.ROOT);
+            boolean interesting = line.startsWith("m=") || line.startsWith("s=")
+                    || lower.startsWith("a=rtpmap") || lower.startsWith("a=fmtp")
+                    || lower.startsWith("a=control") || lower.startsWith("a=range")
+                    || lower.startsWith("a=rtcp") || lower.startsWith("b=");
+            if (!interesting) continue;
+            if (summary.length() + line.length() > 900) {
+                summary.append(" …");
+                break;
+            }
+            if (kept++ > 0) summary.append(" / ");
+            summary.append(line);
+        }
+        return summary.toString();
     }
 
     private static String basicHeader(String user, String password) {
@@ -206,13 +346,30 @@ public final class RtspDiagnostics {
             result.statusLine = reader.readLine();
             if (result.statusLine == null) return result;
 
+            int contentLength = -1;
             String line;
             int guard = 0;
-            while ((line = reader.readLine()) != null && guard++ < 20) {
+            while ((line = reader.readLine()) != null && guard++ < 40) {
                 if (line.isEmpty()) break;
-                if (line.toLowerCase(java.util.Locale.ROOT).startsWith("www-authenticate")) {
+                String lower = line.toLowerCase(java.util.Locale.ROOT);
+                if (lower.startsWith("www-authenticate")) {
                     result.authenticate = line;
+                } else if (lower.startsWith("content-length")) {
+                    try {
+                        contentLength = Integer.parseInt(line.substring(line.indexOf(':') + 1).trim());
+                    } catch (Exception ignored) {
+                    }
                 }
+            }
+            // 200 才有 SDP 正文，读回来供诊断分析（截断到 20KB，避免异常响应拖死）
+            if (contentLength > 0 && result.statusLine.contains("200")) {
+                StringBuilder body = new StringBuilder();
+                int limit = Math.min(contentLength, 20000);
+                int read;
+                while (body.length() < limit && (read = reader.read()) != -1) {
+                    body.append((char) read);
+                }
+                result.sdp = body.toString();
             }
             return result;
         } catch (java.net.SocketTimeoutException e) {
