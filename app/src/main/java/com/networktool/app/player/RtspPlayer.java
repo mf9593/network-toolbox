@@ -64,6 +64,12 @@ public class RtspPlayer {
     private boolean forceTcpTransport = true;
     /** 本次播放是否已经自动切换过传输 */
     private boolean transportRetried;
+    /** 本地 RTSP 兼容代理（仅在摄像头报文不合规时启用） */
+    private RtspCompatProxy compatProxy;
+    /** 本次播放是否已经启用过兼容代理 */
+    private boolean proxyRetried;
+    /** 兼容代理生效时的实际播放地址（inputUrl 始终保留原始地址） */
+    private String playUrlOverride;
     private String hwdec = "mediacodec";
     private int volume = 100;
     /** 音量增强倍数（1.0 = 不增强） */
@@ -127,7 +133,9 @@ public class RtspPlayer {
         @Override
         public void onRenderedFirstFrame() {
             if (released) return;
-            writeBreadcrumb("首帧已渲染（画面确认输出）");
+            writeBreadcrumb("首帧已渲染（画面确认输出）"
+                    + (compatProxy != null
+                    ? "，兼容代理已改写 " + compatProxy.getRewrittenHeaders() + " 处响应头" : ""));
         }
 
         @Override
@@ -204,6 +212,11 @@ public class RtspPlayer {
             prepared = false;
             // RTSP 常见的 SETUP 传输不支持，先自动切换 RTP 传输重试一次
             if (retryWithAltTransport()) {
+                probeRtspCause();
+                return;
+            }
+            // 传输都不通、且是「服务器报文不合规」这类错误时，启用本地兼容代理再试
+            if (retryWithCompatProxy()) {
                 probeRtspCause();
                 return;
             }
@@ -435,6 +448,9 @@ public class RtspPlayer {
         // 换地址时重置「传输重试」标记
         if (currentUrl == null || !inputUrl.equals(currentUrl)) {
             transportRetried = false;
+            proxyRetried = false;
+            playUrlOverride = null;
+            closeCompatProxy();
         }
         // 已在播放同一地址则跳过
         if (prepared && !paused && inputUrl.equals(currentUrl)) return;
@@ -516,8 +532,10 @@ public class RtspPlayer {
 
             // 加载流：按协议分流（RTSP 需专用 MediaSource，渐进源不支持 rtsp:// 协议）
             // 先整理地址：把 ?username=&password= 搬到 userInfo，否则服务器会返回 401
-            String playUrl = com.networktool.app.util.RtspDiagnostics.normalizeUrl(inputUrl);
-            if (playUrl != null && !playUrl.equals(inputUrl)) {
+            String playUrl = playUrlOverride != null
+                    ? playUrlOverride
+                    : com.networktool.app.util.RtspDiagnostics.normalizeUrl(inputUrl);
+            if (playUrlOverride == null && playUrl != null && !playUrl.equals(inputUrl)) {
                 writeBreadcrumb("RTSP 地址已整理（账号密码移入 URL 鉴权位）");
             }
             Uri uri = Uri.parse(playUrl);
@@ -712,6 +730,7 @@ public class RtspPlayer {
         if (released) return;
         released = true;
         cancelRenderTimeout();
+        closeCompatProxy();
         if (exoPlayer != null) {
             releaseExoPlayer();
         }
@@ -792,6 +811,75 @@ public class RtspPlayer {
             }
         }, 500);
         return true;
+    }
+
+    /**
+     * 启用本地 RTSP 兼容代理后重试。
+     *
+     * <p>部分摄像头（LIVE555 方案）在 OPTIONS 响应的 {@code Public:} 头里写了播放器不认识的
+     * 方法名，ExoPlayer 解析时直接抛无消息的 {@code IllegalArgumentException}；
+     * 其 {@code Content-Base:} 还可能是 {@code rtsp://rtsp://ip:554/stream0/} 这种重复协议头，
+     * 导致 SETUP 的 track 地址拼错。代理只改这两处，其余字节（含内联 RTP）原样透传。</p>
+     *
+     * @return true 表示已安排重试
+     */
+    private boolean retryWithCompatProxy() {
+        if (proxyRetried || released || inputUrl == null) return false;
+        String lower = inputUrl.toLowerCase(java.util.Locale.ROOT);
+        if (!lower.startsWith("rtsp://") && !lower.startsWith("rtsps://")) return false;
+        if (exoPlayer == null) return false;
+        proxyRetried = true;
+        writeBreadcrumb("启用本地 RTSP 兼容代理（改写不合规的 Public / Content-Base 头）");
+
+        final String normalized = com.networktool.app.util.RtspDiagnostics.normalizeUrl(inputUrl);
+        new Thread(() -> {
+            RtspCompatProxy proxy = null;
+            try {
+                java.net.URI uri = new java.net.URI(normalized);
+                String host = uri.getHost();
+                int port = uri.getPort() > 0 ? uri.getPort() : 554;
+                if (host == null) {
+                    writeBreadcrumb("兼容代理跳过：地址无法解析");
+                    return;
+                }
+                closeCompatProxy();
+                proxy = RtspCompatProxy.start(host, port);
+                final String proxiedUrl = RtspCompatProxy.toProxyUrl(normalized, proxy.getLocalPort());
+                compatProxy = proxy;
+                writeBreadcrumb("兼容代理就绪：127.0.0.1:" + proxy.getLocalPort()
+                        + " → " + host + ":" + port);
+                mainHandler.postDelayed(() -> {
+                    if (released || exoPlayer == null || proxiedUrl == null) return;
+                    // 代理链路固定走 TCP 内联：RTP 与 RTSP 走同一条连接才能原样透传
+                    forceTcpTransport = true;
+                    playUrlOverride = proxiedUrl;
+                    try {
+                        startInternal();
+                    } catch (Throwable ignored) {
+                    }
+                }, 300);
+            } catch (Throwable t) {
+                writeBreadcrumb("兼容代理启动失败: " + t.getClass().getSimpleName());
+                if (proxy != null) {
+                    try {
+                        proxy.close();
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        }, "rtsp-compat-proxy").start();
+        return true;
+    }
+
+    /** 关闭本地 RTSP 兼容代理 */
+    private void closeCompatProxy() {
+        if (compatProxy != null) {
+            try {
+                compatProxy.close();
+            } catch (Throwable ignored) {
+            }
+            compatProxy = null;
+        }
     }
 
     /** 播放失败后发一次 RTSP DESCRIBE 预检，把失败原因写进面包屑（子线程） */
