@@ -53,10 +53,10 @@ public final class RtspDiagnostics {
                 String key = eq > 0 ? param.substring(0, eq) : param;
                 String value = eq > 0 ? param.substring(eq + 1) : "";
                 if ("username".equalsIgnoreCase(key) || "user".equalsIgnoreCase(key)) {
-                    user = value;
+                    user = decodeValue(value);
                 } else if ("password".equalsIgnoreCase(key) || "pass".equalsIgnoreCase(key)
                         || "pwd".equalsIgnoreCase(key)) {
-                    password = value;
+                    password = decodeValue(value);
                 } else if (kept.length() > 0) {
                     kept.append('&').append(param);
                 } else {
@@ -66,12 +66,18 @@ public final class RtspDiagnostics {
 
             if (user == null && password == null) return url; // 没有需要搬运的账号密码
 
-            // 已经有 userInfo 就不覆盖
+            // 查询参数里的账号密码优先于 URL 内已有的 userInfo：
+            // 用户常见做法是只改查询参数，若继续沿用旧 userInfo 会一直 401
             URI uri = new URI(base);
-            String userInfo = uri.getUserInfo();
-            if (userInfo != null && !userInfo.isEmpty()) {
-                user = null;
-                password = null;
+            String existingUserInfo = uri.getUserInfo();
+            if (existingUserInfo != null && !existingUserInfo.isEmpty()) {
+                int colon = existingUserInfo.indexOf(':');
+                String existingUser = colon >= 0
+                        ? existingUserInfo.substring(0, colon) : existingUserInfo;
+                String existingPassword = colon >= 0
+                        ? existingUserInfo.substring(colon + 1) : "";
+                if (user == null) user = existingUser;
+                if (password == null) password = existingPassword;
             }
 
             StringBuilder result = new StringBuilder();
@@ -100,6 +106,39 @@ public final class RtspDiagnostics {
         String sdp;
         /** 诊断结论（面向用户的中文描述） */
         String conclusion;
+    }
+
+    /** 解码查询参数里的百分号转义（如密码里的 %40 → @），失败时原样返回 */
+    private static String decodeValue(String value) {
+        try {
+            return java.net.URLDecoder.decode(value, "UTF-8");
+        } catch (Exception e) {
+            return value;
+        }
+    }
+
+    /**
+     * 凭据摘要（只暴露账号名与密码长度，绝不输出密码本身），用于面包屑日志确认凭据是否真的生效。
+     *
+     * <p>排查「地址里明明有密码却提示 401」时，看一眼这行就能判断是凭据没解析出来、
+     * 还是凭据解析对了但服务器不认。</p>
+     */
+    public static String credentialSummary(String rawUrl) {
+        try {
+            String normalized = normalizeUrl(rawUrl);
+            URI uri = new URI(normalized);
+            String userInfo = uri.getUserInfo();
+            if (userInfo == null || userInfo.isEmpty()) return "未携带账号密码";
+            int colon = userInfo.indexOf(':');
+            String user = colon >= 0 ? userInfo.substring(0, colon) : userInfo;
+            String password = colon >= 0 ? userInfo.substring(colon + 1) : "";
+            boolean fromQuery = rawUrl != null
+                    && rawUrl.toLowerCase(java.util.Locale.ROOT).contains("password=");
+            return "账号=" + user + " 密码长度=" + password.length()
+                    + (fromQuery ? "（查询参数）" : "（URL 内嵌）");
+        } catch (Exception e) {
+            return "解析失败";
+        }
     }
 
     /**

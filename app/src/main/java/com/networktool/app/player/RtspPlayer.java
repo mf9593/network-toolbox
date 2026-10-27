@@ -538,6 +538,12 @@ public class RtspPlayer {
             if (playUrlOverride == null && playUrl != null && !playUrl.equals(inputUrl)) {
                 writeBreadcrumb("RTSP 地址已整理（账号密码移入 URL 鉴权位）");
             }
+            String lowerUrl = playUrl == null ? "" : playUrl.toLowerCase(java.util.Locale.ROOT);
+            if (playUrlOverride == null && lowerUrl.startsWith("rtsp")) {
+                // 只输出账号名与密码长度，便于确认凭据是否真的解析生效
+                writeBreadcrumb("RTSP 凭据: "
+                        + com.networktool.app.util.RtspDiagnostics.credentialSummary(inputUrl));
+            }
             Uri uri = Uri.parse(playUrl);
             MediaItem mediaItem = MediaItem.fromUri(uri);
             String scheme = uri.getScheme();
