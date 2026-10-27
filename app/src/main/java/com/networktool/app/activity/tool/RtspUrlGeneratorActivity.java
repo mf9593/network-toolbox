@@ -95,6 +95,7 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         resultTitle = findViewById(R.id.resultTitle);
 
         restorePrefs();
+        applyCardColors();
         applyThemeTints();
 
         MaterialButton pickBrandButton = findViewById(R.id.pickBrandButton);
@@ -312,7 +313,7 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         card.setLayoutParams(cardParams);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
-        card.setCardBackgroundColor(ThemeManager.getChipSurfaceColor(this));
+        ThemeManager.setupResultCard(card, this);
         card.setStrokeWidth(dp(1));
         card.setStrokeColor((ThemeManager.getOnSurfaceVariantColor(this) & 0x00FFFFFF) | 0x33000000);
 
@@ -419,6 +420,12 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         sheet.setContentView(content);
 
         TextInputEditText searchInput = content.findViewById(R.id.brandSearchInput);
+        themeInputLayout(content.findViewById(R.id.brandSearchLayout));
+        // 弹窗里的计数文字用次级色，跟随运行时主题
+        TextView countView = content.findViewById(R.id.brandCountText);
+        if (countView != null) {
+            countView.setTextColor(ThemeManager.getOnSurfaceVariantColor(this));
+        }
         TextView countText = content.findViewById(R.id.brandCountText);
         RecyclerView list = content.findViewById(R.id.brandList);
         list.setLayoutManager(new LinearLayoutManager(this));
@@ -533,38 +540,49 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
 
     /* ==================== 工具 ==================== */
 
+    /** XML 卡片用的是静态主题属性，不会跟随运行时主题色，这里按项目规范套一遍底色 */
+    private void applyCardColors() {
+        try {
+            ThemeManager.setupResultCard(findViewById(R.id.deviceCard), this);
+            ThemeManager.setupResultCard(findViewById(R.id.brandCard), this);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void applyThemeTints() {
+        int accent = ThemeManager.getAccessibleThemeColor(this);
+        MaterialButton pick = findViewById(R.id.pickBrandButton);
+        if (pick != null) {
+            pick.setTextColor(accent);
+        }
+        MaterialButton copyAll = findViewById(R.id.copyAllButton);
+        if (copyAll != null) {
+            copyAll.setTextColor(accent);
+        }
+        int[] ids = new int[]{R.id.hostLayout, R.id.portLayout, R.id.channelLayout,
+                R.id.userLayout, R.id.passwordLayout};
+        for (int id : ids) {
+            themeInputLayout(findViewById(id));
+        }
+    }
+
+    /** 输入框的描边/提示/图标跟随主题色（XML 的 ?attr 不会随运行时主题变化） */
+    private void themeInputLayout(com.google.android.material.textfield.TextInputLayout layout) {
+        if (layout == null) return;
         try {
             int accent = ThemeManager.getAccessibleThemeColor(this);
-            android.content.res.ColorStateList csl =
-                    android.content.res.ColorStateList.valueOf(accent);
-            MaterialButton pick = findViewById(R.id.pickBrandButton);
-            if (pick != null) {
-                pick.setTextColor(accent);
-            }
-            MaterialButton copyAll = findViewById(R.id.copyAllButton);
-            if (copyAll != null) {
-                copyAll.setTextColor(accent);
-            }
-            com.google.android.material.textfield.TextInputLayout[] layouts = new
-                    com.google.android.material.textfield.TextInputLayout[]{
-                    findViewById(R.id.hostLayout), findViewById(R.id.portLayout),
-                    findViewById(R.id.channelLayout), findViewById(R.id.userLayout),
-                    findViewById(R.id.passwordLayout)};
             int[][] states = new int[][]{
                     new int[]{android.R.attr.state_focused},
                     new int[]{}
             };
-            for (com.google.android.material.textfield.TextInputLayout layout : layouts) {
-                if (layout == null) continue;
-                layout.setBoxStrokeColorStateList(new android.content.res.ColorStateList(
-                        states, new int[]{accent,
-                        ThemeManager.getOnSurfaceVariantColor(this)}));
-                layout.setHintTextColor(new android.content.res.ColorStateList(
-                        states, new int[]{accent,
-                        ThemeManager.getOnSurfaceVariantColor(this)}));
-                layout.setEndIconTintList(csl);
-            }
+            layout.setBoxStrokeColorStateList(new android.content.res.ColorStateList(
+                    states, new int[]{accent, ThemeManager.getOnSurfaceVariantColor(this)}));
+            layout.setHintTextColor(new android.content.res.ColorStateList(
+                    states, new int[]{accent, ThemeManager.getOnSurfaceVariantColor(this)}));
+            android.content.res.ColorStateList csl =
+                    android.content.res.ColorStateList.valueOf(accent);
+            layout.setEndIconTintList(csl);
+            layout.setStartIconTintList(csl);
         } catch (Throwable ignored) {
         }
     }

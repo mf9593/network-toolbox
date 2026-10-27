@@ -508,6 +508,8 @@ public class RtspPlayer {
                 RtspMediaSource rtspSource = new RtspMediaSource.Factory()
                         .setForceUseRtpTcp(forceTcpTransport)
                         .setUserAgent("NetworkToolbox/2.1.0")
+                        // 默认 8s 对慢摄像头偏紧，放宽到 12s（页面兜底 15s）
+                        .setTimeoutMs(12000)
                         .createMediaSource(mediaItem);
                 exoPlayer.setMediaSource(rtspSource);
                 writeBreadcrumb("RTSP 源已创建（RTP " + (forceTcpTransport ? "TCP 内联" : "UDP") + "）");

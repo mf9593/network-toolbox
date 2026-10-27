@@ -35,6 +35,7 @@
 
             <!-- 设备参数 -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/deviceCard"
                 style="@style/Widget.NetworkTool.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -168,6 +169,7 @@
 
             <!-- 品牌 -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/brandCard"
                 style="@style/Widget.NetworkTool.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
