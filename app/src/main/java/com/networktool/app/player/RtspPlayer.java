@@ -99,7 +99,8 @@ public class RtspPlayer {
 
     /* ExoPlayer 实例 */
     private ExoPlayer exoPlayer;
-
+    /* 解码器是否按「裁剪铺满」输出（跟随视图的比例模式） */
+    private boolean videoScalingCrop;
     /* 网络带宽估算（用于界面显示实时码率） */
     private com.google.android.exoplayer2.upstream.BandwidthMeter bandwidthMeter;
 
@@ -700,6 +701,8 @@ public class RtspPlayer {
                 .build();
 
         exoPlayer.addListener(playerListener);
+        // 实例重建后解码器的缩放模式会回到默认值，这里按当前视图模式重新贴一次
+        applyVideoScalingMode();
         writeBreadcrumb("ExoPlayer 已创建并初始化");
     }
 
@@ -740,6 +743,33 @@ public class RtspPlayer {
     }
 
     /* ==================== 其他控制方法 ==================== */
+
+    /**
+     * 设置解码器的画面缩放模式（裁剪铺满 / 等比留边）。
+     *
+     * <p>MediaCodec 默认是 {@code SCALE_TO_FIT}：把画面等比塞进 Surface，
+     * 多出来的地方由解码器自己填黑。所以「全屏铺满」时只把 SurfaceView 调大是不够的，
+     * 画面依旧会在 Surface 内部上下留黑边——必须让解码器用「裁剪铺满」输出。</p>
+     *
+     * @param crop true=裁剪铺满（无黑边）；false=等比适应（完整画面）
+     */
+    public void setVideoScalingCrop(boolean crop) {
+        this.videoScalingCrop = crop;
+        applyVideoScalingMode();
+        writeBreadcrumb("画面缩放模式: " + (crop ? "裁剪铺满" : "等比适应"));
+    }
+
+    /** 把期望的缩放方式真正下发给解码器 */
+    private void applyVideoScalingMode() {
+        if (exoPlayer == null) return;
+        try {
+            exoPlayer.setVideoScalingMode(videoScalingCrop
+                    ? android.media.MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                    : android.media.MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
+        } catch (Throwable t) {
+            writeBreadcrumb("设置缩放模式失败: " + t.getMessage());
+        }
+    }
 
     public void pause() {
         if (exoPlayer == null) return;

@@ -40,6 +40,24 @@ public class RtspPlayerView extends android.widget.FrameLayout {
     private int videoWidth;
     private int videoHeight;
 
+    /** 比例模式变化回调：让播放器同步解码器的缩放方式 */
+    public interface OnContentModeChangeListener {
+        void onContentModeChanged(UIViewContentMode mode);
+    }
+
+    private OnContentModeChangeListener contentModeListener;
+
+    /**
+     * 注册比例模式回调。注册时会立刻回调一次当前模式，
+     * 保证播放器一创建就跟视图的显示方式一致。
+     */
+    public void setOnContentModeChangeListener(OnContentModeChangeListener listener) {
+        this.contentModeListener = listener;
+        if (listener != null) {
+            listener.onContentModeChanged(contentMode);
+        }
+    }
+
     public RtspPlayerView(@NonNull Context context) {
         super(context);
         init();
@@ -179,6 +197,9 @@ public class RtspPlayerView extends android.widget.FrameLayout {
         }
         contentMode = mode;
         applyContentMode();
+        if (contentModeListener != null) {
+            contentModeListener.onContentModeChanged(contentMode);
+        }
     }
 
     public UIViewContentMode getUIViewContentMode() {

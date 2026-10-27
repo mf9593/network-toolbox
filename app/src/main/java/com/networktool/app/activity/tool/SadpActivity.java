@@ -1367,6 +1367,9 @@ public class SadpActivity extends AppCompatActivity {
             // 创建RtspPlayer实例
             nodePlayer = new RtspPlayer(this);
             nodePlayer.setPlayerView(videoView);
+            // 比例模式同步给解码器：只调视图大小不够，解码器默认会在画面四周留黑
+            videoView.setOnContentModeChangeListener(mode ->
+                    nodePlayer.setVideoScalingCrop(mode != RtspPlayerView.UIViewContentMode.ScaleAspectFit));
 
             // 设置传输协议
             setTransportProtocol(nodePlayer);

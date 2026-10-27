@@ -97,6 +97,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
     // 播放状态
     private boolean isPlaying = false;
     private boolean isFullscreen = false;
+    /** 用户手动退出全屏后，不再自动进入 */
+    private boolean autoFullscreenCancelled = false;
     private boolean isControlsVisible = false;
 
     // 自动隐藏控制栏
@@ -623,12 +625,27 @@ public class RtspPlayerActivity extends AppCompatActivity {
         startInfoUpdates();
 
         // 延迟进入全屏（等待播放成功后进入）
-        hideHandler.postDelayed(() -> {
-            if (!isFullscreen && isPlaying) {
-                Log.d(TAG, "自动进入横屏全屏");
-                enterFullscreen();
-            }
-        }, 1500); // 增加到1.5秒，确保播放成功
+        // 注意：只试一次不够——网络慢时 1.5 秒还没连上，就永远停在竖屏，
+        // 竖屏下 16:9 的画面按比例适应，上下就是大片黑边（用户看到的「额头黑边」）。
+        scheduleAutoFullscreen(0);
+    }
+
+    /**
+     * 安排自动进入全屏：连上画面后再进，最多重试 12 次（约 12 秒）。
+     * 用户手动退出全屏后不再自动进入。
+     */
+    private void scheduleAutoFullscreen(final int attempt) {
+        if (autoFullscreenCancelled || isFullscreen) return;
+        // 以「真的拿到画面尺寸」为准，而不是 isPlaying（它一开始播放就被置真）
+        boolean ready = nodePlayer != null
+                && nodePlayer.getVideoWidth() > 0 && nodePlayer.getVideoHeight() > 0;
+        if (ready) {
+            Log.d(TAG, "自动进入横屏全屏");
+            enterFullscreen();
+            return;
+        }
+        if (attempt >= 12) return;
+        hideHandler.postDelayed(() -> scheduleAutoFullscreen(attempt + 1), 1000);
     }
 
     /**
@@ -669,6 +686,9 @@ public class RtspPlayerActivity extends AppCompatActivity {
             // 创建RtspPlayer
             nodePlayer = new RtspPlayer(this);
             nodePlayer.setPlayerView(videoView);
+            // 视图的比例模式同步给解码器：只调 SurfaceView 大小不够，解码器默认仍会留黑边
+            videoView.setOnContentModeChangeListener(mode ->
+                    nodePlayer.setVideoScalingCrop(mode != RtspPlayerView.UIViewContentMode.ScaleAspectFit));
             nodePlayer.setHwdec(prefs.getString("hwdec_mode", "mediacodec"));
             nodePlayer.setVolume(volumeSeekBar != null ? volumeSeekBar.getProgress() : 100);
             // 音量增强倍数跟随电视直播页的设置（共享 live_tv 偏好）
@@ -977,6 +997,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
      */
     private void toggleFullscreen() {
         if (isFullscreen) {
+            // 用户主动退出全屏，说明他想看完整画面，不再自动进全屏
+            autoFullscreenCancelled = true;
             exitFullscreen();
         } else {
             enterFullscreen();
