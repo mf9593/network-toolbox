@@ -40,6 +40,7 @@ import com.networktool.app.player.RtspPlayerView;
 import com.networktool.app.adapter.OnvifDeviceAdapter;
 import com.networktool.app.model.OnvifDevice;
 import com.networktool.app.util.AppErrorLogger;
+import com.networktool.app.util.FullscreenHelper;
 import com.networktool.app.util.OnvifUtil;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.activity.tool.WebViewActivity;
@@ -117,6 +118,9 @@ public class OnvifActivity extends AppCompatActivity {
     // 视频尺寸
     private int videoWidth = 0;
     private int videoHeight = 0;
+
+    // 真全屏（铺满整屏 + 沉浸式隐藏系统栏）
+    private FullscreenHelper fullscreenHelper;
     
     // RtspPlayer
     private RtspPlayer nodePlayer;
@@ -301,7 +305,17 @@ public class OnvifActivity extends AppCompatActivity {
         rtspLoadingProgress = findViewById(R.id.rtspLoadingProgress);
         rtspStatusOverlay = findViewById(R.id.rtspStatusOverlay);
         transportProtocolGroup = findViewById(R.id.transportProtocolGroup);
-        
+
+        // RTSP 预览页的两张卡片跟随主题色（90% 底色 + 10% 主题色），避免出现默认灰紫底
+        ThemeManager.setupResultCard(findViewById(R.id.rtspAddressCard), this);
+        ThemeManager.setupResultCard(findViewById(R.id.rtspTransportCard), this);
+
+        // 真全屏助手：把播放器容器铺满整屏，标题栏 / 标签栏 / 另一页内容临时让位
+        fullscreenHelper = new FullscreenHelper(this, rtspPlayerContainer,
+                findViewById(R.id.toolbar),
+                findViewById(R.id.tabLayout),
+                findViewById(R.id.deviceTabContent));
+
         rtspPlayButton.setOnClickListener(v -> startRtspPlayback());
         rtspStopButton.setOnClickListener(v -> stopRtspPlayback());
         
@@ -2903,7 +2917,8 @@ public class OnvifActivity extends AppCompatActivity {
             // 创建RtspPlayerView
             videoView = new RtspPlayerView(this);
             videoView.setRenderType(RtspPlayerView.RenderType.SURFACEVIEW);
-            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleToFill);
+            // 默认按比例适应：完整画面不裁切（全屏时再切成裁剪铺满）
+            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleAspectFit);
             
             // 清除旧视图并添加新视图
             videoViewContainer.removeAllViews();
@@ -2976,6 +2991,7 @@ public class OnvifActivity extends AppCompatActivity {
      * 处理RTSP播放器事件
      */
     private void handleRtspPlayerEvent(int event, String msg) {
+        syncVideoSize();
         switch (event) {
             case 1001: // 连接中
                 rtspStatusText.setText("正在连接...");
@@ -3020,6 +3036,26 @@ public class OnvifActivity extends AppCompatActivity {
     }
 
     /**
+     * 同步视频原始尺寸：比例模式（适应 / 裁剪）要靠它算显示区域
+     */
+    private void syncVideoSize() {
+        if (nodePlayer == null || videoView == null) return;
+        try {
+            int width = nodePlayer.getVideoWidth();
+            int height = nodePlayer.getVideoHeight();
+            if (width > 0 && height > 0 && (width != videoWidth || height != videoHeight)) {
+                videoWidth = width;
+                videoHeight = height;
+                videoView.setVideoSize(width, height);
+                if (rtspResolutionText != null) {
+                    rtspResolutionText.setText(width + "x" + height);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
      * 切换播放/暂停
      */
     private void togglePlayPause() {
@@ -3058,10 +3094,42 @@ public class OnvifActivity extends AppCompatActivity {
     }
 
     /**
-     * 切换全屏（Onvif预览不需要全屏功能）
+     * 切换全屏：真·沉浸全屏（播放器铺满整屏，标题栏/标签栏让位）
+     *
+     * <p>非全屏时按比例适应显示（完整画面）；全屏时改为裁剪铺满，避免出现黑边。</p>
      */
     private void toggleFullscreen() {
-        Toast.makeText(this, "Onvif预览不支持全屏，请使用工具RTSP预览", Toast.LENGTH_SHORT).show();
+        if (videoView == null || nodePlayer == null) {
+            Toast.makeText(this, "先播放视频再全屏", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (fullscreenHelper == null) {
+            return;
+        }
+        if (fullscreenHelper.isFullscreen()) {
+            fullscreenHelper.exit();
+            isFullscreen = false;
+            // 退回按比例适应：完整画面，宁可留一点边也不裁掉内容
+            videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleAspectFit);
+            setFullscreenIcon(false);
+            showControls();
+        } else {
+            if (fullscreenHelper.enter()) {
+                isFullscreen = true;
+                // 全屏时铺满裁边，画面顶到屏幕四边，不留黑边
+                videoView.setUIViewContentMode(RtspPlayerView.UIViewContentMode.ScaleAspectFill);
+                setFullscreenIcon(true);
+                showControls();
+            }
+        }
+    }
+
+    /** 全屏按钮图标跟着状态变 */
+    private void setFullscreenIcon(boolean fullscreen) {
+        if (rtspFullscreenBtn != null) {
+            rtspFullscreenBtn.setImageResource(fullscreen
+                    ? R.drawable.ic_fullscreen_exit : R.drawable.ic_fullscreen);
+        }
     }
 
     /**
@@ -3158,7 +3226,12 @@ public class OnvifActivity extends AppCompatActivity {
         
         isPlaying = false;
         isControlsVisible = false;
+        // 停止播放时若还在全屏，先退出全屏再收起播放器
+        if (fullscreenHelper != null && fullscreenHelper.isFullscreen()) {
+            fullscreenHelper.exit();
+        }
         isFullscreen = false;
+        setFullscreenIcon(false);
         hideHandler.removeCallbacksAndMessages(null);
         
         // 安全隐藏视图（在onDestroy中可能为null）
@@ -3207,6 +3280,25 @@ public class OnvifActivity extends AppCompatActivity {
         // 避免与随后打开的 RtspPlayerActivity 争用同一个 native 实例。
         if (nodePlayer != null) {
             stopRtspPlayback();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        // 全屏时返回键先退出全屏，不要直接离开页面
+        if (fullscreenHelper != null && fullscreenHelper.isFullscreen()) {
+            toggleFullscreen();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // 系统栏被系统重新贴回来时，再贴一次沉浸标记
+        if (hasFocus && fullscreenHelper != null) {
+            fullscreenHelper.refreshImmersive();
         }
     }
 

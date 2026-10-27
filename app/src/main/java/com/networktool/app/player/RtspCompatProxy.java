@@ -36,6 +36,14 @@ import java.util.regex.Pattern;
  */
 public final class RtspCompatProxy implements Closeable {
 
+    /** 面包屑日志出口，由播放器注入，便于把 SDP 修补细节写进日志 */
+    public interface LogSink {
+        void log(String message);
+    }
+
+    /** 全局日志出口（不注入时静默） */
+    public static volatile LogSink logSink;
+
     private static final String TAG = "RtspCompatProxy";
     /** ExoPlayer 认识的方法集合，改写为这个安全值 */
     private static final String SAFE_PUBLIC_VALUE =
@@ -54,6 +62,8 @@ public final class RtspCompatProxy implements Closeable {
     private volatile int rewrittenHeaders;
     /** SDP 被净化的次数（H.265 sprop 参数损坏时） */
     private volatile int sdpRewrites;
+    /** 是否已经从摄像头拿到过 SDP（拿到说明鉴权是通过的） */
+    private volatile boolean sdpSeen;
 
     private RtspCompatProxy(ServerSocket serverSocket, String targetHost, int targetPort) {
         this.serverSocket = serverSocket;
@@ -87,6 +97,11 @@ public final class RtspCompatProxy implements Closeable {
     /** SDP 被净化的次数（去掉了损坏的 H.265 sprop 参数） */
     public int getSdpRewrites() {
         return sdpRewrites;
+    }
+
+    /** 是否已经从摄像头拿到 SDP：拿到即说明鉴权通过，可用于压掉误报的 401 提示 */
+    public boolean hasSdp() {
+        return sdpSeen;
     }
 
     /**
@@ -199,6 +214,10 @@ public final class RtspCompatProxy implements Closeable {
                 int bodyLength = parseContentLength(headerText);
                 byte[] body = bodyLength > 0 ? readExactly(in, bodyLength) : null;
                 if (body != null && isSdpBody(headerText, body)) {
+                    sdpSeen = true;
+                    if (body.length > 0) {
+                        log("代理收到 SDP（" + body.length + " 字节）");
+                    }
                     // 部分摄像头的 H.265 sprop-* 参数损坏，会让 ExoPlayer 解析 SPS 时数组越界闪退
                     byte[] sanitized = sanitizeSdp(body);
                     if (sanitized.length != body.length) {
@@ -367,11 +386,7 @@ public final class RtspCompatProxy implements Closeable {
                     }
                 }
             } else if (hevcTrack && trimmed.toLowerCase(Locale.ROOT).startsWith("a=fmtp:")) {
-                String rebuilt = stripSpropParameters(trimmed);
-                if (rebuilt.isEmpty()) {
-                    changed = true;
-                    continue; // 参数全被去掉，整行丢弃
-                }
+                String rebuilt = repairHevcFmtp(trimmed);
                 if (!rebuilt.equals(trimmed)) {
                     changed = true;
                     output.add(rebuilt);
@@ -389,8 +404,14 @@ public final class RtspCompatProxy implements Closeable {
         return joined.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
 
-    /** 去掉 fmtp 里的 sprop-* 参数，其它参数保留；没有剩余参数时返回空串 */
-    private static String stripSpropParameters(String fmtpLine) {
+    /**
+     * 修复 H.265 fmtp 里的 sprop 参数。
+     *
+     * <p>不删参数（ExoPlayer 强制要求三个都在），而是把 sprop-vps/sps/pps 的值解成 NAL，
+     * 按 NAL 头里的真实类型（32=VPS、33=SPS、34=PPS）重新归位，并去掉起始码/长度前缀等杂字节。
+     * 很多国产摄像头会把这三个值写错位置，ExoPlayer 拿错字节当 SPS 解析就会数组越界闪退。</p>
+     */
+    private static String repairHevcFmtp(String fmtpLine) {
         int colon = fmtpLine.indexOf(':');
         if (colon < 0) return fmtpLine;
         String prefix = fmtpLine.substring(0, colon + 1);
@@ -403,23 +424,174 @@ public final class RtspCompatProxy implements Closeable {
             params = params.substring(space + 1);
         }
 
-        StringBuilder kept = new StringBuilder();
-        for (String param : params.split(";")) {
-            String single = param.trim();
+        java.util.List<String> others = new java.util.ArrayList<>();
+        java.util.Map<Integer, byte[]> byNalType = new java.util.HashMap<>();
+        boolean sawSprop = false;
+        for (String rawParam : params.split(";")) {
+            String single = rawParam.trim();
             if (single.isEmpty()) continue;
-            String lower = single.toLowerCase(Locale.ROOT);
-            if (lower.startsWith("sprop-vps") || lower.startsWith("sprop-sps")
-                    || lower.startsWith("sprop-pps") || lower.startsWith("sprop-parameter-sets")) {
-                continue;
+            int eq = single.indexOf('=');
+            String name = eq > 0
+                    ? single.substring(0, eq).trim().toLowerCase(Locale.ROOT)
+                    : single.toLowerCase(Locale.ROOT);
+            if (name.startsWith("sprop")) {
+                sawSprop = true;
+                collectNalUnits(eq > 0 ? single.substring(eq + 1) : "",
+                        guessNalType(name), byNalType);
+            } else {
+                others.add(single);
             }
-            if (kept.length() > 0) kept.append(';');
-            kept.append(single);
         }
-        if (kept.length() == 0) return "";
-        StringBuilder result = new StringBuilder(prefix);
-        if (!payloadType.isEmpty()) result.append(' ').append(payloadType);
-        result.append(' ').append(kept);
-        return result.toString();
+        if (!sawSprop) return fmtpLine;
+
+        byte[] vps = byNalType.get(32);
+        byte[] sps = byNalType.get(33);
+        byte[] pps = byNalType.get(34);
+        if (vps == null || sps == null || pps == null) {
+            log("SDP sprop 参数不成套（vps=" + (vps != null) + " sps=" + (sps != null)
+                    + " pps=" + (pps != null) + "），改为去掉 sprop 避免解析越界闪退");
+            // 宁可让播放器抛出可捕获的「缺少 sprop-vps」错误，也不要它解析坏数据把进程带崩
+            StringBuilder fallback = new StringBuilder(prefix);
+            if (!payloadType.isEmpty()) fallback.append(payloadType);
+            for (String other : others) fallback.append(' ').append(other).append(';');
+            int length = fallback.length();
+            if (length > 0 && fallback.charAt(length - 1) == ';') {
+                fallback.setLength(length - 1);
+            }
+            return fallback.toString();
+        }
+
+        StringBuilder rebuilt = new StringBuilder(prefix);
+        // 注意：a=fmtp: 后面必须紧跟负载类型号，不能有空格，否则 ExoPlayer 整条属性作废
+        if (!payloadType.isEmpty()) rebuilt.append(payloadType);
+        rebuilt.append(" sprop-vps=").append(encodeBase64(vps))
+                .append(";sprop-sps=").append(encodeBase64(sps))
+                .append(";sprop-pps=").append(encodeBase64(pps));
+        for (String other : others) rebuilt.append(';').append(other);
+        String result = rebuilt.toString();
+        if (!result.equals(fmtpLine)) {
+            log("SDP 已按 NAL 类型重排 H.265 参数: " + abbreviate(fmtpLine) + " → " + abbreviate(result));
+        }
+        return result;
+    }
+
+    /** 参数名里带的 NAL 类型提示：sprop-vps → 32、sprop-sps → 33、sprop-pps → 34 */
+    private static int guessNalType(String name) {
+        if (name == null) return -1;
+        if (name.contains("vps")) return 32;
+        if (name.contains("sps")) return 33;
+        if (name.contains("pps")) return 34;
+        return -1;
+    }
+
+    /** H.265 参数集 NAL 头两字节：类型左移一位 + 0x01 */
+    private static byte[] hevcNalHeader(int type) {
+        return new byte[]{(byte) ((type << 1) & 0x3F), 0x01};
+    }
+
+    /** 读 NAL 头里的类型（只认参数集 32/33/34，其它返回 -1） */
+    private static int hevcNalType(byte[] nal) {
+        if (nal == null || nal.length < 3) return -1;
+        int type = (nal[0] >> 1) & 0x3F;
+        // 第二字节必须是 0x01（nuh_layer_id=0、temporal_id_plus1=1），否则不是合法参数集头
+        if ((nal[1] & 0xFF) != 0x01) return -1;
+        return (type == 32 || type == 33 || type == 34) ? type : -1;
+    }
+
+    /**
+     * 从 sprop 值里解出所有 NAL，登记到「NAL 类型 → 字节」表里。
+     *
+     * <p>能认出 NAL 头就按头里的真实类型归位（兼容摄像头把三个值写错位置）；
+     * 认不出说明这个摄像头省掉了 2 字节 NAL 头，按参数名补上再归位。</p>
+     */
+    private static void collectNalUnits(String value, int hintType,
+                                        java.util.Map<Integer, byte[]> target) {
+        if (value == null || value.isEmpty()) return;
+        for (String part : value.split("[,:]")) {
+            String trimmedPart = part.trim();
+            if (trimmedPart.isEmpty()) continue;
+            byte[] bytes = decodeBase64(trimmedPart);
+            if (bytes == null || bytes.length < 2) continue;
+            for (byte[] nal : splitNalUnits(bytes)) {
+                if (nal.length < 2) continue;
+                int type = hevcNalType(nal);
+                byte[] unit = nal;
+                if (type < 0) {
+                    // 没有合法 NAL 头：按参数名补头
+                    if (hintType < 0) continue;
+                    byte[] header = hevcNalHeader(hintType);
+                    unit = new byte[header.length + nal.length];
+                    System.arraycopy(header, 0, unit, 0, header.length);
+                    System.arraycopy(nal, 0, unit, header.length, nal.length);
+                    type = hintType;
+                }
+                if (unit.length < 3) continue;
+                target.put(type, unit);
+            }
+        }
+    }
+
+    /** 把一段字节切成独立 NAL（支持 annex-B 起始码、4 字节长度前缀、裸 NAL 三种形式） */
+    private static java.util.List<byte[]> splitNalUnits(byte[] bytes) {
+        java.util.List<byte[]> result = new java.util.ArrayList<>();
+        java.util.List<Integer> starts = new java.util.ArrayList<>();
+        for (int i = 0; i + 3 < bytes.length; i++) {
+            if (bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 1) {
+                starts.add(i + 3);
+            } else if (bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 0 && bytes[i + 3] == 1) {
+                starts.add(i + 4);
+            }
+        }
+        if (!starts.isEmpty()) {
+            for (int i = 0; i < starts.size(); i++) {
+                int from = starts.get(i);
+                int to = i + 1 < starts.size() ? starts.get(i + 1) : bytes.length;
+                while (to > from && bytes[to - 1] == 0) to--;
+                if (to - from > 2) result.add(subArray(bytes, from, to));
+            }
+            return result;
+        }
+        if (bytes.length > 4) {
+            int declared = ((bytes[0] & 0xFF) << 24) | ((bytes[1] & 0xFF) << 16)
+                    | ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
+            if (declared == bytes.length - 4) {
+                result.add(subArray(bytes, 4, bytes.length));
+                return result;
+            }
+        }
+        result.add(bytes);
+        return result;
+    }
+
+    private static byte[] subArray(byte[] source, int from, int to) {
+        byte[] out = new byte[to - from];
+        System.arraycopy(source, from, out, 0, out.length);
+        return out;
+    }
+
+    private static byte[] decodeBase64(String value) {
+        if (value == null || value.isEmpty()) return null;
+        for (int flags : new int[]{android.util.Base64.DEFAULT, android.util.Base64.URL_SAFE}) {
+            try {
+                return android.util.Base64.decode(value, flags);
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static String encodeBase64(byte[] data) {
+        return android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP);
+    }
+
+    private static String abbreviate(String text) {
+        if (text == null) return "";
+        return text.length() > 160 ? text.substring(0, 160) + "…" : text;
+    }
+
+    private static void log(String message) {
+        LogSink sink = RtspCompatProxy.logSink;
+        if (sink != null) sink.log(message);
     }
 
     /** 正文长度变化后同步改写 Content-Length 头，否则播放器会按旧长度读错位 */

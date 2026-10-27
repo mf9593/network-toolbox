@@ -1959,15 +1959,20 @@ public class LanScanManager {
                     DatagramPacket response = new DatagramPacket(receiveBuffer, receiveBuffer.length);
                     socket.receive(response);
                     String senderIp = response.getAddress().getHostAddress();
-                    String hostname = parseMdnsHostname(receiveBuffer, response.getLength());
-                    DebugLogger.logDiscovery("mDNS_IPv6", "收到响应", senderIp + " | 主机名=" + (hostname != null ? hostname : "null"));
+                    MdnsDevice mdns = parseMdns(receiveBuffer, response.getLength());
+                    String hostname = mdns != null ? mdns.bestTitle() : null;
+                    Integer mdnsPort = mdns != null ? mdns.port : null;
+                    DebugLogger.logDiscovery("mDNS_IPv6", "收到响应", senderIp + " | 设备名="
+                            + (hostname != null ? hostname : "null")
+                            + (mdnsPort != null ? " | 端口=" + mdnsPort : ""));
                     DebugLogger.logBroadcast("mDNS_IPv6", senderIp,
-                            "主机名=" + (hostname != null ? hostname : "(无)") + "\n原始报文(长度="
+                            "设备名=" + (hostname != null ? hostname : "(无)") + "\n原始报文(长度="
                                     + response.getLength() + "):\n"
                                     + RuntimeLogStore.bytesToDisplay(receiveBuffer, response.getLength()));
                     if (hostname != null) {
-                        addDeviceWithPriority(senderIp, hostname + "(IPv6)",
-                            DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS);
+                        // 标题就是设备名本身，不加分类前缀（IPv6 由列表里的角标体现）
+                        addDeviceWithPriority(senderIp, hostname, null,
+                                DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -2017,17 +2022,20 @@ public class LanScanManager {
                     socket.receive(response);
                     String senderIp = response.getAddress().getHostAddress();
 
-                    String hostname = parseMdnsHostname(receiveBuffer, response.getLength());
-                    Integer mdnsPort = parseMdnsSrvPort(receiveBuffer, response.getLength());
-                    DebugLogger.logDiscovery("mDNS", "收到响应", senderIp + " | 主机名=" + (hostname != null ? hostname : "null")
+                    MdnsDevice mdns = parseMdns(receiveBuffer, response.getLength());
+                    String hostname = mdns != null ? mdns.bestTitle() : null;
+                    Integer mdnsPort = mdns != null ? mdns.port : null;
+                    DebugLogger.logDiscovery("mDNS", "收到响应", senderIp + " | 设备名=" + (hostname != null ? hostname : "null")
+                            + (mdns != null && mdns.hostname != null ? " | 主机名=" + mdns.hostname : "")
                             + (mdnsPort != null ? " | 端口=" + mdnsPort : ""));
                     // 记录原始 mDNS 报文（十六进制+ASCII），供运行日志核对解析结果
                     DebugLogger.logBroadcast("mDNS", senderIp,
-                            "主机名=" + (hostname != null ? hostname : "(无)")
+                            "设备名=" + (hostname != null ? hostname : "(无)")
                                     + (mdnsPort != null ? " | 服务端口=" + mdnsPort : "")
                                     + "\n原始报文(长度=" + response.getLength() + "):\n"
                                     + RuntimeLogStore.bytesToDisplay(receiveBuffer, response.getLength()));
                     if (hostname != null) {
+                        // 标题就用设备自己的名字，不加任何分类前缀
                         addDeviceWithPriority(senderIp, hostname, null,
                             DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS, null, mdnsPort);
                     }
@@ -2068,113 +2076,217 @@ public class LanScanManager {
         return os.toByteArray();
     }
 
+    /** mDNS 解析出的设备信息 */
+    private static final class MdnsDevice {
+        /** 服务实例名，最像「设备名」，例如 HP OfficeJet Pro 7740 series [43A66F] */
+        String instanceName;
+        /** A/AAAA 记录的主机名，例如 HP7C4D8F43A66F */
+        String hostname;
+        /** SRV 记录里的服务端口 */
+        Integer port;
+
+        String bestTitle() {
+            return instanceName != null ? instanceName : hostname;
+        }
+    }
+
+    /** 域名读取结果：名字 + 下一个解析位置（压缩指针会跳着读） */
+    private static final class NameResult {
+        final String name;
+        final int nextOffset;
+
+        NameResult(String name, int nextOffset) {
+            this.name = name;
+            this.nextOffset = nextOffset;
+        }
+    }
+
     /**
-     * 从mDNS响应中提取主机名
-     */
-    /**
-     * 从 mDNS 响应中解析 SRV 记录的端口号（type=33）。
+     * 解析 mDNS 响应，取出「设备名 / 主机名 / 服务端口」。
      *
-     * mDNS 服务实例（如 _http._tcp.local）通过 SRV 记录通告监听端口。
-     * 这里遍历所有 answer，找到 SRV 记录后取出端口（RDATA 中第 5-6 字节）。
-     *
-     * @return 端口号；未找到 SRV 记录时返回 null
+     * <p>只认这几种记录：PTR（服务实例名）、SRV（实例名 + 端口）、TXT（实例名）、
+     * A/AAAA（主机名）。服务类型那一段（{@code _http._tcp.local}）只用来判断记录含义，
+     * 绝不拼进标题——否则标题会变成 {@code http_tcplocal(HP OfficeJet...} 这种怪串。</p>
      */
-    private Integer parseMdnsSrvPort(byte[] data, int length) {
+    private MdnsDevice parseMdns(byte[] data, int length) {
         if (length < 12) return null;
         try {
-            int qdcount = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
-            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
-            if (ancount == 0) return null;
+            int questionCount = readU16(data, 4);
+            int recordCount = readU16(data, 6) + readU16(data, 8) + readU16(data, 10);
+            if (recordCount <= 0) return null;
 
-            // 跳过 header + question section
+            // 跳过 question section
             int offset = 12;
-            for (int q = 0; q < qdcount && offset < length; q++) {
-                while (offset < length && data[offset] != 0) {
-                    offset += (data[offset] & 0xFF) + 1;
-                }
-                offset += 1 + 4; // 终止符 + QTYPE(2) + QCLASS(2)
+            for (int q = 0; q < questionCount; q++) {
+                NameResult question = readMdnsName(data, length, offset);
+                if (question == null) return null;
+                offset = question.nextOffset + 4;
             }
 
-            for (int a = 0; a < ancount && offset < length; a++) {
-                // NAME（可能是压缩指针）
-                if ((data[offset] & 0xC0) == 0xC0) {
-                    offset += 2;
-                } else {
-                    while (offset < length && data[offset] != 0) {
-                        offset += (data[offset] & 0xFF) + 1;
-                    }
-                    offset++;
-                }
+            MdnsDevice device = new MdnsDevice();
+            for (int i = 0; i < recordCount && offset + 10 <= length; i++) {
+                NameResult owner = readMdnsName(data, length, offset);
+                if (owner == null) break;
+                offset = owner.nextOffset;
                 if (offset + 10 > length) break;
-                int type = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
-                offset += 8; // TYPE(2) + CLASS(2) + TTL(4)
-                int rdlength = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
-                offset += 2;
+                int type = readU16(data, offset);
+                int rdLength = readU16(data, offset + 8);
+                int rdataOffset = offset + 10;
+                if (rdataOffset + rdLength > length) break;
 
-                if (type == 33 && rdlength >= 6 && offset + rdlength <= length) {
-                    // SRV RDATA: Priority(2) Weight(2) Port(2) Target(...)
-                    int port = ((data[offset + 4] & 0xFF) << 8) | (data[offset + 5] & 0xFF);
-                    if (port > 0 && port <= 65535) return port;
+                switch (type) {
+                    case 12: { // PTR：owner 是服务类型，RDATA 指向服务实例名
+                        if (isMdnsServiceType(owner.name)) {
+                            NameResult target = readMdnsName(data, length, rdataOffset);
+                            if (target != null && device.instanceName == null) {
+                                device.instanceName = mdnsTitle(target.name);
+                            }
+                        }
+                        break;
+                    }
+                    case 33: { // SRV：owner 就是服务实例名，RDATA 里有端口
+                        if (device.instanceName == null) {
+                            device.instanceName = mdnsTitle(owner.name);
+                        }
+                        if (rdLength >= 6) {
+                            int port = readU16(data, rdataOffset + 4);
+                            if (port > 0 && port <= 65535) device.port = port;
+                        }
+                        break;
+                    }
+                    case 16: { // TXT：owner 同样是服务实例名
+                        if (device.instanceName == null) {
+                            device.instanceName = mdnsTitle(owner.name);
+                        }
+                        break;
+                    }
+                    case 1:   // A
+                    case 28: { // AAAA
+                        if (device.hostname == null) {
+                            device.hostname = mdnsTitle(owner.name);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
                 }
-                offset += rdlength;
+                offset = rdataOffset + rdLength;
             }
-            return null;
+            if (device.instanceName == null && device.hostname == null && device.port == null) {
+                return null;
+            }
+            return device;
         } catch (Exception e) {
             return null;
         }
     }
 
-    private String parseMdnsHostname(byte[] data, int length) {
-        if (length < 12) return null;
-        try {
-            int ancount = ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
-            if (ancount == 0) return null;
+    private static int readU16(byte[] data, int offset) {
+        if (offset + 1 >= data.length) return 0;
+        return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+    }
 
-            // 跳过header(12) + question section
-            int offset = 12;
-            while (offset < length && data[offset] != 0) {
-                offset += (data[offset] & 0xFF) + 1;
+    /**
+     * 读取 mDNS 域名（支持压缩指针）。
+     *
+     * @return 名字与下一个解析位置；越界或格式异常时返回 null
+     */
+    private static NameResult readMdnsName(byte[] data, int length, int offset) {
+        StringBuilder sb = new StringBuilder();
+        int nextOffset = -1;
+        int cursor = offset;
+        int hops = 0;
+        while (cursor >= 0 && cursor < length) {
+            int labelLength = data[cursor] & 0xFF;
+            if (labelLength == 0) {
+                cursor++;
+                break;
             }
-            offset += 5; // 跳过终止符+QTYPE+QCLASS
+            if ((labelLength & 0xC0) == 0xC0) {
+                if (cursor + 1 >= length) return null;
+                int pointer = ((labelLength & 0x3F) << 8) | (data[cursor + 1] & 0xFF);
+                if (nextOffset < 0) nextOffset = cursor + 2;
+                if (++hops > 8) return null;   // 防环
+                cursor = pointer;
+                continue;
+            }
+            if ((labelLength & 0xC0) != 0) return null;   // 不认识的标签类型
+            cursor++;
+            if (cursor + labelLength > length) return null;
+            if (sb.length() > 0) sb.append('.');
+            sb.append(new String(data, cursor, labelLength, java.nio.charset.StandardCharsets.UTF_8));
+            cursor += labelLength;
+        }
+        return new NameResult(sb.toString(), nextOffset >= 0 ? nextOffset : cursor);
+    }
 
-            // 解析第一个answer的NAME
-            int nameOffset;
-            if ((data[offset] & 0xC0) == 0xC0) {
-                nameOffset = ((data[offset] & 0x3F) << 8) | (data[offset + 1] & 0xFF);
-                offset += 2;
-            } else {
-                nameOffset = offset;
-                while (offset < length && data[offset] != 0) {
-                    offset += (data[offset] & 0xFF) + 1;
-                }
-                offset++; // terminator
-            }
-            offset += 8; // TYPE(2) + CLASS(2) + TTL(4)
-            int rdlength = ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
-            offset += 2;
+    /** 是否为形如 _http._tcp.local / _printer._udp.local 的服务类型名 */
+    private static boolean isMdnsServiceType(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("_services._dns-sd")) return false;   // 服务类型清单，不是设备
+        return lower.startsWith("_") || lower.contains("._tcp") || lower.contains("._udp");
+    }
 
-            // 从NAME（或RDATA中的PTR target）提取第一个标签作为主机名
-            int hostStart;
-            if ((data[nameOffset] & 0xC0) == 0xC0 && nameOffset + 1 < length) {
-                hostStart = ((data[nameOffset] & 0x3F) << 8) | (data[nameOffset + 1] & 0xFF);
-            } else {
-                hostStart = nameOffset + 1;
-            }
-            StringBuilder sb = new StringBuilder();
-            while (hostStart < length && data[hostStart] != 0) {
-                int labelLen = data[hostStart] & 0xFF;
-                hostStart++;
-                for (int i = 0; i < labelLen && hostStart < length; i++) {
-                    char c = (char) data[hostStart++];
-                    if (c >= 32 && c < 127) sb.append(c);
-                }
-                if (data[hostStart] != 0) sb.append(".");
-            }
-            String result = sb.toString().trim();
-            return result.isEmpty() || result.contains("_services") || result.contains("_dns-sd") ? null : result;
-        } catch (Exception e) {
+    /**
+     * 把 mDNS 全名变成给人看的标题。
+     *
+     * <p>服务实例名的完整形式是 {@code HP OfficeJet Pro 7740 series [43A66F]._http._tcp.local}，
+     * 这里在第一个以 {@code _} 开头的标签处截断，只留设备名；域名后缀（local/lan/home.arpa）一并丢掉。</p>
+     */
+    private static String mdnsTitle(String fullName) {
+        if (fullName == null) return null;
+        String[] labels = fullName.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        for (String label : labels) {
+            String trimmed = label.trim();
+            if (trimmed.isEmpty()) continue;
+            if (trimmed.startsWith("_")) break;                       // 服务类型往后都不是设备名
+            String lower = trimmed.toLowerCase(java.util.Locale.ROOT);
+            if (lower.equals("local") || lower.equals("lan")
+                    || lower.equals("home") || lower.equals("arpa")) break;
+            if (sb.length() > 0) sb.append('.');
+            sb.append(trimmed);
+        }
+        return cleanMdnsName(sb.toString());
+    }
+
+    /**
+     * 清洗设备名字符：只保留字母（含中文）、数字、空格和少量常见符号，
+     * 其余特殊符号（% $ ~ * ! 之类）一律剔除；剔完没剩几个有效字符就当无名。
+     */
+    private static String cleanMdnsName(String raw) {
+        if (raw == null) return null;
+        String name = raw.trim();
+        while (name.endsWith(".")) name = name.substring(0, name.length() - 1).trim();
+        if (name.isEmpty()) return null;
+
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.startsWith("_") || lower.contains("_tcp") || lower.contains("_udp")
+                || lower.contains("_services") || lower.contains("_dns-sd")
+                || lower.contains("_device-info") || lower.contains("_workstation")) {
             return null;
         }
+
+        StringBuilder sb = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean allowed = Character.isLetterOrDigit(c) || c == ' ' || c == '-'
+                    || c == '_' || c == '.' || c == '(' || c == ')' || c == '['
+                    || c == ']' || c == '+' || c == '&' || c == '/';
+            if (allowed) sb.append(c);
+        }
+        String cleaned = sb.toString().replaceAll("\\s{2,}", " ").trim();
+        if (cleaned.isEmpty()) return null;
+
+        int meaningful = 0;
+        for (int i = 0; i < cleaned.length(); i++) {
+            if (Character.isLetterOrDigit(cleaned.charAt(i))) meaningful++;
+        }
+        if (meaningful < 2) return null;
+
+        if (cleaned.length() > 60) cleaned = cleaned.substring(0, 60).trim();
+        return cleaned;
     }
 
     /**

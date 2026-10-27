@@ -255,6 +255,7 @@
 
                 <!-- 地址与名称 -->
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/rtspAddressCard"
                     style="@style/Widget.NetworkTool.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -303,6 +304,7 @@
 
                 <!-- 传输协议 -->
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/rtspTransportCard"
                     style="@style/Widget.NetworkTool.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

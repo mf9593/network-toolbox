@@ -238,6 +238,8 @@ public class RtspPlayer {
 
     public RtspPlayer(Context context) {
         this.context = context.getApplicationContext();
+        // 让兼容代理的 SDP 修补细节也写进面包屑日志
+        RtspCompatProxy.logSink = RtspPlayer::writeBreadcrumb;
     }
 
     /* ==================== Surface 生命周期 ==================== */
@@ -990,6 +992,12 @@ public class RtspPlayer {
                 }
                 // 已经安排重试、或重试后已出画、或已经换了地址：只保留日志，不再打扰界面
                 if (willRetry || generation != probeGeneration || prepared) {
+                    return;
+                }
+                // 代理已经拿到 SDP 说明鉴权是通的，此时 401 是预检自己的误报，不要弹给用户
+                if (compatProxy != null && compatProxy.hasSdp() && result != null
+                        && result.contains("401")) {
+                    writeBreadcrumb("预检 401 属误报（代理已拿到 SDP），不提示用户");
                     return;
                 }
                 // 直接把原因反馈给界面，方便用户补账号密码或检查端口

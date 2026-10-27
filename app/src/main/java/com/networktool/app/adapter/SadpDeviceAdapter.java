@@ -80,7 +80,7 @@ public class SadpDeviceAdapter extends RecyclerView.Adapter<SadpDeviceAdapter.Vi
         holder.deviceNameText.setTextColor(ThemeManager.getOnSurfaceColor(context));
         holder.deviceIpText.setTextColor(ThemeManager.getOnSurfaceVariantColor(context));
         holder.deviceInfoText.setTextColor(ThemeManager.getOnSurfaceVariantColor(context));
-        holder.menuButton.setTextColor(accentColor);
+        holder.menuButton.setColorFilter(accentColor);
         
         holder.deviceNameText.setText(device.getDisplayName());
         holder.deviceIpText.setText(device.getIpAddress() + ":" + device.getPort());
@@ -133,7 +133,7 @@ public class SadpDeviceAdapter extends RecyclerView.Adapter<SadpDeviceAdapter.Vi
         TextView deviceNameText;
         TextView deviceIpText;
         TextView deviceInfoText;
-        MaterialButton menuButton;
+        android.widget.ImageButton menuButton;
 
         ViewHolder(View itemView) {
             super(itemView);
@@ -142,6 +142,7 @@ public class SadpDeviceAdapter extends RecyclerView.Adapter<SadpDeviceAdapter.Vi
             deviceNameText = itemView.findViewById(R.id.deviceNameText);
             deviceIpText = itemView.findViewById(R.id.deviceIpText);
             deviceInfoText = itemView.findViewById(R.id.deviceInfoText);
+            // 布局里是 ImageButton（不是 MaterialButton），按实际类型取，避免 ClassCastException
             menuButton = itemView.findViewById(R.id.menuButton);
         }
     }

@@ -78,6 +78,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private TextView infoText;
     private int lastVolume = 100;
     private int aspectModeIndex = 0;
+    /** 进入全屏前的画面比例，退出全屏时还原 */
+    private int savedAspectModeIndex = 0;
     private final Handler infoHandler = new Handler(Looper.getMainLooper());
     private Runnable infoRunnable;
 
@@ -989,6 +991,11 @@ public class RtspPlayerActivity extends AppCompatActivity {
         
         // 设置横屏
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
+        // 全屏时裁剪铺满，画面顶到屏幕四边，不留黑边（退出时还原成按比例适应）
+        savedAspectModeIndex = aspectModeIndex;
+        aspectModeIndex = 1; // ScaleAspectFill
+        applyAspectMode();
         
         // 隐藏状态栏和导航栏
         getWindow().getDecorView().setSystemUiVisibility(
@@ -1016,6 +1023,10 @@ public class RtspPlayerActivity extends AppCompatActivity {
         
         // 设置竖屏
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+        // 还原退出全屏前的画面比例
+        aspectModeIndex = savedAspectModeIndex;
+        applyAspectMode();
         
         // 恢复状态栏和导航栏
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
