@@ -52,6 +52,8 @@ public final class RtspCompatProxy implements Closeable {
     private volatile boolean closed;
     /** 已改写的响应头数量，用于面包屑日志确认兼容逻辑是否生效 */
     private volatile int rewrittenHeaders;
+    /** SDP 被净化的次数（H.265 sprop 参数损坏时） */
+    private volatile int sdpRewrites;
 
     private RtspCompatProxy(ServerSocket serverSocket, String targetHost, int targetPort) {
         this.serverSocket = serverSocket;
@@ -80,6 +82,11 @@ public final class RtspCompatProxy implements Closeable {
 
     public int getRewrittenHeaders() {
         return rewrittenHeaders;
+    }
+
+    /** SDP 被净化的次数（去掉了损坏的 H.265 sprop 参数） */
+    public int getSdpRewrites() {
+        return sdpRewrites;
     }
 
     /**
@@ -188,10 +195,23 @@ public final class RtspCompatProxy implements Closeable {
                 if (!readHeaderBlock(in, head)) break;
                 String headerText = new String(head.toByteArray(), StandardCharsets.ISO_8859_1);
                 String patched = normalizeHeaderBlock(headerText);
-                out.write(patched.getBytes(StandardCharsets.ISO_8859_1));
+
                 int bodyLength = parseContentLength(headerText);
-                if (bodyLength > 0) {
-                    copyExactly(in, out, bodyLength, buffer);
+                byte[] body = bodyLength > 0 ? readExactly(in, bodyLength) : null;
+                if (body != null && isSdpBody(headerText, body)) {
+                    // 部分摄像头的 H.265 sprop-* 参数损坏，会让 ExoPlayer 解析 SPS 时数组越界闪退
+                    byte[] sanitized = sanitizeSdp(body);
+                    if (sanitized.length != body.length) {
+                        patched = replaceContentLength(patched, sanitized.length);
+                        sdpRewrites++;
+                        rewrittenHeaders++;
+                    }
+                    body = sanitized;
+                }
+
+                out.write(patched.getBytes(StandardCharsets.ISO_8859_1));
+                if (body != null) {
+                    out.write(body);
                 }
                 out.flush();
             }
@@ -294,6 +314,127 @@ public final class RtspCompatProxy implements Closeable {
             out.write(buffer, 0, read);
             remaining -= read;
         }
+    }
+
+    private static byte[] readExactly(InputStream in, int length) throws IOException {
+        byte[] data = new byte[length];
+        int offset = 0;
+        while (offset < length) {
+            int read = in.read(data, offset, length - offset);
+            if (read < 0) break;
+            offset += read;
+        }
+        if (offset == length) return data;
+        byte[] trimmed = new byte[offset];
+        System.arraycopy(data, 0, trimmed, 0, offset);
+        return trimmed;
+    }
+
+    /** 判断报文正文是否为 SDP（看 Content-Type，退化为看 v= 开头） */
+    private static boolean isSdpBody(String headerText, byte[] body) {
+        if (headerText != null && headerText.toLowerCase(Locale.ROOT)
+                .contains("content-type: application/sdp")) {
+            return true;
+        }
+        return body != null && body.length > 2 && body[0] == 'v' && body[1] == '=';
+    }
+
+    /**
+     * 净化 SDP：对 H.265（HEVC）轨道的 {@code a=fmtp} 去掉 sprop-* 参数。
+     *
+     * <p>不少摄像头的 sprop-vps/sps/pps 数据是损坏或截断的，ExoPlayer 解析时会在
+     * {@code NalUnitUtil.skipH265ScalingList} 数组越界闪退，而且异常抛在播放器自己的
+     * HandlerThread 上，应用层接不住（表现就是一播就崩）。去掉这些提示参数后，
+     * 播放器改用码流里内嵌的 VPS/SPS/PPS。</p>
+     */
+    private static byte[] sanitizeSdp(byte[] body) {
+        String sdp = new String(body, StandardCharsets.ISO_8859_1);
+        String[] lines = sdp.split("\r\n", -1);
+        List<String> output = new java.util.ArrayList<>(lines.length);
+        boolean hevcTrack = false;
+        boolean changed = false;
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("m=")) {
+                hevcTrack = false;
+            } else if (trimmed.toLowerCase(Locale.ROOT).startsWith("a=rtpmap:")) {
+                String value = trimmed.substring("a=rtpmap:".length());
+                int space = value.indexOf(' ');
+                if (space > 0) {
+                    String encoding = value.substring(space + 1).trim().toUpperCase(Locale.ROOT);
+                    if (encoding.startsWith("H265") || encoding.startsWith("HEVC")) {
+                        hevcTrack = true;
+                    }
+                }
+            } else if (hevcTrack && trimmed.toLowerCase(Locale.ROOT).startsWith("a=fmtp:")) {
+                String rebuilt = stripSpropParameters(trimmed);
+                if (rebuilt.isEmpty()) {
+                    changed = true;
+                    continue; // 参数全被去掉，整行丢弃
+                }
+                if (!rebuilt.equals(trimmed)) {
+                    changed = true;
+                    output.add(rebuilt);
+                    continue;
+                }
+            }
+            output.add(line);
+        }
+        if (!changed) return body;
+        StringBuilder joined = new StringBuilder(sdp.length());
+        for (int i = 0; i < output.size(); i++) {
+            joined.append(output.get(i));
+            if (i < output.size() - 1) joined.append("\r\n");
+        }
+        return joined.toString().getBytes(StandardCharsets.ISO_8859_1);
+    }
+
+    /** 去掉 fmtp 里的 sprop-* 参数，其它参数保留；没有剩余参数时返回空串 */
+    private static String stripSpropParameters(String fmtpLine) {
+        int colon = fmtpLine.indexOf(':');
+        if (colon < 0) return fmtpLine;
+        String prefix = fmtpLine.substring(0, colon + 1);
+        String params = fmtpLine.substring(colon + 1).trim();
+
+        String payloadType = "";
+        int space = params.indexOf(' ');
+        if (space > 0) {
+            payloadType = params.substring(0, space).trim();
+            params = params.substring(space + 1);
+        }
+
+        StringBuilder kept = new StringBuilder();
+        for (String param : params.split(";")) {
+            String single = param.trim();
+            if (single.isEmpty()) continue;
+            String lower = single.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("sprop-vps") || lower.startsWith("sprop-sps")
+                    || lower.startsWith("sprop-pps") || lower.startsWith("sprop-parameter-sets")) {
+                continue;
+            }
+            if (kept.length() > 0) kept.append(';');
+            kept.append(single);
+        }
+        if (kept.length() == 0) return "";
+        StringBuilder result = new StringBuilder(prefix);
+        if (!payloadType.isEmpty()) result.append(' ').append(payloadType);
+        result.append(' ').append(kept);
+        return result.toString();
+    }
+
+    /** 正文长度变化后同步改写 Content-Length 头，否则播放器会按旧长度读错位 */
+    private static String replaceContentLength(String headerText, int newLength) {
+        String[] lines = headerText.split("\r\n", -1);
+        StringBuilder rebuilt = new StringBuilder(headerText.length() + 8);
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.toLowerCase(Locale.ROOT).startsWith("content-length")) {
+                line = "Content-Length: " + newLength;
+            }
+            rebuilt.append(line);
+            if (i < lines.length - 1) rebuilt.append("\r\n");
+        }
+        return rebuilt.toString();
     }
 
     private static void closeQuietly(Closeable closeable) {

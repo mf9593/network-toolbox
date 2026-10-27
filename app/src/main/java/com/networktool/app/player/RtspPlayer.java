@@ -70,6 +70,16 @@ public class RtspPlayer {
     private boolean proxyRetried;
     /** 兼容代理生效时的实际播放地址（inputUrl 始终保留原始地址） */
     private String playUrlOverride;
+    /** 播放前是否已完成 SDP 预检 */
+    private boolean rtspPreflightDone;
+    /** 预检判定的地址（换地址后需重新预检） */
+    private String rtspPreflightUrl;
+    /** SDP 是否为 H.265：这类摄像头的 sprop 参数常损坏，直连会让 ExoPlayer 解析 SPS 时闪退 */
+    private boolean rtspSdpIsH265;
+    /** 预检进行中，避免重复触发 */
+    private boolean rtspPreflightRunning;
+    /** 诊断预检代次：重试成功出画后丢弃旧结论，避免成功后还弹失败提示 */
+    private int probeGeneration;
     private String hwdec = "mediacodec";
     private int volume = 100;
     /** 音量增强倍数（1.0 = 不增强） */
@@ -135,7 +145,8 @@ public class RtspPlayer {
             if (released) return;
             writeBreadcrumb("首帧已渲染（画面确认输出）"
                     + (compatProxy != null
-                    ? "，兼容代理已改写 " + compatProxy.getRewrittenHeaders() + " 处响应头" : ""));
+                    ? "，兼容代理已改写 " + compatProxy.getRewrittenHeaders()
+                    + " 处响应头，净化 SDP " + compatProxy.getSdpRewrites() + " 次" : ""));
         }
 
         @Override
@@ -212,16 +223,16 @@ public class RtspPlayer {
             prepared = false;
             // RTSP 常见的 SETUP 传输不支持，先自动切换 RTP 传输重试一次
             if (retryWithAltTransport()) {
-                probeRtspCause();
+                probeRtspCause(true);
                 return;
             }
             // 传输都不通、且是「服务器报文不合规」这类错误时，启用本地兼容代理再试
             if (retryWithCompatProxy()) {
-                probeRtspCause();
+                probeRtspCause(true);
                 return;
             }
             notifyEvent(EVENT_ERROR, "播放失败：" + msg);
-            probeRtspCause();
+            probeRtspCause(false);
         }
     };
 
@@ -450,6 +461,10 @@ public class RtspPlayer {
             transportRetried = false;
             proxyRetried = false;
             playUrlOverride = null;
+            rtspPreflightDone = false;
+            rtspPreflightUrl = null;
+            rtspSdpIsH265 = false;
+            rtspPreflightRunning = false;
             closeCompatProxy();
         }
         // 已在播放同一地址则跳过
@@ -483,6 +498,8 @@ public class RtspPlayer {
     private void startInternal() {
         if (inputUrl == null || inputUrl.isEmpty()) return;
         writeBreadcrumb("startInternal: " + safeUrl(inputUrl));
+        // 每次重建播放链路都推进代次，让上一轮遗留的诊断结论失效（避免成功后弹失败提示）
+        probeGeneration++;
 
         // 检查是否需要重建实例（hwdec 变化或首次启动）
         boolean needsRecreate = (exoPlayer == null) || !safeEquals(currentHwdec, hwdec);
@@ -547,7 +564,23 @@ public class RtspPlayer {
             Uri uri = Uri.parse(playUrl);
             MediaItem mediaItem = MediaItem.fromUri(uri);
             String scheme = uri.getScheme();
-            if ("rtsp".equalsIgnoreCase(scheme) || "rtsps".equalsIgnoreCase(scheme)) {
+            boolean isRtspScheme = "rtsp".equalsIgnoreCase(scheme) || "rtsps".equalsIgnoreCase(scheme);
+
+            // H.265 摄像头常带损坏的 sprop 参数，直连会让 ExoPlayer 在解析 SPS 时数组越界闪退
+            // （异常抛在播放器自己的 HandlerThread 上，应用层接不住），因此先预检 SDP 再决定链路
+            if (isRtspScheme && playUrlOverride == null) {
+                if (!rtspPreflightDone || !safeEquals(rtspPreflightUrl, inputUrl)) {
+                    runPreflightThenStart();
+                    return;
+                }
+                if (rtspSdpIsH265) {
+                    writeBreadcrumb("H.265 流改走兼容代理（净化损坏的 sprop 参数，避免闪退）");
+                    startCompatProxyAsync();
+                    return;
+                }
+            }
+
+            if (isRtspScheme) {
                 // 相机预览默认走 TCP 内联传输（UDP 常被 NAT/防火墙拦截）
                 RtspMediaSource rtspSource = new RtspMediaSource.Factory()
                         .setForceUseRtpTcp(forceTcpTransport)
@@ -836,7 +869,12 @@ public class RtspPlayer {
         if (exoPlayer == null) return false;
         proxyRetried = true;
         writeBreadcrumb("启用本地 RTSP 兼容代理（改写不合规的 Public / Content-Base 头）");
+        startCompatProxyAsync();
+        return true;
+    }
 
+    /** 启动兼容代理，把播放地址切到 127.0.0.1 后重新开始播放 */
+    private void startCompatProxyAsync() {
         final String normalized = com.networktool.app.util.RtspDiagnostics.normalizeUrl(inputUrl);
         new Thread(() -> {
             RtspCompatProxy proxy = null;
@@ -874,7 +912,48 @@ public class RtspPlayer {
                 }
             }
         }, "rtsp-compat-proxy").start();
-        return true;
+    }
+
+    /**
+     * 播放前预检 SDP，判断是否需要走兼容代理。
+     *
+     * <p>H.265 摄像头若 sprop-vps/sps/pps 数据损坏，ExoPlayer 解析 SPS 时会数组越界，
+     * 且异常抛在播放器自己的 HandlerThread 上，应用层无法捕获（表现为一播就闪退）。
+     * 因此这类地址要在建连前就切到兼容代理，由代理把损坏的 sprop 参数去掉。</p>
+     */
+    private void runPreflightThenStart() {
+        if (rtspPreflightRunning || released) return;
+        rtspPreflightRunning = true;
+        writeBreadcrumb("播放前预检 SDP（判断是否需要兼容代理）");
+        new Thread(() -> {
+            boolean h265 = false;
+            boolean preflightFailed = false;
+            try {
+                String sdp = com.networktool.app.util.RtspDiagnostics.sdpSummary(inputUrl, 2500);
+                String upper = sdp == null ? "" : sdp.toUpperCase(java.util.Locale.ROOT);
+                preflightFailed = upper.isEmpty();
+                h265 = upper.contains("H265") || upper.contains("HEVC");
+            } catch (Throwable t) {
+                preflightFailed = true;
+            }
+            // 预检失败时也走代理：代理只是透传，最坏情况与直连等价，但能挡住未知的报文问题
+            boolean useProxy = h265 || preflightFailed;
+            rtspPreflightDone = true;
+            rtspPreflightUrl = inputUrl;
+            rtspSdpIsH265 = useProxy;
+            rtspPreflightRunning = false;
+            writeBreadcrumb(useProxy
+                    ? (h265 ? "预检结果：H.265 流，走兼容代理（净化 sprop）"
+                    : "预检未取到 SDP，按兼容代理处理")
+                    : "预检结果：非 H.265，直连播放");
+            mainHandler.post(() -> {
+                if (released || exoPlayer == null) return;
+                try {
+                    startInternal();
+                } catch (Throwable ignored) {
+                }
+            });
+        }, "rtsp-preflight").start();
     }
 
     /** 关闭本地 RTSP 兼容代理 */
@@ -889,11 +968,12 @@ public class RtspPlayer {
     }
 
     /** 播放失败后发一次 RTSP DESCRIBE 预检，把失败原因写进面包屑（子线程） */
-    private void probeRtspCause() {
+    private void probeRtspCause(boolean willRetry) {
         final String url = currentUrl;
         if (url == null || released) return;
         String lower = url.toLowerCase(java.util.Locale.ROOT);
         if (!lower.startsWith("rtsp://") && !lower.startsWith("rtsps://")) return;
+        final int generation = probeGeneration;
         new Thread(() -> {
             try {
                 String result = com.networktool.app.util.RtspDiagnostics.describe(url, 2500);
@@ -907,6 +987,10 @@ public class RtspPlayer {
                 String raw = com.networktool.app.util.RtspDiagnostics.rawHead(url, 2500);
                 if (raw != null && !raw.isEmpty()) {
                     writeBreadcrumb("原始响应: " + raw);
+                }
+                // 已经安排重试、或重试后已出画、或已经换了地址：只保留日志，不再打扰界面
+                if (willRetry || generation != probeGeneration || prepared) {
+                    return;
                 }
                 // 直接把原因反馈给界面，方便用户补账号密码或检查端口
                 notifyEvent(EVENT_DIAGNOSTIC, result);
