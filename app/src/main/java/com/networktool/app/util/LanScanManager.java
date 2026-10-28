@@ -2054,8 +2054,10 @@ public class LanScanManager {
                     MdnsDevice mdns = parseMdns(receiveBuffer, response.getLength());
                     String hostname = mdns != null ? mdns.bestTitle() : null;
                     Integer mdnsPort = mdns != null ? mdns.port : null;
+                    String mdnsMacV6 = mdns != null ? mdns.mac : null;
                     DebugLogger.logDiscovery("mDNS_IPv6", "收到响应", senderIp + " | 设备名="
                             + (hostname != null ? hostname : "null")
+                            + (mdnsMacV6 != null ? " | MAC=" + mdnsMacV6 : "")
                             + (mdnsPort != null ? " | 端口=" + mdnsPort : ""));
                     DebugLogger.logBroadcast("mDNS_IPv6", senderIp,
                             "设备名=" + (hostname != null ? hostname : "(无)") + "\n原始报文(长度="
@@ -2064,7 +2066,7 @@ public class LanScanManager {
                     if (hostname != null) {
                         // 标题就是设备名本身，不加分类前缀（IPv6 由列表里的角标体现）
                         addDeviceWithPriority(senderIp, hostname, null,
-                                DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS);
+                                DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS, mdnsMacV6);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -2117,19 +2119,23 @@ public class LanScanManager {
                     MdnsDevice mdns = parseMdns(receiveBuffer, response.getLength());
                     String hostname = mdns != null ? mdns.bestTitle() : null;
                     Integer mdnsPort = mdns != null ? mdns.port : null;
+                    String mdnsMac = mdns != null ? mdns.mac : null;
                     DebugLogger.logDiscovery("mDNS", "收到响应", senderIp + " | 设备名=" + (hostname != null ? hostname : "null")
                             + (mdns != null && mdns.hostname != null ? " | 主机名=" + mdns.hostname : "")
+                            + (mdnsMac != null ? " | MAC=" + mdnsMac : "")
                             + (mdnsPort != null ? " | 端口=" + mdnsPort : ""));
                     // 记录原始 mDNS 报文（十六进制+ASCII），供运行日志核对解析结果
                     DebugLogger.logBroadcast("mDNS", senderIp,
                             "设备名=" + (hostname != null ? hostname : "(无)")
+                                    + (mdnsMac != null ? " | MAC=" + mdnsMac : "")
                                     + (mdnsPort != null ? " | 服务端口=" + mdnsPort : "")
                                     + "\n原始报文(长度=" + response.getLength() + "):\n"
                                     + RuntimeLogStore.bytesToDisplay(receiveBuffer, response.getLength()));
                     if (hostname != null) {
-                        // 标题就用设备自己的名字，不加任何分类前缀
+                        // 标题就用设备自己的名字，不加任何分类前缀；
+                        // MAC 从 TXT 里带出来，列表里才能显示 MAC 而不是只有 IP
                         addDeviceWithPriority(senderIp, hostname, null,
-                            DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS, null, mdnsPort);
+                            DeviceInfo.ICON_COMPUTER, PRIORITY_MDNS, mdnsMac, mdnsPort);
                     }
                 } catch (SocketTimeoutException e) {
                     break;
@@ -2176,9 +2182,18 @@ public class LanScanManager {
         String hostname;
         /** SRV 记录里的服务端口 */
         Integer port;
+        /** TXT 记录里的 mac=，统一成 38:AF:29:05:6E:F7 格式 */
+        String mac;
+        /** TXT 记录里的 host=，很多 IoT 设备只在这里给名字 */
+        String txtHost;
+        /** TXT 记录里的 model= / md= / ty= 等型号字段 */
+        String model;
 
         String bestTitle() {
-            return instanceName != null ? instanceName : hostname;
+            if (instanceName != null) return instanceName;
+            if (model != null) return model;
+            if (txtHost != null && !txtHost.isEmpty()) return txtHost;
+            return hostname;
         }
     }
 
@@ -2246,10 +2261,11 @@ public class LanScanManager {
                         }
                         break;
                     }
-                    case 16: { // TXT：owner 同样是服务实例名
+                    case 16: { // TXT：owner 同样是服务实例名，RDATA 是若干 key=value
                         if (device.instanceName == null) {
                             device.instanceName = mdnsTitle(owner.name);
                         }
+                        parseMdnsTxt(data, rdataOffset, rdLength, device);
                         break;
                     }
                     case 1:   // A
@@ -2271,6 +2287,67 @@ public class LanScanManager {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 解析 TXT 记录里的键值对。
+     *
+     * <p>小米/华为这类 IoT 设备的 {@code _http._tcp} 通告常把硬件信息塞进 TXT，
+     * 例如 {@code host=4C058C5YAG4CC1A / mac=38:af:29:05:6e:f7 / ip=192.168.2.117}。
+     * 以前整段内容被直接丢掉，设备列表里就只剩 IP，既没有 MAC 也没有名字。</p>
+     */
+    private static void parseMdnsTxt(byte[] data, int offset, int length, MdnsDevice device) {
+        int start = offset;
+        int end = Math.min(offset + length, data.length);
+        int cursor = start;
+        while (cursor < end) {
+            int len = data[cursor] & 0xFF;
+            cursor++;
+            if (len == 0) continue;
+            if (cursor + len > end) break;
+            String entry = new String(data, cursor, len, java.nio.charset.StandardCharsets.UTF_8);
+            cursor += len;
+            int eq = entry.indexOf('=');
+            if (eq <= 0) continue;
+            String key = entry.substring(0, eq).trim().toLowerCase(java.util.Locale.ROOT);
+            String value = entry.substring(eq + 1).trim();
+            if (value.isEmpty()) continue;
+            switch (key) {
+                case "mac": {
+                    String mac = normalizeMac(value);
+                    if (mac != null && device.mac == null) device.mac = mac;
+                    break;
+                }
+                case "host":
+                case "hostname":
+                case "fn":
+                    if (device.txtHost == null) device.txtHost = value;
+                    break;
+                case "model":
+                case "md":
+                case "product":
+                case "ty":
+                case "name": {
+                    if (device.model == null) device.model = value;
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+
+    /** 把 38:af:29:05:6e:f7 / 38AF29056EF7 之类写法统一成大写冒号格式 */
+    private static String normalizeMac(String raw) {
+        if (raw == null) return null;
+        String hex = raw.replaceAll("[^0-9a-fA-F]", "");
+        if (hex.length() != 12) return null;
+        StringBuilder sb = new StringBuilder(17);
+        for (int i = 0; i < 12; i += 2) {
+            if (i > 0) sb.append(':');
+            sb.append(hex.substring(i, i + 2).toUpperCase(java.util.Locale.US));
+        }
+        return sb.toString();
     }
 
     private static int readU16(byte[] data, int offset) {
