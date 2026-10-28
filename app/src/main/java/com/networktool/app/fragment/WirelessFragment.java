@@ -637,6 +637,10 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
                             ThemeManager.getOnSurfaceVariantColor(requireContext())),
                     start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
+        if (sb.length() == 0) {
+            // 扫描完一个网络都没发现时标题栏不能空着，给一句默认主标题
+            sb.append("未发现网络");
+        }
         title.setText(sb);
     }
 
