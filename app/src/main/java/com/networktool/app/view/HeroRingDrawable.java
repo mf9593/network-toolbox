@@ -26,8 +26,8 @@ import java.util.Random;
  */
 public class HeroRingDrawable extends Drawable {
 
-    /** 一圈动画时长（星环绕转一圈的时间，慢一点更耐看） */
-    private static final long LOOP_DURATION_MS = 36000L;
+    /** 一圈动画时长（星空绕右上角转一圈的时间：80 秒 ≈ 4.5°/s） */
+    private static final long LOOP_DURATION_MS = 80000L;
     /**
      * 星点数量。
      *
@@ -70,7 +70,7 @@ public class HeroRingDrawable extends Drawable {
     private static final int[] RING_ALPHAS = {0x8C, 0x78, 0x62, 0x4A, 0x34};
     private static final float[] RING_SWEEPS = {66f, 58f, 48f, 38f, 28f};
     /** 转速（每圈动画转多少整圈，负数=反向），必须是整数，否则接缝处会跳 */
-    private static final float[] RING_CYCLES = {1f, -2f, 1f, -1f, 1f};
+    private static final float[] RING_CYCLES = {5f, -10f, 5f, -5f, 5f};
     private static final float[] RING_STROKES = {3.4f, 3.0f, 2.6f, 2.2f, 1.9f};
     private static final float[] RING_ORIGINS = {10f, 92f, 168f, 246f, 318f};
 
@@ -106,7 +106,7 @@ public class HeroRingDrawable extends Drawable {
             starRadius[i] = (0.30f + random.nextFloat() * 0.55f) * density;
             starAlpha[i] = 0.16f + random.nextFloat() * 0.64f;
             // 闪烁必须是整数圈，否则循环接缝处亮度会突然一跳
-            starSpeed[i] = 3 + (int) (random.nextFloat() * 4f);
+            starSpeed[i] = 10 + (int) (random.nextFloat() * 10f);
             starPhase[i] = random.nextFloat();
             starBright[i] = i % BRIGHT_STAR_INTERVAL == 0;
             if (starBright[i]) {
@@ -164,7 +164,7 @@ public class HeroRingDrawable extends Drawable {
         for (int i = 0; i < STAR_COUNT; i++) {
             // 半径带 ±5% 的整数圈脉动，远近层次更自然
             float radius = unit * starDist[i]
-                    * (1f + 0.05f * (float) Math.sin(2 * Math.PI * (phase * 2 + starPhase[i])));
+                    * (1f + 0.05f * (float) Math.sin(2 * Math.PI * (phase * 8 + starPhase[i])));
             // 初始角度叠加整圈旋转
             float dirX = starCos[i] * cosSpin - starSin[i] * sinSpin;
             float dirY = starSin[i] * cosSpin + starCos[i] * sinSpin;
@@ -221,7 +221,7 @@ public class HeroRingDrawable extends Drawable {
 
         // 绕环运行的小星 + 一圈柔光
         float orbitRadius = base * RING_SCALES[1];
-        double theta = 2 * Math.PI * phase;
+        double theta = 2 * Math.PI * phase * 4;
         float px = cx + (float) (orbitRadius * Math.cos(theta));
         float py = cy + (float) (orbitRadius * Math.sin(theta));
         starPaint.setAlpha(0x2A);
