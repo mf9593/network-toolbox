@@ -149,8 +149,10 @@ public class InfoFragment extends Fragment {
     private static final long HOME_REFRESH_INTERVAL_MS = 5000L;
     /** 上一次渲染的设备列表指纹，内容没变就不重建视图，避免闪烁 */
     private String homeDevicesSignature;
-    /** 延迟测量是否进行中，避免定时器叠加 ping 进程 */
+    /** 延迟测量是否进行中，避免定时器叠加测速任务 */
     private boolean latencyMeasuring;
+    /** 最近一次测到的延迟（-1 表示还没测到过） */
+    private long lastLatencyMs = -1L;
 
     private final List<Integer> rssiHistory = new ArrayList<>();
     private final Runnable rssiTimer = new Runnable() {
@@ -320,7 +322,7 @@ public class InfoFragment extends Fragment {
         if (metricSpeed != null) metricSpeed.setOnClickListener(v -> copyText(textOf(linkSpeedValue), "协商速率"));
     }
 
-    /** ping 一次网关估算延迟（子线程执行，结果回主线程） */
+    /** 测一次网关延迟（子线程执行，结果回主线程） */
     private void measureGatewayLatency() {
         if (statLatencyValue == null || !isAdded() || latencyMeasuring) return;
         String gateway = (currentGateway != null && !currentGateway.isEmpty())
@@ -330,40 +332,81 @@ public class InfoFragment extends Fragment {
             return;
         }
         latencyMeasuring = true;
-        statLatencyValue.setText("…");
+        // 只有还没测到过数值时才显示占位符。
+        // 以前每轮都先写「…」再写数字，5 秒闪一次，看着就是「一卡一卡」。
+        if (lastLatencyMs < 0) {
+            statLatencyValue.setText("…");
+        }
         new Thread(() -> {
-            long cost = -1;
-            try {
-                // 取 ping 输出里的 time=xx ms，避免把进程启动开销也算进延迟
-                Process process = new ProcessBuilder("ping", "-c", "1", "-W", "1", gateway)
-                        .redirectErrorStream(true).start();
-                java.io.BufferedReader reader = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(process.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    java.util.regex.Matcher matcher = java.util.regex.Pattern
-                            .compile("time[=<]\\s*([0-9.]+)").matcher(line);
-                    if (matcher.find()) {
-                        try {
-                            cost = Math.round(Double.parseDouble(matcher.group(1)));
-                        } catch (Exception ignored) {
-                        }
-                        break;
-                    }
-                }
-                process.waitFor();
-                process.destroy();
-            } catch (Exception ignored) {
-            }
-            final long result = cost;
+            final long cost = probeLatency(gateway);
             latencyMeasuring = false;
             if (!isAdded()) return;
             mainHandler.post(() -> {
-                if (statLatencyValue != null) {
-                    statLatencyValue.setText(result >= 0 ? result + " ms" : "--");
+                if (statLatencyValue == null) return;
+                if (cost >= 0) {
+                    lastLatencyMs = cost;
+                    String text = cost + " ms";
+                    if (!text.contentEquals(statLatencyValue.getText())) {
+                        statLatencyValue.setText(text);
+                    }
+                } else if (lastLatencyMs < 0) {
+                    // 从没测到过就显示 --；测到过则保留上次数值，避免数字忽有忽无
+                    statLatencyValue.setText("--");
                 }
             });
         }, "home-latency").start();
+    }
+
+    /**
+     * 测网关往返时延。
+     *
+     * <p>先做 TCP 握手：握手成功、或者端口被拒绝（返回很快）都说明主机在线，
+     * 握手耗时就是延迟；这样不用反复启动 ping 进程，刷新时不会掉帧。
+     * 所有端口都无响应才退回 ping 命令。</p>
+     */
+    private long probeLatency(String host) {
+        int[] ports = {80, 443, 8080, 53, 22};
+        for (int port : ports) {
+            long startNs = System.nanoTime();
+            try (java.net.Socket socket = new java.net.Socket()) {
+                socket.connect(new java.net.InetSocketAddress(host, port), 400);
+                return Math.max(1, (System.nanoTime() - startNs) / 1_000_000L);
+            } catch (java.net.ConnectException refused) {
+                return Math.max(1, (System.nanoTime() - startNs) / 1_000_000L);
+            } catch (java.net.SocketTimeoutException timeout) {
+                // 这个端口没响应，换下一个
+            } catch (Exception ignored) {
+            }
+        }
+        return pingLatency(host);
+    }
+
+    /** 兜底：ping 一次（毫秒，失败返回 -1） */
+    private long pingLatency(String host) {
+        try {
+            Process process = new ProcessBuilder("ping", "-c", "1", "-W", "1", host)
+                    .redirectErrorStream(true).start();
+            long cost = -1;
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("time[=<]\\s*([0-9.]+)").matcher(line);
+                if (matcher.find()) {
+                    try {
+                        cost = Math.round(Double.parseDouble(matcher.group(1)));
+                    } catch (Exception ignored) {
+                    }
+                    break;
+                }
+            }
+            process.waitFor();
+            process.destroy();
+            return cost;
+        } catch (Exception ignored) {
+            return -1;
+        }
     }
 
     /** 主页「局域网设备」：读取上次扫描结果，最多展示 3 条 */
@@ -381,12 +424,34 @@ public class InfoFragment extends Fragment {
             }
             // 换过网络的话旧记录里的设备已经不在同一网段，直接过滤掉，避免看起来像缓存
             devices = filterToCurrentSubnet(devices);
+            // 顺序固定按 IP 排：扫描是边扫边加设备的，顺序一变整块就要重绘
+            try {
+                devices.sort((left, right) ->
+                        Long.compare(ipSortKey(left.getIp()), ipSortKey(right.getIp())));
+            } catch (Exception ignored) {
+            }
+
+            // 数量每次都刷：设备页扫到新设备时这里立刻跟着变，
+            // 不受下面「内容没变就不重绘」的影响
+            if (statDevicesValue != null) {
+                String countText = devices.isEmpty() ? "--" : devices.size() + " 台";
+                if (!countText.contentEquals(statDevicesValue.getText())) {
+                    statDevicesValue.setText(countText);
+                }
+            }
+
+            // 指纹只算真正要渲染的内容（前 3 条 + 空/兜底状态），
+            // 第 4 台之后的变化不会引起重绘，刷新时就不会闪
             StringBuilder signature = new StringBuilder();
-            for (com.networktool.app.model.DeviceInfo device : devices) {
+            int visibleCount = Math.min(3, devices.size());
+            for (int i = 0; i < visibleCount; i++) {
+                com.networktool.app.model.DeviceInfo device = devices.get(i);
                 signature.append(device.getIp()).append('#')
                         .append(device.getTitle()).append('#')
                         .append(device.getDescription()).append(';');
             }
+            signature.append("empty=").append(devices.isEmpty())
+                     .append(";last=").append(fromLastScan);
             String currentSignature = signature.toString();
             if (currentSignature.equals(homeDevicesSignature)
                     && homeDeviceContainer.getChildCount() > 0) {
@@ -394,9 +459,6 @@ public class InfoFragment extends Fragment {
             }
             homeDevicesSignature = currentSignature;
             homeDeviceContainer.removeAllViews();
-            if (statDevicesValue != null) {
-                statDevicesValue.setText(devices.isEmpty() ? "--" : devices.size() + " 台");
-            }
             if (devices.isEmpty()) {
                 TextView hint = new TextView(requireContext());
                 hint.setText("还没有扫描记录，点「全部」去扫描局域网设备");
@@ -407,8 +469,7 @@ public class InfoFragment extends Fragment {
                 homeDeviceContainer.addView(hint);
                 return;
             }
-            int count = Math.min(3, devices.size());
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < visibleCount; i++) {
                 addHomeDeviceRow(devices.get(i));
             }
             if (fromLastScan) {
@@ -422,6 +483,22 @@ public class InfoFragment extends Fragment {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** 把 IP 转成可比较的数值，用于主页列表稳定排序 */
+    private static long ipSortKey(String ip) {
+        if (ip == null) return Long.MAX_VALUE;
+        String[] parts = ip.split("\\.");
+        if (parts.length != 4) return Long.MAX_VALUE;
+        long key = 0L;
+        for (String part : parts) {
+            try {
+                key = (key << 8) | (Integer.parseInt(part.trim()) & 0xFF);
+            } catch (Exception e) {
+                return Long.MAX_VALUE;
+            }
+        }
+        return key;
     }
 
     /**

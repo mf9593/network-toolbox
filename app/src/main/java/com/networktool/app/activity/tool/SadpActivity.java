@@ -308,9 +308,14 @@ public class SadpActivity extends AppCompatActivity {
             DatagramSocket socket = null;
             try {
                 // 使用临时 UDP 端口发送多播探测，设备会以单播响应回来源端口
-                socket = new DatagramSocket();
-                socket.setBroadcast(true);
-                socket.setSoTimeout(500);
+                // 用 MulticastSocket（普通 DatagramSocket 没有 setTimeToLive），
+                // 把组播 TTL 抬到 4：同网段必然能收到；家用路由器如果开了
+                // IGMP 代理 / 组播转发，还能穿过一层三层设备到相邻网段。
+                java.net.MulticastSocket multicastSocket = new java.net.MulticastSocket();
+                multicastSocket.setTimeToLive(4);
+                multicastSocket.setBroadcast(true);
+                multicastSocket.setSoTimeout(500);
+                socket = multicastSocket;
                 InetAddress multicastGroup = InetAddress.getByName("239.255.255.250");
                 
                 // 构建SADP探测消息（XML格式）
