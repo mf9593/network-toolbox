@@ -1055,6 +1055,40 @@ public class RtspPlayerActivity extends AppCompatActivity {
     /**
      * 进入全屏（横屏）
      */
+    /**
+     * 转屏（竖屏 ⇄ 全屏横屏）后重新按比例排版。
+     *
+     * <p>本页在清单里声明了 {@code configChanges="orientation|screenSize"}，
+     * 转屏时 Activity 不会重建，容器和视频区尺寸却变了。不在这一步重算，
+     * 画面就会一直沿用它转屏前的比例，必须手动点一次右下角的比例按钮才恢复。</p>
+     */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (videoView == null) return;
+        videoView.post(() -> {
+            if (videoView == null) return;
+            // 1) 视图按新尺寸重新摆一次
+            applyAspectMode();
+            videoView.requestLayout();
+            // 2) 解码器的缩放模式也跟着重贴（Surface 重建后会被重置成默认值）
+            if (nodePlayer != null) {
+                nodePlayer.setVideoScalingCrop(ASPECT_MODES[aspectModeIndex]
+                        != RtspPlayerView.UIViewContentMode.ScaleAspectFit);
+            }
+            // 3) 沉浸标记在转屏后可能被系统清掉，重贴一次
+            if (isFullscreen) {
+                getWindow().getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            }
+        });
+    }
+
     private void enterFullscreen() {
         isFullscreen = true;
         

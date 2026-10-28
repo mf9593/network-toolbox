@@ -411,6 +411,15 @@ public class OnvifActivity extends AppCompatActivity {
      * - Activity销毁时立即终止线程池，防止内存泄漏
      * - 所有UI更新都通过runOnUiThreadSafe检查Activity状态
      */
+    /**
+     * 组装失败提示：设备回的具体原因（SOAP Fault / 认证失败）优先，
+     * 没有就退回一句通用猜测，避免只提示「可能不支持」却查不出原因。
+     */
+    private String reasonSuffix(String fallback) {
+        String reason = OnvifUtil.getLastErrorMessage();
+        return (reason == null || reason.isEmpty()) ? fallback : reason;
+    }
+
     private void startScan() {
         // 防止重复扫描
         if (isScanning) return;
@@ -920,7 +929,8 @@ public class OnvifActivity extends AppCompatActivity {
                 if (osdResponse == null || videoSourceResponse == null) {
                     mainHandler.post(() -> {
                         loadingDialog.dismiss();
-                        Toast.makeText(this, "获取OSD配置失败，设备可能不支持OSD", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "获取 OSD 配置失败：" + reasonSuffix("该设备可能不支持 OSD"),
+                                Toast.LENGTH_SHORT).show();
                     });
                     return;
                 }
@@ -1450,7 +1460,8 @@ public class OnvifActivity extends AppCompatActivity {
                 if (profilesResponse == null || profilesResponse.isEmpty()) {
                     mainHandler.post(() -> {
                         scanStatusText.setText("获取视频配置失败");
-                        Toast.makeText(this, "获取视频配置失败", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "获取视频配置失败：" + reasonSuffix("该设备可能不支持该操作"),
+                                Toast.LENGTH_SHORT).show();
                     });
                     return;
                 }

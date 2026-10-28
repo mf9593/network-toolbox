@@ -101,6 +101,12 @@ public class RtspPlayer {
     private ExoPlayer exoPlayer;
     /* 解码器是否按「裁剪铺满」输出（跟随视图的比例模式） */
     private boolean videoScalingCrop;
+    /* 是否禁用音频轨（部分 IPC 在 SDP 里报音频却一个包都不发，会把播放卡在首帧） */
+    private boolean audioDisabled;
+    /* 音频兜底是否已重试过，避免反复重启 */
+    private boolean audioDisabledRetried;
+    /* 首帧后仍未就绪的看门狗 */
+    private Runnable stallWatchdogRunnable;
     /* 网络带宽估算（用于界面显示实时码率） */
     private com.google.android.exoplayer2.upstream.BandwidthMeter bandwidthMeter;
 
@@ -121,6 +127,7 @@ public class RtspPlayer {
                 notifyEvent(EVENT_CONNECTING, "正在连接...");
             } else if (playbackState == Player.STATE_READY) {
                 cancelRenderTimeout();
+                cancelStallWatchdog();
                 // 诊断：检查播放器状态
                 try {
                     boolean playing = exoPlayer.isPlaying();
@@ -144,6 +151,7 @@ public class RtspPlayer {
         @Override
         public void onRenderedFirstFrame() {
             if (released) return;
+            scheduleStallWatchdog();
             writeBreadcrumb("首帧已渲染（画面确认输出）"
                     + (compatProxy != null
                     ? "，兼容代理已改写 " + compatProxy.getRewrittenHeaders()
@@ -468,6 +476,8 @@ public class RtspPlayer {
             rtspPreflightUrl = null;
             rtspSdpIsH265 = false;
             rtspPreflightRunning = false;
+            audioDisabled = false;
+            audioDisabledRetried = false;
             closeCompatProxy();
         }
         // 已在播放同一地址则跳过
@@ -703,18 +713,71 @@ public class RtspPlayer {
         exoPlayer.addListener(playerListener);
         // 实例重建后解码器的缩放模式会回到默认值，这里按当前视图模式重新贴一次
         applyVideoScalingMode();
+        // 上一轮卡在首帧时禁过音频，这次重建继续禁用
+        if (audioDisabled) {
+            try {
+                exoPlayer.setTrackSelectionParameters(
+                        new com.google.android.exoplayer2.trackselection.TrackSelectionParameters.Builder()
+                                .setTrackTypeDisabled(
+                                        com.google.android.exoplayer2.C.TRACK_TYPE_AUDIO, true)
+                                .build());
+                writeBreadcrumb("音频轨已禁用（上一轮卡在首帧，只用视频继续播）");
+            } catch (Throwable t) {
+                writeBreadcrumb("禁用音频轨失败: " + t.getMessage());
+            }
+        }
         writeBreadcrumb("ExoPlayer 已创建并初始化");
     }
 
     /** 释放 ExoPlayer 实例 */
     private void releaseExoPlayer() {
         if (exoPlayer == null) return;
+        cancelStallWatchdog();
         writeBreadcrumb("release: removeListener");
         try { exoPlayer.removeListener(playerListener); } catch (Throwable ignored) {}
         writeBreadcrumb("release: release");
         try { exoPlayer.release(); } catch (Throwable ignored) {}
         writeBreadcrumb("release: 完成");
         exoPlayer = null;
+    }
+
+    /* ==================== 首帧后卡住的兜底 ==================== */
+
+    /**
+     * 首帧出来了却迟迟进不了 READY 的兜底。
+     *
+     * <p>不少国产 IPC 在 SDP 里声明了音频轨（g711），实际一个音频包都不发，
+     * 播放器就一直停在 buffering：画面定格在第一帧、状态永远到不了 READY。
+     * 这里在首帧后等 4 秒，还没就绪就禁用音频轨重来一次（只重试一次）。</p>
+     */
+    private void scheduleStallWatchdog() {
+        cancelStallWatchdog();
+        if (audioDisabled || audioDisabledRetried) return;
+        stallWatchdogRunnable = () -> {
+            stallWatchdogRunnable = null;
+            if (released || paused) return;
+            try {
+                if (exoPlayer != null
+                        && exoPlayer.getPlaybackState() == Player.STATE_READY) {
+                    return;
+                }
+            } catch (Throwable ignored) {
+            }
+            if (audioDisabledRetried) return;
+            audioDisabledRetried = true;
+            audioDisabled = true;
+            writeBreadcrumb("首帧后 4 秒仍未就绪：判定音频轨无数据，禁用音频重试");
+            prepared = false;
+            startInternal();
+        };
+        mainHandler.postDelayed(stallWatchdogRunnable, 4000);
+    }
+
+    private void cancelStallWatchdog() {
+        if (stallWatchdogRunnable != null) {
+            mainHandler.removeCallbacks(stallWatchdogRunnable);
+            stallWatchdogRunnable = null;
+        }
     }
 
     /* ==================== 渲染超时兜底 ==================== */

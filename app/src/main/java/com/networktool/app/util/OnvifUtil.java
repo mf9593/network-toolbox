@@ -51,6 +51,48 @@ public class OnvifUtil {
     // 设备服务地址 -> 媒体服务地址缓存
     private static final ConcurrentHashMap<String, String> MEDIA_SERVICE_URLS = new ConcurrentHashMap<>();
 
+    /** 最近一次 SOAP 请求的失败原因（供界面提示；成功时清空） */
+    private static volatile String lastErrorMessage;
+
+    /** 取最近一次 SOAP 失败原因，没有则返回 null */
+    public static String getLastErrorMessage() {
+        return lastErrorMessage;
+    }
+
+    /** 从 SOAP Fault 响应里提炼一句能看懂的原因 */
+    private static String describeFault(int httpCode, String body) {
+        String reason = null;
+        String subCode = null;
+        if (body != null && !body.isEmpty()) {
+            java.util.regex.Matcher textMatcher = java.util.regex.Pattern
+                    .compile("<(?:[\\w]+:)?Text[^>]*>([^<]+)</",
+                            java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(body);
+            if (textMatcher.find()) reason = textMatcher.group(1).trim();
+            // SOAP Fault 里第一个 <Value> 是 s:Sender / s:Receiver，
+            // 真正说明原因的是它后面那个带命名空间的子代码（如 ter:ActionNotSupported）
+            java.util.regex.Matcher codeMatcher = java.util.regex.Pattern
+                    .compile("<(?:[\\w]+:)?Value[^>]*>([^<]+)</",
+                            java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(body);
+            while (codeMatcher.find()) {
+                String candidate = codeMatcher.group(1).trim();
+                if (candidate.isEmpty()) continue;
+                if (subCode == null) subCode = candidate;
+                String lower = candidate.toLowerCase(java.util.Locale.US);
+                // 跳过 s:Sender / s:Receiver 这类通用代码，取真正的子代码
+                if (!lower.endsWith("sender") && !lower.endsWith("receiver")) {
+                    subCode = candidate;
+                    break;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder("HTTP ").append(httpCode);
+        if (subCode != null && !subCode.isEmpty()) sb.append(" · ").append(subCode);
+        if (reason != null && !reason.isEmpty()) sb.append(" · ").append(reason);
+        return sb.toString();
+    }
+
     // ========== 设备发现 ==========
     public static List<OnvifDevice> discoverDevices(Context context) {
         List<OnvifDevice> devices = new ArrayList<>();
@@ -1552,6 +1594,7 @@ public class OnvifUtil {
 
             try (Response response = CLIENT.newCall(request).execute()) {
                 if (response.isSuccessful()) {
+                    lastErrorMessage = null;
                     return response.body() != null ? response.body().string() : "";
                 } else if (response.code() == 401 && username != null && password != null) {
                     // 尝试HTTP Digest认证
@@ -1586,9 +1629,19 @@ public class OnvifUtil {
                         }
                     }
                     Log.w(TAG, "所有认证方式均失败 (retryCount=" + retryCount + ")");
+                    lastErrorMessage = "认证失败：账号或密码不被设备接受";
                     return null;
                 } else {
-                    Log.w(TAG, "SOAP请求失败: " + response.code());
+                    // 设备回了 SOAP Fault（多半是它根本不支持这个操作），
+                    // 把原因留下来，界面才能提示到底是「不支持」还是「参数错」
+                    String faultBody = "";
+                    try {
+                        faultBody = response.body() != null ? response.body().string() : "";
+                    } catch (Exception ignored) {
+                    }
+                    lastErrorMessage = describeFault(response.code(), faultBody);
+                    Log.w(TAG, "SOAP请求失败: " + response.code() + " "
+                            + lastErrorMessage);
                     return null;
                 }
             }
