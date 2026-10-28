@@ -17,8 +17,9 @@ import java.util.Random;
  * 主页 Hero 卡片背景：整片星空 + 右侧旋转星环 + 主题色渐变。
  *
  * <p>星空是均匀铺满整张卡片的星点（小星为主、每隔几颗来一颗带柔光的亮星），
- * 整片星空<b>以右上角为圆心</b>缓慢自转（和星环同一个圆心），每颗星转速略有差异产生视差，
- * 同时按自己的速度与相位呼吸闪烁，
+ * 整片星空<b>以右上角为圆心</b>缓慢往复微旋（和星环同一个圆心，方向一致），
+ * 每颗星幅度略有差异产生视差，同时按自己的速度与相位呼吸闪烁，
+ * 所有周期量都取整数圈，循环衔接处不会跳变，
  * 形成「繁星点点」的效果。颜色全部跟随主题色，不写死。动画由 {@link ValueAnimator}
  * 驱动，随可见性自动启停。</p>
  */
@@ -28,8 +29,14 @@ public class HeroRingDrawable extends Drawable {
     private static final long LOOP_DURATION_MS = 16000L;
     /** 星点数量（繁星点点，太少了看不出星空） */
     private static final int STAR_COUNT = 150;
-    /** 星空每圈动画自转多少圈（以右上角为圆心，和星环同一个中心） */
-    private static final float STAR_ROTATION_TURNS = 0.14f;
+    /**
+     * 星空绕右上角的微旋幅度（度）。
+     *
+     * <p>必须做成「一圈动画往复一次」的正弦摆动：星环圆心在卡片右上角，
+     * 卡片只覆盖它的左下两个象限，整片星空真转满 360° 会有一大半时间飞出画面；
+     * 而正弦在相位 0 和 1 处取值与斜率都相等，循环衔接处不会出现跳变（重置感）。</p>
+     */
+    private static final float STAR_SWING_DEG = 16f;
     /** 每隔几颗星安排一颗带柔光的亮星 */
     private static final int BRIGHT_STAR_INTERVAL = 7;
 
@@ -58,8 +65,12 @@ public class HeroRingDrawable extends Drawable {
     private static final float[] RING_SCALES = {0.55f, 0.78f, 1.02f, 1.28f, 1.56f};
     private static final int[] RING_ALPHAS = {0x8C, 0x78, 0x62, 0x4A, 0x34};
     private static final float[] RING_SWEEPS = {66f, 58f, 48f, 38f, 28f};
-    /** 转速：第二道保持反向（原来的手感），其余同向 */
-    private static final float[] RING_CYCLES = {1.25f, -1.75f, 0.86f, 0.70f, 0.56f};
+    /**
+     * 转速（每圈动画转多少整圈，负数=反向）。
+     *
+     * <p>必须是整数：非整数转速在一圈结束时会跳回起点，看起来就是「动画重置」。</p>
+     */
+    private static final float[] RING_CYCLES = {1f, -2f, 1f, -1f, 1f};
     private static final float[] RING_STROKES = {3.4f, 3.0f, 2.6f, 2.2f, 1.9f};
     private static final float[] RING_ORIGINS = {10f, 92f, 168f, 246f, 318f};
 
@@ -85,13 +96,14 @@ public class HeroRingDrawable extends Drawable {
     private void initStars() {
         Random random = new Random(20260210L);
         for (int i = 0; i < STAR_COUNT; i++) {
-            // 均匀铺满整张卡片：星星分散，不往左上角堆
-            starX[i] = 0.02f + random.nextFloat() * 0.96f;
-            starY[i] = 0.04f + random.nextFloat() * 0.92f;
+            // 分散在左侧和中间（右侧留给星环，星星不挤过去）
+            starX[i] = 0.02f + random.nextFloat() * 0.56f;
+            starY[i] = 0.05f + random.nextFloat() * 0.90f;
             // 小星为主：半径收小，左边的星也不能显大
             starRadius[i] = (0.30f + random.nextFloat() * 0.55f) * density;
             starAlpha[i] = 0.16f + random.nextFloat() * 0.64f;
-            starSpeed[i] = 0.6f + random.nextFloat() * 1.6f;
+            // 闪烁也必须是整数圈，否则循环接缝处亮度会突然一跳
+            starSpeed[i] = 3 + (int) (random.nextFloat() * 4f);
             starPhase[i] = random.nextFloat();
             starBright[i] = i % BRIGHT_STAR_INTERVAL == 0;
             if (starBright[i]) {
@@ -145,12 +157,14 @@ public class HeroRingDrawable extends Drawable {
             int alphaInt = (int) (alpha * 255);
             if (alphaInt <= 2) continue;
 
-            // 与星环同向自转：相位差 0.7~1.15 倍，靠近中心的星转得慢一点
+            // 绕右上角微旋：方向跟星环一致，每颗星幅度略有差异（近角的转得少）
             float baseX = rect.left + rect.width() * starX[i];
             float baseY = rect.top + rect.height() * starY[i];
             float dx = baseX - pivotX;
             float dy = baseY - pivotY;
-            double angle = 2 * Math.PI * phase * STAR_ROTATION_TURNS * (0.7f + 0.45f * starPhase[i]);
+            double angle = Math.toRadians(STAR_SWING_DEG
+                    * (0.6f + 0.6f * starPhase[i])
+                    * Math.sin(2 * Math.PI * phase));
             double cos = Math.cos(angle);
             double sin = Math.sin(angle);
             float x = pivotX + (float) (dx * cos - dy * sin);
