@@ -119,6 +119,17 @@ public class InfoFragment extends Fragment {
     private boolean isWifiNetwork = false;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /**
+     * 设备页是边扫边出设备的，一次扫描要十几秒。
+     * 这里直接监听扫描快照，一有新设备就刷主页的数量和列表，
+     * 不再等 5 秒轮询（轮询只是兜底）。
+     */
+    private final com.networktool.app.util.LanScanManager.OnSnapshotChangedListener snapshotListener =
+            devices -> mainHandler.post(this::scheduleHomeDevicesRefresh);
+
+    /** 合并短时间内的多次快照变化，避免一次扫描里反复重绘 */
+    private boolean homeDevicesRefreshPosted;
     private final Runnable delayedRefresh = () -> {
         if (getActivity() != null && isAdded()) {
             refreshInfo();
@@ -189,6 +200,7 @@ public class InfoFragment extends Fragment {
             heroRingDrawable.start();
         }
         refreshInfo();
+        com.networktool.app.util.LanScanManager.addSnapshotListener(snapshotListener);
         loadHomeDevices();
         measureGatewayLatency();
         collectRssi();
@@ -210,6 +222,9 @@ public class InfoFragment extends Fragment {
         mainHandler.removeCallbacks(rssiTimer);
         mainHandler.removeCallbacks(batteryTimer);
         mainHandler.removeCallbacks(homeRefreshTimer);
+        mainHandler.removeCallbacks(homeDevicesRefreshRunnable);
+        homeDevicesRefreshPosted = false;
+        com.networktool.app.util.LanScanManager.removeSnapshotListener(snapshotListener);
         unregisterBatteryReceiver();
     }
 
@@ -407,6 +422,19 @@ public class InfoFragment extends Fragment {
         } catch (Exception ignored) {
             return -1;
         }
+    }
+
+    private final Runnable homeDevicesRefreshRunnable = () -> {
+        homeDevicesRefreshPosted = false;
+        if (isAdded()) loadHomeDevices();
+    };
+
+    /** 扫描快照变了：150 毫秒内多次变化只刷一次 */
+    private void scheduleHomeDevicesRefresh() {
+        if (homeDevicesRefreshPosted || !isAdded()) return;
+        homeDevicesRefreshPosted = true;
+        mainHandler.removeCallbacks(homeDevicesRefreshRunnable);
+        mainHandler.postDelayed(homeDevicesRefreshRunnable, 150);
     }
 
     /** 主页「局域网设备」：读取上次扫描结果，最多展示 3 条 */

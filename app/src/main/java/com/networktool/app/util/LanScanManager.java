@@ -121,6 +121,41 @@ public class LanScanManager {
     /** 最近一次扫描到的设备快照，供主页「局域网设备」直接展示，避免重复扫描 */
     private static volatile List<DeviceInfo> cachedDevices = new ArrayList<>();
 
+    /**
+     * 快照变化监听：设备页是边扫边出设备的（一次扫描要十几秒），
+     * 主页的「局域网设备」数量靠它实时跟随，而不是等 5 秒轮询。
+     */
+    public interface OnSnapshotChangedListener {
+        void onSnapshotChanged(List<DeviceInfo> devices);
+    }
+
+    private static final java.util.List<OnSnapshotChangedListener> snapshotListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public static void addSnapshotListener(OnSnapshotChangedListener listener) {
+        if (listener != null && !snapshotListeners.contains(listener)) {
+            snapshotListeners.add(listener);
+        }
+    }
+
+    public static void removeSnapshotListener(OnSnapshotChangedListener listener) {
+        if (listener != null) {
+            snapshotListeners.remove(listener);
+        }
+    }
+
+    private static void notifySnapshotChanged(List<DeviceInfo> devices) {
+        if (snapshotListeners.isEmpty()) return;
+        List<DeviceInfo> copy = (devices == null)
+                ? new ArrayList<>() : new ArrayList<>(devices);
+        for (OnSnapshotChangedListener listener : snapshotListeners) {
+            try {
+                listener.onSnapshotChanged(copy);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     private static final String PREF_SCAN_CACHE = "lan_scan_cache";
     /** 上一次落盘的快照指纹，避免每次刷新都写盘 */
     private static String lastSnapshotSignature;
@@ -148,6 +183,9 @@ public class LanScanManager {
                     .append(device.getDescription()).append(';');
         }
         cachedDevices = snapshot;
+        // 先通知：设备页边扫边加设备，主页要立刻跟着变；
+        // 下面的「指纹没变就不落盘」只是省写盘，不能挡住通知
+        notifySnapshotChanged(snapshot);
         if (signature.toString().equals(lastSnapshotSignature)) {
             return;
         }
@@ -2672,6 +2710,7 @@ public class LanScanManager {
                         }
                     }
                     cachedDevices = new ArrayList<>(deviceList);
+                    notifySnapshotChanged(cachedDevices);
                     return;
                 }
             }
@@ -2697,6 +2736,7 @@ public class LanScanManager {
             scannedIps.put(finalIp, true);
             
             cachedDevices = new ArrayList<>(deviceList);
+            notifySnapshotChanged(cachedDevices);
             if (listener != null) {
                 listener.onDeviceFound(device);
             }
@@ -2941,6 +2981,7 @@ public class LanScanManager {
         });
         
         cachedDevices = new ArrayList<>(deviceList);
+        notifySnapshotChanged(cachedDevices);
         persistCachedDevices();
         if (listener != null) {
             mainHandler.post(() -> listener.onScanComplete(deviceList.size()));

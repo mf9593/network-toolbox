@@ -752,22 +752,41 @@ public class RtspPlayer {
      */
     private void scheduleStallWatchdog() {
         cancelStallWatchdog();
-        if (audioDisabled || audioDisabledRetried) return;
+        if (audioDisabledRetried && transportRetried) return;
         stallWatchdogRunnable = () -> {
             stallWatchdogRunnable = null;
             if (released || paused) return;
+            int state = -1;
+            long bufferedMs = 0;
             try {
-                if (exoPlayer != null
-                        && exoPlayer.getPlaybackState() == Player.STATE_READY) {
-                    return;
+                if (exoPlayer != null) {
+                    state = exoPlayer.getPlaybackState();
+                    bufferedMs = exoPlayer.getBufferedPosition();
                 }
             } catch (Throwable ignored) {
             }
-            if (audioDisabledRetried) return;
-            audioDisabledRetried = true;
-            audioDisabled = true;
-            writeBreadcrumb("首帧后 4 秒仍未就绪：判定音频轨无数据，禁用音频重试");
+            if (state == Player.STATE_READY || state == Player.STATE_ENDED) return;
+
+            // 第一招：音频轨可能一个包都不发 —— 整个音频轨禁用后重来
+            if (!audioDisabledRetried) {
+                audioDisabledRetried = true;
+                audioDisabled = true;
+                writeBreadcrumb("首帧后 4 秒仍未就绪（state=" + state
+                        + " 缓冲=" + bufferedMs + "ms）：判定音频轨无数据，禁用音频重试");
+                prepared = false;
+                // 必须重建实例：禁用音频轨是创建时下发的，复用旧实例会带着已选音频轨继续卡住
+                releaseExoPlayer();
+                startInternal();
+                return;
+            }
+            // 第二招：换 RTP 传输（TCP 内联 ⇄ UDP）再试一次
+            if (transportRetried) return;
+            transportRetried = true;
+            forceTcpTransport = !forceTcpTransport;
+            writeBreadcrumb("禁用音频后仍未就绪（state=" + state + "）：RTP 传输切换为 "
+                    + (forceTcpTransport ? "TCP(内联)" : "UDP") + "，重试播放");
             prepared = false;
+            releaseExoPlayer();
             startInternal();
         };
         mainHandler.postDelayed(stallWatchdogRunnable, 4000);
