@@ -28,6 +28,8 @@ public final class FullscreenHelper {
     private final List<View> hiddenViews = new ArrayList<>();
     private final List<Integer> savedVisibilities = new ArrayList<>();
     private boolean fullscreen;
+    /** 进入全屏前的挖孔避让策略，退出时还原（-1 表示没动过） */
+    private int savedCutoutMode = -1;
 
     /**
      * @param activity    页面
@@ -81,6 +83,7 @@ public final class FullscreenHelper {
 
         // 4) 横屏 + 沉浸
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        applyCutoutMode();
         applyImmersive();
         fullscreen = true;
         return true;
@@ -106,6 +109,7 @@ public final class FullscreenHelper {
         }
 
         if (activity != null) {
+            restoreCutoutMode();
             activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             View decor = activity.getWindow().getDecorView();
             decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
@@ -137,6 +141,43 @@ public final class FullscreenHelper {
         // 系统栏透明，播放器画面才能真正顶到屏幕边缘
         activity.getWindow().setStatusBarColor(Color.TRANSPARENT);
         activity.getWindow().setNavigationBarColor(Color.TRANSPARENT);
+    }
+
+    /**
+     * 允许窗口绘制到挖孔 / 摄像头区域。
+     *
+     * <p>不设置的话，系统为了避开摄像头会把内容挤开一段，
+     * 全屏时顶部（横屏时是侧边）就会永久留一条黑带。</p>
+     */
+    private void applyCutoutMode() {
+        if (activity == null) {
+            return;
+        }
+        android.view.Window window = activity.getWindow();
+        android.view.WindowManager.LayoutParams lp = window.getAttributes();
+        savedCutoutMode = lp.layoutInDisplayCutoutMode;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            lp.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            lp.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        } else {
+            return;
+        }
+        window.setAttributes(lp);
+    }
+
+    /** 退出全屏时把挖孔策略还原成系统默认 */
+    private void restoreCutoutMode() {
+        if (activity == null || savedCutoutMode < 0) {
+            return;
+        }
+        android.view.Window window = activity.getWindow();
+        android.view.WindowManager.LayoutParams lp = window.getAttributes();
+        lp.layoutInDisplayCutoutMode = savedCutoutMode;
+        window.setAttributes(lp);
+        savedCutoutMode = -1;
     }
 
     private ViewGroup.LayoutParams newFillParams(ViewGroup parent) {

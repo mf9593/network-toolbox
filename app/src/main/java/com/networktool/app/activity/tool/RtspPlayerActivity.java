@@ -78,8 +78,6 @@ public class RtspPlayerActivity extends AppCompatActivity {
     private TextView infoText;
     private int lastVolume = 100;
     private int aspectModeIndex = 0;
-    /** 进入全屏前的画面比例，退出全屏时还原 */
-    private int savedAspectModeIndex = 0;
     private final Handler infoHandler = new Handler(Looper.getMainLooper());
     private Runnable infoRunnable;
 
@@ -115,9 +113,10 @@ public class RtspPlayerActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(0x00000000);
-        }
+        // 允许画面伸进挖孔 / 摄像头区域，否则全屏时顶部会空出一条黑带
+        applyDisplayCutoutMode();
+        // 输入页状态栏跟随主题：以前是透明的，图标叠在内容上根本看不清
+        applyStatusBarForInput();
 
         setContentView(R.layout.activity_rtsp_player);
 
@@ -609,6 +608,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
         if (playerContainer != null) {
             playerContainer.setVisibility(View.VISIBLE);
         }
+        // 播放页是黑底，状态栏改透明 + 白图标，否则深色图标全糊在黑背景里
+        applyStatusBarForPlayback();
 
         // 显示加载提示
         if (loadingProgress != null) {
@@ -628,6 +629,52 @@ public class RtspPlayerActivity extends AppCompatActivity {
         // 注意：只试一次不够——网络慢时 1.5 秒还没连上，就永远停在竖屏，
         // 竖屏下 16:9 的画面按比例适应，上下就是大片黑边（用户看到的「额头黑边」）。
         scheduleAutoFullscreen(0);
+    }
+
+    /**
+     * 让窗口可以绘制到挖孔 / 摄像头区域。
+     *
+     * <p>默认 {@code LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT} 时，系统会为了避开摄像头
+     * 把内容挤开一段，全屏播放就会在顶部（横屏则在侧边）留出一条黑带。
+     * 播放器本来就该铺满整块屏幕，所以这里改成不避开。</p>
+     */
+    private void applyDisplayCutoutMode() {
+        android.view.Window window = getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams lp = window.getAttributes();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            lp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        window.setAttributes(lp);
+    }
+
+    /** 输入页：状态栏跟随主题底色，图标深浅跟着明暗模式走，保证看得清 */
+    private void applyStatusBarForInput() {
+        android.view.Window window = getWindow();
+        if (window == null) return;
+        window.setStatusBarColor(ThemeManager.getSurfaceBaseColor(this));
+        androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller != null) {
+            // 浅色主题 → 深色图标；深色主题 → 浅色图标
+            controller.setAppearanceLightStatusBars(!ThemeManager.isDarkMode(this));
+        }
+    }
+
+    /** 播放页：状态栏透明 + 白色图标（黑底上才看得见） */
+    private void applyStatusBarForPlayback() {
+        android.view.Window window = getWindow();
+        if (window == null) return;
+        window.setStatusBarColor(Color.TRANSPARENT);
+        androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(window, window.getDecorView());
+        if (controller != null) {
+            controller.setAppearanceLightStatusBars(false);
+        }
     }
 
     /**
@@ -1014,9 +1061,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
         // 设置横屏
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
-        // 全屏时裁剪铺满，画面顶到屏幕四边，不留黑边（退出时还原成按比例适应）
-        savedAspectModeIndex = aspectModeIndex;
-        aspectModeIndex = 1; // ScaleAspectFill
+        // 画面比例遵循用户选择（默认「按比例适应」居中显示），
+        // 全屏只是把画面区域撑满整块屏幕（含挖孔区域），不再强制裁切
         applyAspectMode();
         
         // 隐藏状态栏和导航栏
@@ -1046,8 +1092,7 @@ public class RtspPlayerActivity extends AppCompatActivity {
         // 设置竖屏
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-        // 还原退出全屏前的画面比例
-        aspectModeIndex = savedAspectModeIndex;
+        // 画面比例保持不变（全屏前后一致）
         applyAspectMode();
         
         // 恢复状态栏和导航栏
@@ -1204,6 +1249,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
         if (loadingProgress != null) {
             loadingProgress.setVisibility(View.GONE);
         }
+        // 回到输入页，状态栏恢复成主题底色
+        applyStatusBarForInput();
         stopInfoUpdates();
     }
 
