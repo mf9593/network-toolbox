@@ -16,8 +16,9 @@ import java.util.Random;
 /**
  * 主页 Hero 卡片背景：整片星空 + 右侧旋转星环 + 主题色渐变。
  *
- * <p>星空是密集的星点（小星为主、每隔几颗来一颗带柔光的亮星），整片星空与右侧星环
- * <b>同向</b>缓慢自转，每颗星转速略有差异产生视差，同时按自己的速度与相位呼吸闪烁，
+ * <p>星空是均匀铺满整张卡片的星点（小星为主、每隔几颗来一颗带柔光的亮星），
+ * 整片星空<b>以右上角为圆心</b>缓慢自转（和星环同一个圆心），每颗星转速略有差异产生视差，
+ * 同时按自己的速度与相位呼吸闪烁，
  * 形成「繁星点点」的效果。颜色全部跟随主题色，不写死。动画由 {@link ValueAnimator}
  * 驱动，随可见性自动启停。</p>
  */
@@ -27,8 +28,8 @@ public class HeroRingDrawable extends Drawable {
     private static final long LOOP_DURATION_MS = 16000L;
     /** 星点数量（繁星点点，太少了看不出星空） */
     private static final int STAR_COUNT = 150;
-    /** 星空每圈动画自转多少圈（与星环同向） */
-    private static final float STAR_ROTATION_TURNS = 0.45f;
+    /** 星空每圈动画自转多少圈（以右上角为圆心，和星环同一个中心） */
+    private static final float STAR_ROTATION_TURNS = 0.14f;
     /** 每隔几颗星安排一颗带柔光的亮星 */
     private static final int BRIGHT_STAR_INTERVAL = 7;
 
@@ -57,7 +58,8 @@ public class HeroRingDrawable extends Drawable {
     private static final float[] RING_SCALES = {0.55f, 0.78f, 1.02f, 1.28f, 1.56f};
     private static final int[] RING_ALPHAS = {0x8C, 0x78, 0x62, 0x4A, 0x34};
     private static final float[] RING_SWEEPS = {66f, 58f, 48f, 38f, 28f};
-    private static final float[] RING_CYCLES = {1.25f, 1.02f, 0.86f, 0.70f, 0.56f};
+    /** 转速：第二道保持反向（原来的手感），其余同向 */
+    private static final float[] RING_CYCLES = {1.25f, -1.75f, 0.86f, 0.70f, 0.56f};
     private static final float[] RING_STROKES = {3.4f, 3.0f, 2.6f, 2.2f, 1.9f};
     private static final float[] RING_ORIGINS = {10f, 92f, 168f, 246f, 318f};
 
@@ -83,21 +85,17 @@ public class HeroRingDrawable extends Drawable {
     private void initStars() {
         Random random = new Random(20260210L);
         for (int i = 0; i < STAR_COUNT; i++) {
-            // 铺满整张卡片：左侧密、右侧疏，星环后面也留几颗，层次更足
-            float x = random.nextFloat();
-            if (x > 0.55f && random.nextFloat() < 0.6f) {
-                x = 0.03f + random.nextFloat() * 0.56f;
-            }
-            starX[i] = x;
-            starY[i] = 0.05f + random.nextFloat() * 0.90f;
-            // 小星多、亮星少：整体半径收小，避免变成「点点斑块」
-            starRadius[i] = (0.45f + random.nextFloat() * 0.85f) * density;
+            // 均匀铺满整张卡片：星星分散，不往左上角堆
+            starX[i] = 0.02f + random.nextFloat() * 0.96f;
+            starY[i] = 0.04f + random.nextFloat() * 0.92f;
+            // 小星为主：半径收小，左边的星也不能显大
+            starRadius[i] = (0.30f + random.nextFloat() * 0.55f) * density;
             starAlpha[i] = 0.16f + random.nextFloat() * 0.64f;
             starSpeed[i] = 0.6f + random.nextFloat() * 1.6f;
             starPhase[i] = random.nextFloat();
             starBright[i] = i % BRIGHT_STAR_INTERVAL == 0;
             if (starBright[i]) {
-                starRadius[i] *= 1.8f;
+                starRadius[i] *= 1.5f;
                 starAlpha[i] = Math.min(1f, starAlpha[i] + 0.2f);
             }
         }
@@ -137,8 +135,9 @@ public class HeroRingDrawable extends Drawable {
      * 同时按自己的速度与相位呼吸闪烁；亮星额外带一圈柔光。
      */
     private void drawStars(Canvas canvas) {
-        float pivotX = rect.left + rect.width() * 0.34f;
-        float pivotY = rect.top + rect.height() * 0.50f;
+        // 圆心和星环完全一致：整片星空绕着右上角转，看起来是一个整体
+        float pivotX = ringCenterX();
+        float pivotY = ringCenterY();
 
         for (int i = 0; i < STAR_COUNT; i++) {
             float wave = (float) Math.sin(2 * Math.PI * (phase * starSpeed[i] + starPhase[i]));
@@ -167,10 +166,19 @@ public class HeroRingDrawable extends Drawable {
         }
     }
 
-    /** 右侧星环：多道同向自转的弧段 + 一颗绕环运行的小星 */
+    /** 星环圆心（右上角），星空也绕它转 */
+    private float ringCenterX() {
+        return rect.right - rect.width() * 0.04f;
+    }
+
+    private float ringCenterY() {
+        return rect.top + rect.height() * 0.02f;
+    }
+
+    /** 右侧星环：多道自转的弧段 + 一颗绕环运行的小星 */
     private void drawRings(Canvas canvas) {
-        float cx = rect.right - rect.width() * 0.04f;
-        float cy = rect.top + rect.height() * 0.02f;
+        float cx = ringCenterX();
+        float cy = ringCenterY();
         float base = rect.height() * 0.58f;
 
         for (int i = 0; i < RING_SCALES.length; i++) {
