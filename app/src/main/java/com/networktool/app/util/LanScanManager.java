@@ -787,7 +787,10 @@ public class LanScanManager {
                     .build();
             try (Response response = client.newCall(request).execute()) {
                 if (response.body() == null) return null;
-                String content = response.body().string();
+                byte[] bodyBytes = response.body().bytes();
+                // 电信/光猫管理页常只在 meta 里写 gb2312，HTTP 头不带字符集，
+                // 一律按 UTF-8 解会把中文标题变成乱码
+                String content = decodeHttpBody(bodyBytes, response.header("Content-Type"));
                 Document doc = Jsoup.parse(content);
                 String server = response.header("Server");
                 // 标题：<title> 为空时依次退到 og:site_name / h1 / 厂商特征 / Server
@@ -1351,6 +1354,50 @@ public class LanScanManager {
     }
 
     /**
+     * 按网页真实字符集解码正文。
+     *
+     * <p>先看响应头 {@code Content-Type}，再看 HTML 头部 {@code <meta>} 里的
+     * {@code charset=}；都没有就按 UTF-8 解，若解出大量替换符再退回 GBK。</p>
+     */
+    private static String decodeHttpBody(byte[] bytes, String contentType) {
+        if (bytes == null || bytes.length == 0) return "";
+        java.util.regex.Pattern charsetPattern = java.util.regex.Pattern.compile(
+                "charset\\s*=\\s*[\"']?([A-Za-z0-9_\\-]+)",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        String charset = null;
+        if (contentType != null) {
+            java.util.regex.Matcher m = charsetPattern.matcher(contentType);
+            if (m.find()) charset = m.group(1);
+        }
+        if (charset == null) {
+            int sniffLen = Math.min(bytes.length, 4096);
+            String head = new String(bytes, 0, sniffLen, java.nio.charset.StandardCharsets.ISO_8859_1);
+            java.util.regex.Matcher m = charsetPattern.matcher(head);
+            if (m.find()) charset = m.group(1);
+        }
+        if (charset != null) {
+            try {
+                return new String(bytes, java.nio.charset.Charset.forName(charset));
+            } catch (Exception ignored) {
+            }
+        }
+
+        String utf8 = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        int bad = 0;
+        for (int i = 0; i < utf8.length(); i++) {
+            if (utf8.charAt(i) == '\uFFFD') bad++;
+        }
+        if (bad * 200 > utf8.length()) {   // 超过 0.5% 是替换符，说明其实不是 UTF-8
+            try {
+                return new String(bytes, java.nio.charset.Charset.forName("GBK"));
+            } catch (Exception ignored) {
+            }
+        }
+        return utf8;
+    }
+
+    /**
      * 从网页里提取设备标题。
      *
      * <p>不少路由/录像机/NAS 的首页 {@code <title></title>} 是空的（标题由 JS 动态写入），
@@ -1435,6 +1482,18 @@ public class LanScanManager {
                 {"netgear", "网件设备"},
                 {"vstarcam", "威视达康设备"},
                 {"v380", "V380 摄像头"},
+                // 电信/联通光猫、智能网关常见首页：标题为空，靠这些特征串辨认
+                {"version_switch.gch", "天翼网关（光猫）"},
+                {"registercountrycode", "天翼网关（光猫）"},
+                {"echolife", "华为光猫"},
+                {"chinanet", "中国电信网关"},
+                {"fiberhome", "烽火设备"},
+                {"hg8245", "华为光猫"},
+                {"hg8145", "华为光猫"},
+                {"tenda", "腾达设备"},
+                {"mercury", "水星设备"},
+                {"fastcom", "迅捷设备"},
+                {"zte", "中兴设备"},
         };
         for (String[] signature : signatures) {
             if (lower.contains(signature[0])) return signature[1];
@@ -1716,7 +1775,40 @@ public class LanScanManager {
             if (value < 32 || value >= 127) continue;
             sb.append((char) value);
         }
-        String name = sb.toString().trim();
+        return cleanNetBiosName(sb.toString());
+    }
+
+    /**
+     * 清洗 NetBIOS 名称。
+     *
+     * <p>NetBIOS 名字只有 15 字节，很多机器直接把自己的 IP 塞进去，
+     * 于是列表里会出现「192」这种残缺数字；还有设备塞了一堆特殊符号。
+     * 规则和 mDNS 一致：去掉控制字符/特殊符号，剩下的如果全是数字、
+     * 形如 IP、或短到没有意义，就当成没有名字。</p>
+     */
+    private static String cleanNetBiosName(String raw) {
+        if (raw == null) return null;
+        StringBuilder sb = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            boolean allowed = Character.isLetterOrDigit(c) || c == ' ' || c == '-'
+                    || c == '_' || c == '.' || c == '(' || c == ')'
+                    || c == '[' || c == ']' || c == '+' || c == '&';
+            if (allowed) sb.append(c);
+        }
+        String name = sb.toString().replaceAll("\\s{2,}", " ").trim();
+        if (name.isEmpty()) return null;
+
+        // 全是数字 / 形如 IP → 是设备把 IP 当名字了，不是有效主机名
+        int letters = 0;
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isLetter(name.charAt(i))) letters++;
+        }
+        if (letters == 0) return null;
+        if (name.matches("\\d{1,3}(\\.\\d{1,3}){0,3}")) return null;
+        // 只有一个字母（"x"、"A" 之类）也没什么用
+        if (name.length() < 2) return null;
+        if (name.length() > 30) name = name.substring(0, 30).trim();
         return name.isEmpty() ? null : name;
     }
 
