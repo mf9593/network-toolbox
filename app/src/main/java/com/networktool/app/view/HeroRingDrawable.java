@@ -14,19 +14,23 @@ import android.view.animation.LinearInterpolator;
 import java.util.Random;
 
 /**
- * 主页 Hero 卡片背景：左侧星空 + 右侧旋转星环 + 主题色渐变。
+ * 主页 Hero 卡片背景：整片星空 + 右侧旋转星环 + 主题色渐变。
  *
- * <p>左侧是一组会呼吸闪烁的星点，右侧是几道缓慢自转的圆环弧段和一颗绕环运行的小星，
- * 颜色全部跟随主题色，不写死。动画由 {@link ValueAnimator} 驱动，随可见性自动启停。</p>
+ * <p>星空是密集的星点（小星为主、每隔几颗来一颗带柔光的亮星），整片星空与右侧星环
+ * <b>同向</b>缓慢自转，每颗星转速略有差异产生视差，同时按自己的速度与相位呼吸闪烁，
+ * 形成「繁星点点」的效果。颜色全部跟随主题色，不写死。动画由 {@link ValueAnimator}
+ * 驱动，随可见性自动启停。</p>
  */
 public class HeroRingDrawable extends Drawable {
 
     /** 一圈动画时长：越长时间动得越慢越耐看 */
     private static final long LOOP_DURATION_MS = 16000L;
-    /** 星点数量 */
-    private static final int STAR_COUNT = 30;
+    /** 星点数量（繁星点点，太少了看不出星空） */
+    private static final int STAR_COUNT = 150;
     /** 星空每圈动画自转多少圈（与星环同向） */
-    private static final float STAR_ROTATION_TURNS = 0.22f;
+    private static final float STAR_ROTATION_TURNS = 0.45f;
+    /** 每隔几颗星安排一颗带柔光的亮星 */
+    private static final int BRIGHT_STAR_INTERVAL = 7;
 
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -46,6 +50,16 @@ public class HeroRingDrawable extends Drawable {
     private final float[] starAlpha = new float[STAR_COUNT];
     private final float[] starSpeed = new float[STAR_COUNT];
     private final float[] starPhase = new float[STAR_COUNT];
+    /** 是否带柔光的亮星 */
+    private final boolean[] starBright = new boolean[STAR_COUNT];
+
+    /** 星环参数：越外层越淡越细，方向统一（与星空同向） */
+    private static final float[] RING_SCALES = {0.55f, 0.78f, 1.02f, 1.28f, 1.56f};
+    private static final int[] RING_ALPHAS = {0x8C, 0x78, 0x62, 0x4A, 0x34};
+    private static final float[] RING_SWEEPS = {66f, 58f, 48f, 38f, 28f};
+    private static final float[] RING_CYCLES = {1.25f, 1.02f, 0.86f, 0.70f, 0.56f};
+    private static final float[] RING_STROKES = {3.4f, 3.0f, 2.6f, 2.2f, 1.9f};
+    private static final float[] RING_ORIGINS = {10f, 92f, 168f, 246f, 318f};
 
     private ValueAnimator animator;
     /** 0..1 的循环进度 */
@@ -58,7 +72,8 @@ public class HeroRingDrawable extends Drawable {
         this.density = density;
 
         ringPaint.setStyle(Paint.Style.STROKE);
-        ringPaint.setStrokeWidth(Math.max(1f, density * 1.3f));
+        ringPaint.setStrokeCap(Paint.Cap.ROUND);
+        ringPaint.setStrokeWidth(Math.max(1f, density * 2.6f));
         ringPaint.setColor(0xFFFFFFFF);
         starPaint.setColor(0xFFFFFFFF);
 
@@ -68,13 +83,23 @@ public class HeroRingDrawable extends Drawable {
     private void initStars() {
         Random random = new Random(20260210L);
         for (int i = 0; i < STAR_COUNT; i++) {
-            // 星星集中在左侧，右侧留给星环
-            starX[i] = 0.04f + random.nextFloat() * 0.56f;
-            starY[i] = 0.12f + random.nextFloat() * 0.76f;
-            starRadius[i] = (0.6f + random.nextFloat() * 1.1f) * density;
-            starAlpha[i] = 0.20f + random.nextFloat() * 0.55f;
+            // 铺满整张卡片：左侧密、右侧疏，星环后面也留几颗，层次更足
+            float x = random.nextFloat();
+            if (x > 0.55f && random.nextFloat() < 0.6f) {
+                x = 0.03f + random.nextFloat() * 0.56f;
+            }
+            starX[i] = x;
+            starY[i] = 0.05f + random.nextFloat() * 0.90f;
+            // 小星多、亮星少：整体半径收小，避免变成「点点斑块」
+            starRadius[i] = (0.45f + random.nextFloat() * 0.85f) * density;
+            starAlpha[i] = 0.16f + random.nextFloat() * 0.64f;
             starSpeed[i] = 0.6f + random.nextFloat() * 1.6f;
             starPhase[i] = random.nextFloat();
+            starBright[i] = i % BRIGHT_STAR_INTERVAL == 0;
+            if (starBright[i]) {
+                starRadius[i] *= 1.8f;
+                starAlpha[i] = Math.min(1f, starAlpha[i] + 0.2f);
+            }
         }
     }
 
@@ -108,8 +133,8 @@ public class HeroRingDrawable extends Drawable {
     }
 
     /**
-     * 左侧星空：整片星空跟着右侧星环同向缓慢旋转（每颗星转速略有差异，产生视差），
-     * 同时按自己的速度与相位呼吸闪烁。
+     * 整片星空：与右侧星环同向缓慢自转（每颗星转速略有差异，产生视差），
+     * 同时按自己的速度与相位呼吸闪烁；亮星额外带一圈柔光。
      */
     private void drawStars(Canvas canvas) {
         float pivotX = rect.left + rect.width() * 0.34f;
@@ -132,36 +157,36 @@ public class HeroRingDrawable extends Drawable {
             float x = pivotX + (float) (dx * cos - dy * sin);
             float y = pivotY + (float) (dx * sin + dy * cos);
 
+            if (starBright[i]) {
+                // 亮星先铺一圈很淡的柔光，看着更「星」
+                starPaint.setAlpha(Math.min(alphaInt / 3, 88));
+                canvas.drawCircle(x, y, starRadius[i] * 3.4f, starPaint);
+            }
             starPaint.setAlpha(Math.min(alphaInt, 255));
             canvas.drawCircle(x, y, starRadius[i], starPaint);
         }
     }
 
-    /** 右侧星环：几道围绕右上角自转的弧段 + 一颗绕环运行的小星 */
+    /** 右侧星环：多道同向自转的弧段 + 一颗绕环运行的小星 */
     private void drawRings(Canvas canvas) {
         float cx = rect.right - rect.width() * 0.04f;
         float cy = rect.top + rect.height() * 0.02f;
         float base = rect.height() * 0.58f;
 
-        float[] scales = {0.72f, 1.06f, 1.44f};
-        int[] alphas = {0x5C, 0x38, 0x20};
-        float[] sweeps = {58f, 42f, 28f};
-        float[] cycles = {1.15f, -1.75f, 0.75f};
-        float[] origin = {20f, 150f, 265f};
-
-        for (int i = 0; i < scales.length; i++) {
-            ringPaint.setAlpha(alphas[i]);
-            float radius = base * scales[i];
-            float startAngle = origin[i] + 360f * cycles[i] * phase;
+        for (int i = 0; i < RING_SCALES.length; i++) {
+            ringPaint.setAlpha(RING_ALPHAS[i]);
+            ringPaint.setStrokeWidth(Math.max(1.2f, density * RING_STROKES[i]));
+            float radius = base * RING_SCALES[i];
+            float startAngle = RING_ORIGINS[i] + 360f * RING_CYCLES[i] * phase;
             canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
-                    startAngle, sweeps[i], false, ringPaint);
+                    startAngle, RING_SWEEPS[i], false, ringPaint);
             // 对面对称再来一段，转起来更有「环」的层次
             canvas.drawArc(cx - radius, cy - radius, cx + radius, cy + radius,
-                    startAngle + 180f, sweeps[i] * 0.6f, false, ringPaint);
+                    startAngle + 180f, RING_SWEEPS[i] * 0.6f, false, ringPaint);
         }
 
         // 绕环运行的小星 + 一圈柔光
-        float orbitRadius = base * scales[1];
+        float orbitRadius = base * RING_SCALES[1];
         double theta = 2 * Math.PI * phase;
         float px = cx + (float) (orbitRadius * Math.cos(theta));
         float py = cy + (float) (orbitRadius * Math.sin(theta));
