@@ -483,7 +483,8 @@ public class ScanActivity extends AppCompatActivity {
         com.google.android.material.button.MaterialButton closeButton =
                 sheetView.findViewById(R.id.closeButton);
 
-        resultText.setText(result);
+        // 内容可能带多行换行，整段显示 + 按主题给按钮上色
+        com.networktool.app.util.ScanResultSheet.bind(sheetView, result);
         copyButton.setOnClickListener(v -> {
             copyToClipboard(result);
             showToast("已复制到剪贴板");

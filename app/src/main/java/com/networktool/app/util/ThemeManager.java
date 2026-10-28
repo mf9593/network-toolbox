@@ -238,6 +238,23 @@ public class ThemeManager {
     }
 
     /**
+     * 应用主题色到「强调（tonal）」按钮：淡主题底 + 主题色文字和图标。
+     *
+     * <p>tonal 按钮默认取的是主题里静态的 colorSecondaryContainer，
+     * 用户换主题色后不会跟着变，所以这里按当前主题色重刷一遍。</p>
+     */
+    public static void applyTonalButton(com.google.android.material.button.MaterialButton button) {
+        if (button == null) return;
+        int accent = getAccessibleThemeColor(button.getContext());
+        int background = blendColorWithBase(accent,
+                isDarkTheme() ? 0xFF1D2124 : 0xFFFFFFFF,
+                isDarkTheme() ? 60 : 34);
+        button.setBackgroundTintList(ColorStateList.valueOf(background));
+        button.setTextColor(accent);
+        button.setIconTint(ColorStateList.valueOf(accent));
+    }
+
+    /**
      * 获取柔和的主题背景色
      */
     public static int getSoftThemeBackground(int alpha) {

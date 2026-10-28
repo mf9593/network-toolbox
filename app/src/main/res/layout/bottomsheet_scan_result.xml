@@ -23,18 +23,27 @@
         android:text="扫描结果"
         android:textAppearance="@style/TextAppearance.NetworkTool.Headline" />
 
-    <TextView
-        android:id="@+id/resultText"
+    <!-- 二维码内容常带换行（WiFi 多字段、vCard、纯文本多行）：
+         整段显示，超过一屏才滚动，不能按行数截断 -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/resultScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_3"
-        android:background="@drawable/bg_chip"
-        android:maxLines="8"
-        android:padding="@dimen/space_3"
-        android:scrollbars="vertical"
-        android:textColor="?attr/colorOnSurface"
-        android:textIsSelectable="true"
-        android:textSize="15sp" />
+        android:scrollbars="vertical">
+
+        <TextView
+            android:id="@+id/resultText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:lineSpacingExtra="2dp"
+            android:padding="@dimen/space_3"
+            android:textColor="?attr/colorOnSurface"
+            android:textIsSelectable="true"
+            android:textSize="15sp" />
+
+    </androidx.core.widget.NestedScrollView>
 
     <LinearLayout
         android:layout_width="match_parent"
