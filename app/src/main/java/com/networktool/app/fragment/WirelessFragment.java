@@ -153,7 +153,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         currentWifiCard = view.findViewById(R.id.currentWifiCard);
         // 标题栏已不使用信号图标（保留字段做空值保护）
         currentSignalIcon = null;
-        // 主标题固定为「无线列表」，连接状态统一放在副标题
+        // 主标题只放网络数量，连接状态统一放在副标题
         currentSsid = null;
         currentIp = view.findViewById(R.id.currentIp);
         // 标题栏只保留两行，网段/标准等细节不再单独占一行
@@ -610,20 +610,22 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         }
     }
 
-    /** 主标题带上网络数量与刷新时间，例如「无线列表 · 12 个网络 · 19:48」 */
+    /** 主标题只写网络数量与刷新时间，例如「12 个网络 · 19:48」 */
     private void updateTitle() {
         if (!isAdded() || getView() == null) return;
         TextView title = getView().findViewById(R.id.wifiTitleText);
         if (title == null) return;
         int count = fullWifiList.isEmpty() ? wifiList.size() : fullWifiList.size();
-        String base = count <= 0 ? "无线列表" : "无线列表 · " + count + " 个网络";
 
-        android.text.SpannableStringBuilder sb =
-                new android.text.SpannableStringBuilder(base);
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        if (count > 0) {
+            sb.append(String.valueOf(count)).append(" 个网络");
+        }
         int start = sb.length();
         if (scanning) {
-            sb.append(" · 扫描中…");
-        } else if (lastScanTime > 0) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append("扫描中…");
+        } else if (lastScanTime > 0 && count > 0) {
             sb.append(" · ").append(new SimpleDateFormat("HH:mm", Locale.getDefault())
                     .format(new Date(lastScanTime)));
         }
