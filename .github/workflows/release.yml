@@ -135,6 +135,12 @@ jobs:
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG 已存在，替换资产"
             gh release upload "$TAG" "$FILE" --clobber
+            # 标签被删除重建后，原 Release 会变成草稿（草稿对外不可见），这里自动转为正式发布
+            IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+            if [ "$IS_DRAFT" = "true" ]; then
+              echo "该 Release 当前是草稿，改为正式发布"
+              gh release edit "$TAG" --draft=false
+            fi
           else
             echo "新建 Release $TAG"
             PRERELEASE=""
