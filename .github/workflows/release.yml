@@ -81,7 +81,7 @@ jobs:
           fi
           chmod 600 "$HOME/.android/debug.keystore"
           ls -l "$HOME/.android/debug.keystore"
-          echo "文件头 4 字节（JKS 为 fe ed fe ed）：$(xxd -p -l 4 "$HOME/.android/debug.keystore")"
+          echo "文件头 4 字节（PKCS12 为 3082，JKS 为 feedfeed）：$(head -c 4 "$HOME/.android/debug.keystore" | od -An -tx1 | tr -d ' \n')"
 
       - name: 3/3 校验 keystore 与证书指纹
         run: |
