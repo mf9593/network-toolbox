@@ -23,11 +23,7 @@
 
 ## 宣传页
 
-项目包含一个响应式宣传页，源码位于 `docs/`：
-
 - 在线地址：<https://mf9593.github.io/network-toolbox/>
-- 本地预览：`python3 -m http.server 8080 --directory docs`
-- GitHub Pages 通过 `.github/workflows/pages.yml` 自动部署
 
 ## 构建
 
@@ -47,38 +43,11 @@
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## GitHub 仓库配置
-
-开源仓库地址和“检查更新”功能通过 `gradle.properties` 配置：
-
-```properties
-github.owner=mf9593
-github.repo=network-toolbox
-```
-
-配置后重新构建，关于页会显示仓库地址，设置页的“检查更新”会请求：
-
-```text
-https://api.github.com/repos/<owner>/<repo>/releases/latest
-```
-
-发布 Release 时请使用语义化版本标签，例如 `v2.1.1`。
-
 ## 隐私
 
 应用不上传 WiFi 密码、设备信息、聊天内容或其他个人数据。所有业务数据保存在本机应用私有目录中。
 
 - 隐私说明：[PRIVACY.md](PRIVACY.md)
-- 应用内隐私政策：`app/src/main/assets/privacyPolicy.md`
-- 用户协议：`app/src/main/assets/userAgreement.md`
-
-请勿将以下内容提交到 GitHub：
-
-- WiFi 备份样本（`.bak`、备份 `.zip`、`wifi/` 目录）
-- 实际 WiFi 配置、聊天数据库、崩溃日志
-- `local.properties`、签名文件、密钥、`.env`
-
-项目 `.gitignore` 已默认排除这些文件。
 
 ## 开源协议
 

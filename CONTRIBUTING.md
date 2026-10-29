@@ -41,12 +41,7 @@
    git push -u origin main
    ```
 
-3. 把 `gradle.properties` 里的仓库信息改成你自己的，否则「检查更新」会指向原仓库：
-
-   ```properties
-   github.owner=<你的用户名>
-   github.repo=<你的仓库名>
-   ```
+3. 按自己的仓库与证书做好对应配置（仓库信息、签名证书），否则「检查更新」会指向原仓库。
 
 4. 在仓库 **Settings → Pages** 中选择 **GitHub Actions**，`pages.yml` 会自动把 `docs/`
    部署为宣传页。
@@ -61,15 +56,8 @@
 
 ### 签名（覆盖升级的前提）
 
-- Release 里的 APK 用仓库 Secret **`DEBUG_KEYSTORE_B64`** 中的 `debug.keystore` 签名。
-- 未配置该 Secret 时工作流会直接失败，避免推出签名不一致、无法覆盖安装的包。
-- 生成方法（本地执行，取单行输出存入 Secret）：
-
-  ```bash
-  base64 -w0 ~/.android/debug.keystore
-  ```
-
-- 换成你自己的 keystore 时，已装旧版的用户需要先卸载再安装（签名不同不能覆盖）。
+- 发布用的 APK 需要用自己仓库中配置的证书签名，未配置时工作流会直接失败，避免推出签名不一致、无法覆盖安装的包。
+- 换成不同证书后，已装旧版的用户需要先卸载再安装（签名不同不能覆盖）。
 
 ## 三、发布前注意
 
