@@ -32,6 +32,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # 已发布 APK 的签名证书指纹（SHA-256，去掉冒号小写）。换签名时改这里。
+    env:
+      EXPECTED_CERT_SHA256: c20a82846aa00f594bd7c9f745b8b110b86ccb39e0a2f99a184bf91580a9e3f7
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -82,20 +85,29 @@ jobs:
           chmod 600 "$HOME/.android/debug.keystore"
           ls -l "$HOME/.android/debug.keystore"
           echo "文件头 4 字节（PKCS12 为 3082，JKS 为 feedfeed）：$(head -c 4 "$HOME/.android/debug.keystore" | od -An -tx1 | tr -d ' \n')"
+          # 让 Gradle 显式使用这份 keystore 签名，避免 runner 自己生成新证书
+          echo "DEBUG_KEYSTORE_FILE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          echo "DEBUG_KEYSTORE_STORE_PASSWORD=${{ secrets.DEBUG_KEYSTORE_STORE_PASSWORD || 'android' }}" >> "$GITHUB_ENV"
+          echo "DEBUG_KEYSTORE_KEY_ALIAS=${{ secrets.DEBUG_KEYSTORE_KEY_ALIAS || 'androiddebugkey' }}" >> "$GITHUB_ENV"
+          echo "DEBUG_KEYSTORE_KEY_PASSWORD=${{ secrets.DEBUG_KEYSTORE_KEY_PASSWORD || 'android' }}" >> "$GITHUB_ENV"
 
       - name: 3/3 校验 keystore 与证书指纹
+        env:
+          EXPECTED: ${{ env.EXPECTED_CERT_SHA256 }}
         run: |
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android || {
             echo "::error::keystore 打不开，确认 Secret 里是 debug.keystore 本身（密码默认 android）。"
             exit 1
           }
           ACTUAL=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
-            | grep -i 'SHA256:' | head -1 | sed 's/.*SHA256:[[:space:]]*//')
+            | grep -i 'SHA256:' | head -1 | sed 's/.*SHA256:[[:space:]]*//' | tr -d ':' | tr 'A-F' 'a-f')
           echo "证书 SHA-256：$ACTUAL"
-          EXPECTED="C2:0A:82:84:6A:A0:0F:59:4B:D7:C9:F7:45:B8:B1:10:B8:6C:CB:39:E0:A2:F9:9A:18:4B:F9:15:80:A9:E3:F7"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::warning::证书指纹与已发布包（$EXPECTED）不一致，已安装用户无法覆盖升级。"
+            echo "::error::证书指纹与已发布包不一致（期望 $EXPECTED），这样发的包装不到已安装用户手机上。"
+            echo "请换成与已发布 APK 相同的 debug.keystore；确需更换签名时，改本工作流的 EXPECTED_CERT_SHA256。"
+            exit 1
           fi
+          echo "证书指纹与已发布包一致，可覆盖升级。"
 
       - name: Read version
         id: ver
@@ -119,7 +131,13 @@ jobs:
           OUT="network-toolbox-${{ steps.ver.outputs.name }}.apk"
           cp "$SRC" "$OUT"
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          "$APKSIGNER" verify --print-certs "$OUT" | grep -i 'SHA-256' | head -1
+          CERT=$("$APKSIGNER" verify --print-certs "$OUT" \
+            | grep -i 'certificate SHA-256 digest' | head -1 | sed 's/.*digest:[[:space:]]*//' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "APK 签名证书 SHA-256：$CERT"
+          if [ "$CERT" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::构建出来的 APK 签名证书与已发布包不一致（期望 $EXPECTED_CERT_SHA256），不能发布，否则已安装用户无法覆盖升级。"
+            exit 1
+          fi
           sha256sum "$OUT" | tee sha256.txt
           echo "file=$OUT" >> "$GITHUB_OUTPUT"
           ls -lh "$OUT"

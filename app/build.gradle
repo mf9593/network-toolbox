@@ -44,6 +44,22 @@ android {
         }
     }
     
+    // ==================== CI 调试签名 ====================
+    // GitHub Actions 构建时会设置 DEBUG_KEYSTORE_FILE，指向还原出来的 debug keystore。
+    // 这样云端出的 debug 包和本地出的签名完全一致，已安装用户可以直接覆盖升级。
+    // 本地没设这几个环境变量时不生效，仍走默认的 ~/.android/debug.keystore。
+    def ciDebugStore = System.getenv("DEBUG_KEYSTORE_FILE")
+    if (ciDebugStore) {
+        signingConfigs {
+            ciDebug {
+                storeFile file(ciDebugStore)
+                storePassword System.getenv("DEBUG_KEYSTORE_STORE_PASSWORD") ?: "android"
+                keyAlias System.getenv("DEBUG_KEYSTORE_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword System.getenv("DEBUG_KEYSTORE_KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     // 编译 SDK 版本 (Android 14)
     compileSdk 34
 
@@ -85,6 +101,11 @@ android {
         }
         debug {
             minifyEnabled false
+            // CI 指定了 debug keystore 就用它签名（不用默认的 ~/.android/debug.keystore，
+            // 避免 runner 自动生成新证书导致已安装用户无法覆盖升级）
+            if (ciDebugStore) {
+                signingConfig signingConfigs.ciDebug
+            }
         }
     }
 
