@@ -71,13 +71,17 @@ jobs:
           KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
         run: |
           mkdir -p "$HOME/.android"
-          if ! printf '%s' "$KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore" 2>/dev/null; then
+          # 容错：去掉可能被复制进来的回车/换行/制表符，并把 URL-safe base64 转回标准 base64
+          VALUE=$(printf '%s' "$KEYSTORE_B64" | tr -d '\r\n\t' | tr '_-' '/+')
+          if ! printf '%s' "$VALUE" | base64 -d -i > "$HOME/.android/debug.keystore" 2>/dev/null \
+             || [ ! -s "$HOME/.android/debug.keystore" ]; then
             echo "::error::Secret 内容不是合法 base64。"
-            echo "请在本地执行 base64 -w0 ~/.android/debug.keystore，把输出的单行文本原样贴进 Secret（不要加引号、不要换行）。"
+            echo "请在本地执行 base64 -w0 ~/.android/debug.keystore，把输出的单行文本原样贴进 Secret（不要加引号、不要带路径、不要换行）。"
             exit 1
           fi
           chmod 600 "$HOME/.android/debug.keystore"
           ls -l "$HOME/.android/debug.keystore"
+          echo "文件头 4 字节（JKS 为 fe ed fe ed）：$(xxd -p -l 4 "$HOME/.android/debug.keystore")"
 
       - name: 3/3 校验 keystore 与证书指纹
         run: |
