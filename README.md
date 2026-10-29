@@ -86,29 +86,11 @@ https://api.github.com/repos/<owner>/<repo>/releases/latest
 
 完整协议见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。第三方组件许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
+欢迎 fork、二次开发与提交合并，贡献与自行发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 仓库地址：<https://github.com/mf9593/network-toolbox>
 
 宣传页：<https://mf9593.github.io/network-toolbox/>
-
-### 首次发布
-
-1. 在 GitHub 创建空的公开仓库 `network-toolbox`（不要勾选自动生成 README）。
-2. 推送本地代码：
-
-```bash
-git push -u origin main
-```
-
-3. 在仓库 Settings → Pages 中选择 GitHub Actions，`pages.yml` 会自动部署 `docs/`。
-4. 创建版本标签并发布 Release，附上 `app-debug.apk` 或签名 APK，检查更新功能即可使用。
-
-### 发布前注意
-
-- 播放内核使用开源 libmpv（`dev.jdtech.mpv:libmpv` AAR），当前不包含 NodeMediaClient。RTSP、HTTP MPEG-TS、HLS 等能否播放取决于流的封装、编码和设备性能；libmpv 播放需要 Android 8.0 及以上。
-- libmpv 原生库启用了 GPL 特性（GPL-2.0-or-later），与 Apache-2.0 的 APK 分发存在许可冲突。对外发布前需统一采用 GPLv3 等兼容许可并履行义务，或改用 LGPL 构建。
-- 电视直播默认读取内部存储根目录的 `44023.txt`，也可通过页面左上角导入文件或手动输入路径；列表不会打包进 APK。
-- NodeMediaClient-Android 的上游明确要求商业授权。若没有可再分发的商业许可证，不建议将它的二进制重新加入公开发布的 APK。
-- 不要提交 `wifi/`、`.bak`、备份 `.zip`、聊天数据库、签名文件或真实网络数据。
 
 ## 免责声明
 
