@@ -155,7 +155,9 @@ public class RtspPlayer {
             writeBreadcrumb("首帧已渲染（画面确认输出）"
                     + (compatProxy != null
                     ? "，兼容代理已改写 " + compatProxy.getRewrittenHeaders()
-                    + " 处响应头，净化 SDP " + compatProxy.getSdpRewrites() + " 次" : ""));
+                    + " 处响应头，净化 SDP " + compatProxy.getSdpRewrites() + " 次"
+                    + "，过滤 RTP 包 " + compatProxy.getDroppedRtpPackets() + " 个"
+                    + "，去扩展 " + compatProxy.getStrippedExtensions() + " 处" : ""));
         }
 
         @Override
@@ -197,8 +199,9 @@ public class RtspPlayer {
                     ? error.getMessage() : error.toString();
             if (msg.length() > 200) msg = msg.substring(0, 200) + "…";
             writeBreadcrumb("ExoPlayer 错误: " + msg);
+            StringBuilder detail = new StringBuilder();
             if (error != null) {
-                StringBuilder detail = new StringBuilder("code=").append(error.errorCode);
+                detail.append("code=").append(error.errorCode);
                 Throwable cause = error.getCause();
                 int depth = 0;
                 while (cause != null && depth++ < 4) {
@@ -230,8 +233,10 @@ public class RtspPlayer {
             }
             cancelRenderTimeout();
             prepared = false;
-            // RTSP 常见的 SETUP 传输不支持，先自动切换 RTP 传输重试一次
-            if (retryWithAltTransport()) {
+            if (isMediaFormatError(detail.toString())) {
+                // 码流打包方式播放器不支持：换 TCP/UDP 解决不了，只能靠兼容代理过滤码流
+                writeBreadcrumb("判定为码流格式问题，跳过传输切换重试");
+            } else if (retryWithAltTransport()) {
                 probeRtspCause(true);
                 return;
             }
@@ -941,6 +946,24 @@ public class RtspPlayer {
         String message = t.getMessage();
         if (message == null || message.isEmpty()) message = t.getClass().getSimpleName();
         notifyEvent(EVENT_ERROR, "播放失败：" + message);
+    }
+
+    /**
+     * 判断错误是否属于「码流格式不被播放器支持」。
+     *
+     * <p>这类问题（H.265 聚合包/厂商自定义 NAL 等）跟 RTP 走 TCP 还是 UDP 无关，
+     * 切换传输只会白等一轮超时，应直接交给兼容代理过滤。</p>
+     */
+    private static boolean isMediaFormatError(String detail) {
+        if (detail == null) return false;
+        String lower = detail.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("payload type")
+                || lower.contains("parserexception")
+                || lower.contains("parser exception")
+                || lower.contains("sprop")
+                || lower.contains("decoder init")
+                || lower.contains("codec exception")
+                || lower.contains("unsupportedoperationexception");
     }
 
     /**

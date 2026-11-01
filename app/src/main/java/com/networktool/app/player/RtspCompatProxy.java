@@ -64,6 +64,18 @@ public final class RtspCompatProxy implements Closeable {
     private volatile int sdpRewrites;
     /** 是否已经从摄像头拿到过 SDP（拿到说明鉴权是通过的） */
     private volatile boolean sdpSeen;
+    /** SDP 里声明的 H.265 负载类型号，用于识别视频 RTP 包 */
+    private final java.util.Set<Integer> hevcPayloadTypes =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** 已经丢弃的、播放器解析不了的 H.265 包数量 */
+    private final java.util.concurrent.atomic.AtomicInteger droppedRtpPackets =
+            new java.util.concurrent.atomic.AtomicInteger();
+    /** 已经去掉的 RTP 头扩展数量 */
+    private final java.util.concurrent.atomic.AtomicInteger strippedExtensions =
+            new java.util.concurrent.atomic.AtomicInteger();
+    /** 已经记过日志的 NAL 类型，避免同一种包刷屏 */
+    private final java.util.Set<Integer> loggedNalTypes =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private RtspCompatProxy(ServerSocket serverSocket, String targetHost, int targetPort) {
         this.serverSocket = serverSocket;
@@ -102,6 +114,16 @@ public final class RtspCompatProxy implements Closeable {
     /** 是否已经从摄像头拿到 SDP：拿到即说明鉴权通过，可用于压掉误报的 401 提示 */
     public boolean hasSdp() {
         return sdpSeen;
+    }
+
+    /** 已丢弃的 H.265 包数量（播放器解析不了的类型） */
+    public int getDroppedRtpPackets() {
+        return droppedRtpPackets.get();
+    }
+
+    /** 已去掉的 RTP 头扩展数量 */
+    public int getStrippedExtensions() {
+        return strippedExtensions.get();
     }
 
     /**
@@ -181,6 +203,8 @@ public final class RtspCompatProxy implements Closeable {
     /** 摄像头 → 播放器：按帧/报文转发，只改写不合规的响应头 */
     private void relayServerToClient(Socket client, Socket target) {
         byte[] buffer = new byte[8192];
+        // RTP 内联帧最大 65535 字节，复用一个缓冲区避免每包都新建数组
+        byte[] rtpBuffer = new byte[65536];
         try {
             InputStream in = new BufferedInputStream(target.getInputStream(), 16384);
             OutputStream out = new BufferedOutputStream(client.getOutputStream(), 16384);
@@ -189,17 +213,33 @@ public final class RtspCompatProxy implements Closeable {
                 if (first < 0) break;
 
                 if (first == '$') {
-                    // RTP/RTCP 内联帧：$ + 通道号(1B) + 长度(2B) + 数据，原样透传
+                    // RTP/RTCP 内联帧：$ + 通道号(1B) + 长度(2B) + 数据
                     int channel = in.read();
                     int high = in.read();
                     int low = in.read();
                     if (channel < 0 || high < 0 || low < 0) break;
                     int length = (high << 8) | low;
+                    if (length > rtpBuffer.length) {
+                        // 理论上不会出现，保底原样透传
+                        out.write('$');
+                        out.write(channel);
+                        out.write(high);
+                        out.write(low);
+                        copyExactly(in, out, length, buffer);
+                        out.flush();
+                        continue;
+                    }
+                    if (readInto(in, rtpBuffer, length) != length) break;
+                    int newLength = sanitizeRtpPacket(rtpBuffer, length);
+                    if (newLength < 0) {
+                        // 这个包播放器解析不了，直接丢掉，保证整个会话不被它打断
+                        continue;
+                    }
                     out.write('$');
                     out.write(channel);
-                    out.write(high);
-                    out.write(low);
-                    copyExactly(in, out, length, buffer);
+                    out.write((newLength >> 8) & 0xFF);
+                    out.write(newLength & 0xFF);
+                    out.write(rtpBuffer, 0, newLength);
                     out.flush();
                     continue;
                 }
@@ -219,6 +259,7 @@ public final class RtspCompatProxy implements Closeable {
                         log("代理收到 SDP（" + body.length + " 字节）");
                     }
                     // 部分摄像头的 H.265 sprop-* 参数损坏，会让 ExoPlayer 解析 SPS 时数组越界闪退
+                    rememberHevcPayloadTypes(body);
                     byte[] sanitized = sanitizeSdp(body);
                     if (sanitized.length != body.length) {
                         patched = replaceContentLength(patched, sanitized.length);
@@ -332,6 +373,107 @@ public final class RtspCompatProxy implements Closeable {
             if (read < 0) break;
             out.write(buffer, 0, read);
             remaining -= read;
+        }
+    }
+
+    /** 读满 length 字节到缓冲区，返回实际读到的字节数 */
+    private static int readInto(InputStream in, byte[] sink, int length) throws IOException {
+        int offset = 0;
+        while (offset < length) {
+            int read = in.read(sink, offset, length - offset);
+            if (read < 0) break;
+            offset += read;
+        }
+        return offset;
+    }
+
+    /**
+     * 校验并修正一个内联 RTP 包，返回修正后的长度；返回 -1 表示这个包要丢掉。
+     *
+     * <p>ExoPlayer 2.19 的 H.265 读取器只支持两种打包方式：单 NAL（类型 0~47）和
+     * 分片包 FU（类型 49）。遇到聚合包 AP（类型 48）会抛
+     * {@code UnsupportedOperationException}，遇到保留/厂商自定义类型（50~63）会抛
+     * {@code ParserException: RTP H265 payload type [x] not supported}——只要来一个这样的包，
+     * 整个播放会话就直接失败。部分国产 IPC 会在码流里混入厂商自定义 NAL，
+     * 跨网段时更容易撞上，所以这里在代理层把它们滤掉，让正常画面继续播。</p>
+     *
+     * <p>顺带做两件 ExoPlayer 不会做的事：去掉 RTP 头扩展（它解析 RTP 时只跳过 CSRC，
+     * 不跳过扩展头，带扩展的流会被当成码流解析）和去掉末尾填充字节。</p>
+     */
+    private int sanitizeRtpPacket(byte[] packet, int length) {
+        if (length < 13 || !hevcPayloadTypes.contains(packet[1] & 0x7F)) {
+            // 只看 H.265 视频轨，音频与 RTCP 原样透传
+            return length;
+        }
+        int firstByte = packet[0] & 0xFF;
+        if ((firstByte >> 6) != 2) return length;       // 不是 RTP v2
+        int payloadStart = 12 + (firstByte & 0x0F) * 4; // 跳过 CSRC
+        if (payloadStart >= length) return length;
+        int payloadEnd = length;
+
+        if ((firstByte & 0x10) != 0) {
+            if (payloadStart + 4 > length) return length;
+            int words = ((packet[payloadStart + 2] & 0xFF) << 8) | (packet[payloadStart + 3] & 0xFF);
+            int extLength = 4 + words * 4;
+            if (payloadStart + extLength > length) return length;
+            System.arraycopy(packet, payloadStart + extLength, packet, payloadStart,
+                    length - payloadStart - extLength);
+            payloadEnd = length - extLength;
+            packet[0] = (byte) (firstByte & ~0x10);
+            strippedExtensions.incrementAndGet();
+            firstByte = packet[0] & 0xFF;
+        }
+        if ((firstByte & 0x20) != 0 && payloadEnd > payloadStart) {
+            int padding = packet[payloadEnd - 1] & 0xFF;
+            if (padding > 0 && payloadEnd - padding >= payloadStart) {
+                payloadEnd -= padding;
+                packet[0] = (byte) (firstByte & ~0x20);
+            }
+        }
+        if (payloadEnd <= payloadStart) return payloadEnd;
+
+        int nalType = (packet[payloadStart] >> 1) & 0x3F;
+        if (nalType < 48 || nalType == 49) {
+            // 单 NAL 与分片包，播放器能正常处理
+            return payloadEnd;
+        }
+        int dropped = droppedRtpPackets.incrementAndGet();
+        if (loggedNalTypes.add(nalType) || dropped % 500 == 0) {
+            log("丢弃播放器不支持的 H.265 包：NAL 类型 " + nalType + "（"
+                    + bytePreview(packet, payloadStart, 4) + "），累计 " + dropped + " 个");
+        }
+        return -1;
+    }
+
+    /** 取前几个字节的十六进制，便于在日志里确认码流形态 */
+    private static String bytePreview(byte[] data, int offset, int count) {
+        StringBuilder sb = new StringBuilder("首字节 ");
+        for (int i = 0; i < count && offset + i < data.length; i++) {
+            if (i > 0) sb.append(' ');
+            sb.append(String.format(Locale.ROOT, "%02X", data[offset + i] & 0xFF));
+        }
+        return sb.toString();
+    }
+
+    /** 从 SDP 里记下 H.265 轨道的负载类型号（通常是 96） */
+    private void rememberHevcPayloadTypes(byte[] sdp) {
+        if (sdp == null || sdp.length == 0) return;
+        String text = new String(sdp, StandardCharsets.ISO_8859_1);
+        for (String line : text.split("\r\n")) {
+            String trimmed = line.trim();
+            if (!trimmed.toLowerCase(Locale.ROOT).startsWith("a=rtpmap:")) continue;
+            String value = trimmed.substring("a=rtpmap:".length()).trim();
+            int space = value.indexOf(' ');
+            if (space <= 0) continue;
+            String encoding = value.substring(space + 1).trim().toUpperCase(Locale.ROOT);
+            if (!encoding.startsWith("H265") && !encoding.startsWith("HEVC")) continue;
+            try {
+                hevcPayloadTypes.add(Integer.parseInt(value.substring(0, space).trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        if (!hevcPayloadTypes.isEmpty()) {
+            log("H.265 负载类型 " + hevcPayloadTypes + "：代理将过滤播放器不支持的 NAL 类型");
         }
     }
 
