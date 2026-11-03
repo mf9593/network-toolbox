@@ -52,14 +52,102 @@ public class NetworkUtils {
                         && info.getType() == ConnectivityManager.TYPE_WIFI;
             }
             Network network = connectivityManager.getActiveNetwork();
-            if (network == null) return false;
-
-            NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
-            if (capabilities == null) return false;
-
-            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+            if (network != null) {
+                NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+                if (capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    return true;
+                }
+            }
+            // 活动网络可能是移动数据（例如连的是没有外网的摄像头/内网 WiFi），
+            // 此时只要系统里存在已连接的 WiFi 网络，也要认为 WiFi 可用，
+            // 否则局域网扫描会直接判定“没有 WiFi”而不工作。
+            return hasTransport(connectivityManager, NetworkCapabilities.TRANSPORT_WIFI);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * 系统中是否存在某种传输方式（WiFi/以太网）的已连接网络。
+     */
+    private static boolean hasTransport(ConnectivityManager connectivityManager, int transport) {
+        try {
+            for (Network network : connectivityManager.getAllNetworks()) {
+                NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+                if (capabilities != null && capabilities.hasTransport(transport)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /**
+     * 获取可用于局域网扫描的网络（优先 WiFi，其次以太网）。
+     * 不依赖“当前活动网络”，因为内网无外网时活动网络往往还是移动数据。
+     *
+     * @return 对应的 {@link Network}，没有可用局域网时返回 null
+     */
+    public static Network getLanNetwork(Context context) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context
+                .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) return null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return null;
+        try {
+            Network wifi = null;
+            Network ethernet = null;
+            for (Network network : connectivityManager.getAllNetworks()) {
+                NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+                if (capabilities == null) continue;
+                if (wifi == null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    wifi = network;
+                } else if (ethernet == null
+                        && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                    ethernet = network;
+                }
+            }
+            return wifi != null ? wifi : ethernet;
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * 把当前进程的默认网络切到局域网（WiFi/以太网）。
+     *
+     * 内网没有外网时，系统的默认网络仍是移动数据，未显式绑定网络的 Socket
+     * 会把广播/探测包发到移动数据网卡，导致扫描不到任何内网设备。
+     * 扫描前绑定、扫描结束解绑即可，不影响其他功能。
+     *
+     * @return 是否绑定成功
+     */
+    public static boolean bindProcessToLanNetwork(Context context) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context
+                .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) return false;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        Network lanNetwork = getLanNetwork(context);
+        if (lanNetwork == null) return false;
+        try {
+            return connectivityManager.bindProcessToNetwork(lanNetwork);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * 解除进程网络绑定，恢复系统默认网络。
+     */
+    public static void unbindProcessNetwork(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        try {
+            ConnectivityManager connectivityManager = (ConnectivityManager) context
+                    .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (connectivityManager != null) {
+                connectivityManager.bindProcessToNetwork(null);
+            }
+        } catch (Exception ignored) {
         }
     }
 

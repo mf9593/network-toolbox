@@ -46,6 +46,7 @@ import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.adapter.DeviceAdapter;
 import com.networktool.app.model.DeviceInfo;
 import com.networktool.app.util.LanScanManager;
+import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ScanSpeedConfig;
 import com.networktool.app.util.ThemeManager;
@@ -102,6 +103,10 @@ public class DeviceFragment extends Fragment {
     private ConnectivityManager.NetworkCallback networkCallback;
     private LanScanManager scanManager;
     private int scanGeneration = 0;
+    /** 是否已把进程默认网络切到 WiFi/以太网（内网无外网时必须切，否则探测包会走移动数据） */
+    private boolean lanNetworkBound = false;
+    /** 绑定时保存的 Application Context，onDestroyView 之后仍能用来解绑 */
+    private Context appContextForNetwork;
     private final List<String[]> routerDomains = new ArrayList<>();
 
     @Override
@@ -364,6 +369,7 @@ public class DeviceFragment extends Fragment {
         if (scanManager != null) {
             scanManager.stopScan();
         }
+        unbindLanNetwork();
         isScanning = false;
         scanStatus = "";
         deviceList.clear();
@@ -389,6 +395,10 @@ public class DeviceFragment extends Fragment {
         isScanning = true;
         scanStatus = "正在发现局域网设备…";
         updateScanUi();
+
+        // 内网没有外网时系统默认网络仍是移动数据，不切网络的话
+        // UDP 广播/TCP 探测会从移动数据网卡发出，扫不到任何内网设备。
+        bindLanNetwork();
 
         // 有线优先：即使系统当前活动网络是移动数据，只要以太网已连接，
         // 也使用以太网网段的网关和本机地址进行扫描。
@@ -424,9 +434,33 @@ public class DeviceFragment extends Fragment {
         } else {
             isScanning = false;
             scanStatus = "未连接到网络";
+            unbindLanNetwork();
             updateScanUi();
             updateEmptyState();
         }
+    }
+
+    /**
+     * 扫描前把进程默认网络切到 WiFi/以太网。
+     * 局域网没有外网时（如摄像头/内网），系统的默认网络仍是移动数据，
+     * 未绑定网络的 Socket 会把广播发到移动数据网卡，导致扫不到设备。
+     */
+    private void bindLanNetwork() {
+        if (lanNetworkBound) return;
+        Context context = getContext();
+        if (context == null) return;
+        appContextForNetwork = context.getApplicationContext();
+        lanNetworkBound = NetworkUtils.bindProcessToLanNetwork(context);
+        AppErrorLogger.logDebug("DeviceFragment", "局域网扫描绑定网络: " + lanNetworkBound);
+    }
+
+    /** 扫描结束后恢复系统默认网络，避免影响其他网络请求 */
+    private void unbindLanNetwork() {
+        if (!lanNetworkBound) return;
+        lanNetworkBound = false;
+        Context context = appContextForNetwork != null ? appContextForNetwork : getContext();
+        if (context == null) return;
+        NetworkUtils.unbindProcessNetwork(context);
     }
 
     private String buildScanRangeLabel(String ip) {
@@ -443,6 +477,7 @@ public class DeviceFragment extends Fragment {
         }
         isScanning = false;
         scanStatus = "扫描已停止";
+        unbindLanNetwork();
         updateScanUi();
         updateEmptyState();
         showToast("已停止扫描");
@@ -530,6 +565,7 @@ public class DeviceFragment extends Fragment {
                     if (!isAdded() || generation != scanGeneration) return;
                     isScanning = false;
                     scanStatus = "扫描完成";
+                    unbindLanNetwork();
                     refreshLayout.setRefreshing(false);
                     updateScanUi();
                     applyFilter();
@@ -541,6 +577,7 @@ public class DeviceFragment extends Fragment {
                     if (!isAdded() || generation != scanGeneration) return;
                     isScanning = false;
                     scanStatus = error == null ? "扫描失败" : error;
+                    unbindLanNetwork();
                     refreshLayout.setRefreshing(false);
                     updateScanUi();
                     updateEmptyState();
@@ -1120,6 +1157,7 @@ public class DeviceFragment extends Fragment {
                             if (scanManager != null) scanManager.stopScan();
                             isScanning = false;
                             scanStatus = "网络已断开";
+                            unbindLanNetwork();
                             updateScanUi();
                             updateEmptyState();
                         });
@@ -1198,6 +1236,7 @@ public class DeviceFragment extends Fragment {
         if (scanManager != null) {
             scanManager.stopScan();
         }
+        unbindLanNetwork();
         if (connectivityManager != null && networkCallback != null) {
             try {
                 connectivityManager.unregisterNetworkCallback(networkCallback);

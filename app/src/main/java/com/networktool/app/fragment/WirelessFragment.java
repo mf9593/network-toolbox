@@ -49,6 +49,7 @@ import com.networktool.app.activity.settings.ScanActivity;
 import com.networktool.app.activity.tool.MacActivity;
 import com.networktool.app.adapter.WifiAdapter;
 import com.networktool.app.model.WifiInfoModel;
+import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.WifiConnector;
@@ -69,6 +70,7 @@ import java.util.Map;
  */
 public class WirelessFragment extends Fragment implements WifiConnector.Callback {
 
+    private static final String TAG = "WirelessFragment";
     private static final int REQ_WIFI_PERMISSION = 100;
     private static final long MIN_SCAN_INTERVAL = 10_000L;
 
@@ -299,7 +301,14 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     private void setupListeners() {
         refreshLayout.setOnRefreshListener(() -> scanWifi(true));
         scanButton.setOnClickListener(v -> scanWifi(true));
-        currentWifiCard.setOnClickListener(v -> openWifiSettings());
+        currentWifiCard.setOnClickListener(v -> {
+            // WiFi 关着时点当前网络卡片，先尝试直接打开，失败再进系统设置
+            if (wifiManager != null && !wifiManager.isWifiEnabled()) {
+                enableWifiOrOpenSettings();
+            } else {
+                openWifiSettings();
+            }
+        });
         openWifiSettingsButton.setOnClickListener(v -> openWifiSettings());
         scanEntryButton.setOnClickListener(v -> {
             try {
@@ -321,7 +330,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
                     requestWifiPermissions();
                 }
             } else if (wifiManager == null || !wifiManager.isWifiEnabled()) {
-                openWifiSettings();
+                enableWifiOrOpenSettings();
             } else if (!WifiConnector.getInstance(requireContext()).isLocationEnabled()) {
                 openLocationSettings();
             } else {
@@ -465,8 +474,12 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             return;
         }
         if (!wifiManager.isWifiEnabled()) {
-            showToast("请先开启 WiFi");
+            // 手动触发扫描时 WiFi 还关着：先尝试请求系统打开，失败再跳设置；
+            // 自动刷新不打扰用户，只更新空态。
             updateEmptyState();
+            if (manual) {
+                enableWifiOrOpenSettings();
+            }
             return;
         }
         if (!WifiConnector.getInstance(requireContext()).isLocationEnabled()) {
@@ -674,8 +687,8 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         } else if (wifiManager == null || !wifiManager.isWifiEnabled()) {
             emptyIcon.setImageResource(R.drawable.ic_wifi_off);
             emptyText.setText("WiFi 已关闭");
-            emptyHint.setText("请在系统设置中开启 WiFi 后重试");
-            emptyAction.setText("打开设置");
+            emptyHint.setText("点击下方按钮直接开启，无法开启时会跳到系统设置");
+            emptyAction.setText("开启 WiFi");
         } else if (!WifiConnector.getInstance(requireContext()).isLocationEnabled()) {
             emptyIcon.setImageResource(R.drawable.ic_lock);
             emptyText.setText("系统定位未开启");
@@ -1261,6 +1274,43 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
         } catch (Exception e) {
             showToast("无法打开 WiFi 设置");
+        }
+    }
+
+    /**
+     * 先尝试直接请求系统打开 WiFi（Android 9 及以下有效）。
+     * Android 10+ 起普通应用不再允许直接开关 WiFi，setWifiEnabled 会返回 false，
+     * 这时再跳到系统 WiFi 设置让用户手动打开。
+     */
+    private void enableWifiOrOpenSettings() {
+        if (!isAdded()) return;
+        if (wifiManager != null && wifiManager.isWifiEnabled()) {
+            scanWifi(true);
+            return;
+        }
+        boolean requested = false;
+        try {
+            if (wifiManager != null) {
+                requested = wifiManager.setWifiEnabled(true);
+            }
+        } catch (Exception e) {
+            AppErrorLogger.catchThrowable(TAG, "请求打开 WiFi 失败", e);
+        }
+        if (requested) {
+            showToast("正在打开 WiFi…");
+            updateEmptyState();
+            mainHandler.postDelayed(() -> {
+                if (!isAdded() || wifiManager == null) return;
+                updateCurrentConnection();
+                if (wifiManager.isWifiEnabled()) {
+                    checkPermissionsAndScan();
+                } else {
+                    updateEmptyState();
+                }
+            }, 1500);
+        } else {
+            showToast("系统限制无法直接打开，请手动开启");
+            openWifiSettings();
         }
     }
 
