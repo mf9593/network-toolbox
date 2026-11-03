@@ -75,6 +75,9 @@ public class IconConverterActivity extends AppCompatActivity {
     private boolean flipH, flipV;
     private float rotateDeg;
 
+    /** 渐变 id → 第一个色标的颜色（Android Vector 的渐变写法较复杂，这里退化成纯色） */
+    private final java.util.Map<String, String> svgGradientColors = new java.util.HashMap<>();
+
     private final ActivityResultLauncher<String> exportTextLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument("text/plain"), uri -> {
                 if (uri == null) return;
@@ -351,10 +354,38 @@ public class IconConverterActivity extends AppCompatActivity {
     }
 
     private Drawable renderVectorDrawable(String input) throws Exception {
-        if (isXmlMode) {
+        // 以输入内容为准，而不是只看模式开关：贴了 SVG 却停在 XML 模式时，
+        // 矢量渲染器认不出 <rect>/<polyline>/<defs>，预览就是一片空白。
+        boolean xmlInput = detectXmlInput(input);
+        syncModeSwitch(xmlInput);
+        if (xmlInput) {
             return renderXmlDrawable(input);
         }
         return renderSvgWithLibrary(input);
+    }
+
+    /**
+     * 自动识别输入格式是 SVG 还是 Android Vector XML。
+     *
+     * @return true 表示矢量 XML（{@code <vector>}），false 表示 SVG（{@code <svg>}）
+     */
+    private boolean detectXmlInput(String text) {
+        if (text == null || text.trim().isEmpty()) return isXmlMode;
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        int svg = lower.indexOf("<svg");
+        int vector = lower.indexOf("<vector");
+        if (svg >= 0 && (vector < 0 || svg < vector)) return false;
+        if (vector >= 0) return true;
+        return isXmlMode;
+    }
+
+    /** 让模式开关跟上实际识别出的格式，避免开关显示的模式和渲染结果对不上 */
+    private void syncModeSwitch(boolean xml) {
+        if (isXmlMode == xml) return;
+        isXmlMode = xml;
+        if (modeToggleGroup != null) {
+            modeToggleGroup.check(xml ? R.id.modeXml : R.id.modeSvg);
+        }
     }
 
     private String stripRootSvgTransform(String svg) {
@@ -384,7 +415,11 @@ public class IconConverterActivity extends AppCompatActivity {
         try {
             svg = SVG.getFromString(sanitized);
         } catch (Exception e) {
-            AppErrorLogger.catchThrowable(TAG, "AndroidSVG 解析失败", e);
+            AppErrorLogger.catchThrowable(TAG, "AndroidSVG 解析失败，尝试内置渲染器兜底", e);
+            // 标准库偶尔会拒绝一些写法古怪的 SVG，退回项目内的基础形状渲染器，
+            // 至少能把 rect/polyline/line/path 画出来，而不是直接报错空白。
+            Drawable fallback = renderSvgWithBuiltin(sanitized);
+            if (fallback != null) return fallback;
             throw new Exception("SVG解析失败: " + e.getMessage());
         }
         float docW, docH;
@@ -420,6 +455,28 @@ public class IconConverterActivity extends AppCompatActivity {
         return new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
     }
 
+    /**
+     * 标准库解析失败时的兜底：用项目内的基础渲染器画出 rect/polyline/line/path。
+     * 只支持基础形状与纯色，渐变会退化为首色或透明，但不会白屏。
+     */
+    private Drawable renderSvgWithBuiltin(String svgContent) {
+        try {
+            SvgRenderer.SvgDocument doc = SvgRenderer.parse(svgContent);
+            if (doc == null || doc.paths == null || doc.paths.isEmpty()) return null;
+            float vw = doc.viewportWidth > 0 ? doc.viewportWidth : 24f;
+            float vh = doc.viewportHeight > 0 ? doc.viewportHeight : 24f;
+            int maxSize = dp(200);
+            float scale = Math.min((float) maxSize / vw, (float) maxSize / vh);
+            int bw = Math.max(1, Math.round(vw * scale));
+            int bh = Math.max(1, Math.round(vh * scale));
+            AppErrorLogger.logDebug(TAG, "内置渲染器兜底 paths=" + doc.paths.size() + " " + bw + "x" + bh);
+            return SvgRenderer.render(doc, bw, bh);
+        } catch (Throwable t) {
+            AppErrorLogger.catchThrowable(TAG, "内置渲染器兜底失败", t);
+            return null;
+        }
+    }
+
     private Drawable renderXmlDrawable(String text) throws Exception {
         int vw = 24, vh = 24;
         Matcher vm = Pattern.compile("viewportWidth\\s*=\\\"([^\\\"]+)\\\"").matcher(text);
@@ -445,6 +502,7 @@ public class IconConverterActivity extends AppCompatActivity {
                 "<group\\b([^>]*)>|</group>|<path\\s+([^>]*)/?>",
                 Pattern.CASE_INSENSITIVE).matcher(text);
         int groupDepth = 0;
+        int drawnCount = 0;
         while (pm.find()) {
             if (pm.group(1) != null) {
                 canvas.save();
@@ -471,6 +529,7 @@ public class IconConverterActivity extends AppCompatActivity {
 
             Path path = SvgRenderer.parsePathData(d);
             if (path == null) continue;
+            drawnCount++;
             String fillType = extract(attrs, "android:fillType", null);
             if ("evenOdd".equals(fillType)) {
                 path.setFillType(Path.FillType.EVEN_ODD);
@@ -503,6 +562,9 @@ public class IconConverterActivity extends AppCompatActivity {
             canvas.restore();
             groupDepth--;
         }
+        if (drawnCount == 0) {
+            throw new Exception("未找到可渲染的路径：请确认粘贴的是矢量 XML（<vector>），SVG 代码会自动切换模式");
+        }
         if (flipH || flipV || rotateDeg != 0) {
             Matrix m = new Matrix();
             m.postTranslate(-bw / 2f, -bh / 2f);
@@ -520,10 +582,11 @@ public class IconConverterActivity extends AppCompatActivity {
             String src = codeEditText.getText().toString();
             if (src.isEmpty()) return;
             String content;
+            boolean xmlInput = detectXmlInput(src);
             if ("svg".equals(format)) {
-                content = isXmlMode ? convertXmlToSvg(src) : src;
+                content = xmlInput ? convertXmlToSvg(src) : src;
             } else {
-                content = isXmlMode ? src : convertSvgToXml(src);
+                content = xmlInput ? src : convertSvgToXml(src);
             }
             android.content.ClipboardManager cm = (android.content.ClipboardManager)
                     getSystemService(android.content.Context.CLIPBOARD_SERVICE);
@@ -616,6 +679,7 @@ public class IconConverterActivity extends AppCompatActivity {
                 .parse(new InputSource(new StringReader(svg)));
         Element root = document.getDocumentElement();
         if (root == null) return null;
+        collectSvgGradients(root);
 
         String vw = "24", vh = "24";
         String viewBox = root.getAttribute("viewBox");
@@ -702,7 +766,7 @@ public class IconConverterActivity extends AppCompatActivity {
         out.append("    <path\n        android:pathData=\"")
                 .append(pathData.replace("\"", "&quot;")).append("\"");
 
-        String fill = paint.fill;
+        String fill = resolveSvgPaint(paint.fill);
         boolean strokeVisible = paint.stroke != null && !"none".equals(paint.stroke);
         if (fill == null) {
             fill = strokeVisible ? "none" : "#000000";
@@ -712,7 +776,7 @@ public class IconConverterActivity extends AppCompatActivity {
                 .append("\"");
 
         if (strokeVisible) {
-            out.append("\n        android:strokeColor=\"").append(svgColor(paint.stroke)).append("\"");
+            out.append("\n        android:strokeColor=\"").append(svgColor(resolveSvgPaint(paint.stroke))).append("\"");
             String sw = paint.strokeWidth != null ? paint.strokeWidth : "1";
             out.append("\n        android:strokeWidth=\"").append(sw).append("\"");
             if ("round".equals(paint.lineCap)) {
@@ -763,6 +827,69 @@ public class IconConverterActivity extends AppCompatActivity {
             }
         }
         return null;
+    }
+
+    /**
+     * 收集文档里所有渐变的「首个色标颜色」，转换时用来把 url(#id) 退化成纯色。
+     */
+    private void collectSvgGradients(Element root) {
+        svgGradientColors.clear();
+        collectSvgGradientsRecursive(root);
+    }
+
+    private void collectSvgGradientsRecursive(Element element) {
+        String tag = element.getLocalName() != null
+                ? element.getLocalName() : element.getTagName();
+        if (tag != null) {
+            tag = tag.toLowerCase(java.util.Locale.US);
+            if ("lineargradient".equals(tag) || "radialgradient".equals(tag)) {
+                String id = element.getAttribute("id");
+                if (id != null && !id.trim().isEmpty()) {
+                    String color = firstStopColor(element);
+                    if (color != null) svgGradientColors.put(id.trim(), color);
+                }
+            }
+        }
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node node = children.item(i);
+            if (node instanceof Element) collectSvgGradientsRecursive((Element) node);
+        }
+    }
+
+    /** 取渐变里第一个能读到颜色的 stop（兼容属性和 style 两种写法） */
+    private String firstStopColor(Element gradient) {
+        NodeList children = gradient.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node node = children.item(i);
+            if (!(node instanceof Element)) continue;
+            Element stop = (Element) node;
+            String tag = stop.getLocalName() != null ? stop.getLocalName() : stop.getTagName();
+            if (tag == null || !"stop".equalsIgnoreCase(tag)) continue;
+            String color = svgElementValue(stop, "stop-color");
+            if (color != null && !"none".equals(color)) return color;
+        }
+        return null;
+    }
+
+    /**
+     * 把 fill/stroke 里的 {@code url(#gradient)} 解析成渐变首色。
+     * Android Vector 要用 aapt:attr 内嵌 gradient，这里的转换器不支持，
+     * 退化成纯色至少不会把图标涂成黑色。
+     */
+    private String resolveSvgPaint(String value) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (!v.startsWith("url(")) return v;
+        int hash = v.indexOf('#');
+        if (hash < 0) return "#000000";
+        int close = v.indexOf(')', hash + 1);
+        String id = close > hash ? v.substring(hash + 1, close) : v.substring(hash + 1);
+        id = id.trim();
+        if (id.startsWith("'") || id.startsWith("\"")) id = id.substring(1);
+        if (id.endsWith("'") || id.endsWith("\"")) id = id.substring(0, id.length() - 1);
+        String color = svgGradientColors.get(id);
+        return color != null ? color : "#000000";
     }
 
     private String svgElementAttrs(Element element) {
@@ -1041,7 +1168,7 @@ public class IconConverterActivity extends AppCompatActivity {
             if (!hasColor(n) && !"#00000000".equals(n)) detectedColors.add(new ColorInfo(m.group(), n, m.start(), m.end()));
         }
         // SVG 模式下检测 currentColor
-        if (!isXmlMode && text.contains("currentColor") && !hasColor("currentColor")) {
+        if (!detectXmlInput(text) && text.contains("currentColor") && !hasColor("currentColor")) {
             int idx = text.indexOf("currentColor");
             detectedColors.add(new ColorInfo("currentColor", "#000000", idx, idx + 12));
         }
@@ -1385,7 +1512,7 @@ public class IconConverterActivity extends AppCompatActivity {
                 text = text.replace(ci.colorValue, hex);
             } else if (text.contains(ci.originalText)) {
                 text = text.replace(ci.originalText, hex);
-            } else if (!isXmlMode && text.contains("currentColor")) {
+            } else if (!detectXmlInput(text) && text.contains("currentColor")) {
                 text = text.replace("currentColor", hex);
             } else {
                 // XML 检测的颜色是 #AARRGGBB 格式，尝试去掉 alpha 前缀匹配 SVG 的 #RRGGBB
@@ -1456,7 +1583,7 @@ public class IconConverterActivity extends AppCompatActivity {
     private void doExportSvg(Uri uri) throws Exception {
         String src = codeEditText.getText().toString();
         if (src.isEmpty()) return;
-        String content = isXmlMode ? convertXmlToSvg(src) : src;
+        String content = detectXmlInput(src) ? convertXmlToSvg(src) : src;
         content = bakeTransform(content, "svg");
         OutputStream os = getContentResolver().openOutputStream(uri);
         os.write(content.getBytes("UTF-8"));
@@ -1467,7 +1594,7 @@ public class IconConverterActivity extends AppCompatActivity {
     private void doExportXml(Uri uri) throws Exception {
         String src = codeEditText.getText().toString();
         if (src.isEmpty()) return;
-        String content = isXmlMode ? src : convertSvgToXml(src);
+        String content = detectXmlInput(src) ? src : convertSvgToXml(src);
         content = bakeTransform(content, "xml");
         OutputStream os = getContentResolver().openOutputStream(uri);
         os.write(content.getBytes("UTF-8"));
