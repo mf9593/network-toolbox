@@ -274,6 +274,11 @@ public class ToolsFragment extends Fragment
         system.add(new ToolItem("MAC 地址查询", R.drawable.ic_mac, "查询 MAC 厂商与地址信息", this::onMacQuery));
         system.add(new ToolItem("图标转换", R.drawable.ic_swap, "SVG/PNG 图标格式转换", this::onIconConverter));
         categories.add(new Category("系统与实验室", system));
+
+        List<ToolItem> nativeSettings = new ArrayList<>();
+        nativeSettings.add(new ToolItem("电池优化", R.drawable.ic_battery_optimization,
+                "打开系统的电池优化（忽略）设置", this::onBatteryOptimization));
+        categories.add(new Category("系统原生设置", nativeSettings));
     }
 
     private void rebuildList() {
@@ -624,6 +629,35 @@ public class ToolsFragment extends Fragment
 
     private void onCast(ToolItem tool) {
         open(CastActivity.class);
+    }
+
+    /**
+     * 打开系统原生的「电池优化」页面（忽略电池优化列表）。
+     *
+     * <p>部分定制系统（MIUI、EMUI 等）裁掉了这个标准页面，按顺序退回应用详情页、
+     * 系统设置首页，保证点了一定有反应。</p>
+     */
+    private void onBatteryOptimization(ToolItem tool) {
+        Context context = getContext();
+        if (context == null) return;
+        String packageName = context.getPackageName();
+        android.content.Intent[] candidates = new android.content.Intent[]{
+                new android.content.Intent(
+                        android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                new android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:" + packageName)),
+                new android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+        };
+        for (android.content.Intent intent : candidates) {
+            try {
+                context.startActivity(intent);
+                return;
+            } catch (Throwable ignored) {
+                // 该 ROM 没有这个页面，继续尝试下一个
+            }
+        }
+        Toast.makeText(context, "无法打开电池优化页面", Toast.LENGTH_SHORT).show();
     }
 
     private void onAppManager(ToolItem tool) {
