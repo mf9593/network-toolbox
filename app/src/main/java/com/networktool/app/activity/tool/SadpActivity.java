@@ -42,6 +42,7 @@ import com.networktool.app.model.SadpDevice;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.DebugLogger;
 import com.networktool.app.util.FullscreenHelper;
+import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 
 import java.io.BufferedReader;
@@ -124,6 +125,8 @@ public class SadpActivity extends AppCompatActivity {
     private ExecutorService executorService;
     private Handler mainHandler;
     private boolean isScanning = false;
+    /** 是否已把进程网络绑定到 WiFi/以太网 */
+    private boolean lanNetworkAcquired = false;
     
     // HTTP客户端
     private OkHttpClient okHttpClient;
@@ -137,6 +140,10 @@ public class SadpActivity extends AppCompatActivity {
 
         executorService = Executors.newCachedThreadPool();
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // SADP 搜索走内网广播，把进程网络绑到 WiFi/以太网，
+        // 避免内网无外网时探测包从移动数据网卡发出
+        lanNetworkAcquired = NetworkUtils.acquireLanNetwork(this);
         
         // 初始化OkHttpClient
         okHttpClient = new OkHttpClient.Builder()
@@ -1328,6 +1335,10 @@ public class SadpActivity extends AppCompatActivity {
             executorService.shutdownNow();
         }
         mainHandler.removeCallbacksAndMessages(null);
+        if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
+        }
     }
 
     // ==================== RTSP播放相关 ====================

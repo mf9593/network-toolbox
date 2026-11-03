@@ -65,6 +65,8 @@ public class PingActivity extends AppCompatActivity {
 
     private ExecutorService executorService;
     private Handler mainHandler;
+    /** 是否已把进程网络绑定到 WiFi/以太网（仅内网目标时绑定） */
+    private boolean lanNetworkAcquired = false;
     private StringBuilder pingResult;
     private Process currentProcess;
     private volatile boolean isPinging = false;
@@ -299,6 +301,9 @@ public class PingActivity extends AppCompatActivity {
             return;
         }
 
+        // 内网目标绑到 WiFi/以太网，公网目标保持默认网络（可能是移动数据）
+        updateLanBinding(host);
+
         if (isPinging && currentProcess != null) {
             currentProcess.destroy();
             currentProcess = null;
@@ -401,11 +406,30 @@ public class PingActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    /**
+     * 目标是内网地址时把进程网络绑到 WiFi/以太网；公网目标保持系统默认网络，
+     * 避免连的是无外网内网 WiFi 时公网也 ping 不通。
+     */
+    private void updateLanBinding(String host) {
+        if (NetworkUtils.isLanTarget(host)) {
+            if (!lanNetworkAcquired) {
+                lanNetworkAcquired = NetworkUtils.acquireLanNetwork(this);
+            }
+        } else if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (executorService != null) {
             executorService.shutdownNow();
+        }
+        if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
         }
     }
 }

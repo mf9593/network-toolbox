@@ -31,6 +31,7 @@ import com.networktool.app.R;
 import com.networktool.app.player.RtspPlayer;
 import com.networktool.app.player.RtspPlayerView;
 import com.networktool.app.util.AppErrorLogger;
+import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 
 
@@ -83,6 +84,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
 
     // RtspPlayer
     private RtspPlayer nodePlayer;
+    /** 是否已把进程网络绑定到 WiFi/以太网（仅内网摄像头时绑定） */
+    private boolean lanNetworkAcquired = false;
 
     // 流地址
     private String streamUrl;
@@ -601,6 +604,10 @@ public class RtspPlayerActivity extends AppCompatActivity {
      * 开始播放
      */
     private void startPlayback() {
+        // 内网摄像头：把进程网络绑到 WiFi/以太网，
+        // 否则连的是无外网内网 WiFi 时，视频流会从移动数据网卡出去，一直连不上
+        bindNetworkForStream();
+
         // 隐藏输入界面，显示播放界面
         if (inputLayout != null) {
             inputLayout.setVisibility(View.GONE);
@@ -629,6 +636,27 @@ public class RtspPlayerActivity extends AppCompatActivity {
         // 注意：只试一次不够——网络慢时 1.5 秒还没连上，就永远停在竖屏，
         // 竖屏下 16:9 的画面按比例适应，上下就是大片黑边（用户看到的「额头黑边」）。
         scheduleAutoFullscreen(0);
+    }
+
+    /**
+     * 内网地址的流绑定到 WiFi/以太网；公网地址保持系统默认网络。
+     */
+    private void bindNetworkForStream() {
+        String host = null;
+        try {
+            host = new java.net.URI(
+                    com.networktool.app.util.RtspDiagnostics.normalizeUrl(streamUrl)).getHost();
+        } catch (Exception e) {
+            AppErrorLogger.catchThrowable(TAG, "解析流地址失败", e);
+        }
+        if (NetworkUtils.isLanTarget(host)) {
+            if (!lanNetworkAcquired) {
+                lanNetworkAcquired = NetworkUtils.acquireLanNetwork(this);
+            }
+        } else if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
+        }
     }
 
     /**
@@ -1344,5 +1372,9 @@ public class RtspPlayerActivity extends AppCompatActivity {
         }
         hideHandler.removeCallbacksAndMessages(null);
         stopInfoUpdates();
+        if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
+        }
     }
 }

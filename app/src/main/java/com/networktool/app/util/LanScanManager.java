@@ -333,6 +333,43 @@ public class LanScanManager {
         }
     }
 
+    /**
+     * 追加一个额外扫描网段（例如通过路由器可以访问到的上级网段）。
+     *
+     * <p>广播/多播过不了路由器，但 Ping、TCP 单播可以路由过去，
+     * 所以把目标主机直接加进扫描列表即可，本网段的发现流程不受影响。</p>
+     *
+     * @param subnetOrIp 形如 "192.168.1.0/24" 或 "192.168.1.1"（按 /24 处理）
+     * @return 实际新增的主机数量
+     */
+    public int addExtraSubnet(String subnetOrIp) {
+        if (subnetOrIp == null) return 0;
+        String value = subnetOrIp.trim();
+        int slash = value.indexOf('/');
+        if (slash > 0) value = value.substring(0, slash);
+        String[] parts = value.split("\\.");
+        if (parts.length < 3) return 0;
+        String prefix;
+        try {
+            for (int i = 0; i < 3; i++) {
+                int v = Integer.parseInt(parts[i]);
+                if (v < 0 || v > 255) return 0;
+            }
+            prefix = parts[0] + "." + parts[1] + "." + parts[2] + ".";
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+        int added = 0;
+        for (int i = 1; i <= 254; i++) {
+            String host = prefix + i;
+            if (!targetHosts.contains(host)) {
+                targetHosts.add(host);
+                added++;
+            }
+        }
+        return added;
+    }
+
     /** 找到本机地址对应的子网掩码前缀长度（拿不到就按 /24） */
     private static int prefixLengthForIp(String localIp) {
         try {
@@ -634,10 +671,11 @@ public class LanScanManager {
         boolean doHttp = !scanMode.equals(MODE_QUIET);
 
         // IPv4 Ping 扫描
-        reportProgress("正在扫描设备...", 0, 255);
-        
+        final int totalHosts = Math.max(targetHosts.size(), 1);
+        reportProgress("正在扫描设备...", 0, totalHosts);
+
         final AtomicInteger progress = new AtomicInteger(0);
-        final CountDownLatch latch = new CountDownLatch(255);
+        final CountDownLatch latch = new CountDownLatch(totalHosts);
         
         for (String host : targetHosts) {
             if (!isScanning) {
@@ -668,16 +706,19 @@ public class LanScanManager {
                     android.util.Log.w(TAG, "IP扫描异常: " + e.getMessage());
                 } finally {
                     int current = progress.incrementAndGet();
-                    reportProgress("正在扫描 " + current + "/255", current, 255);
+                    reportProgress("正在扫描 " + current + "/" + totalHosts, current, totalHosts);
                     latch.countDown();
                 }
             });
         }
         
         try {
-            boolean finished = latch.await(30, TimeUnit.SECONDS);
+            // 主机越多给的时间越长，至少 30 秒
+            long timeoutSeconds = Math.max(30, totalHosts / 10);
+            boolean finished = latch.await(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
-                android.util.Log.w(TAG, "IP扫描超时，已完成 " + (255 - latch.getCount()) + "/255");
+                android.util.Log.w(TAG, "IP扫描超时，已完成 "
+                        + (totalHosts - latch.getCount()) + "/" + totalHosts);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

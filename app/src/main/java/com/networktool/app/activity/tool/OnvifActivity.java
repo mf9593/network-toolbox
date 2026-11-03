@@ -41,6 +41,7 @@ import com.networktool.app.adapter.OnvifDeviceAdapter;
 import com.networktool.app.model.OnvifDevice;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.FullscreenHelper;
+import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.OnvifUtil;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.activity.tool.WebViewActivity;
@@ -143,6 +144,8 @@ public class OnvifActivity extends AppCompatActivity {
     private ExecutorService executorService;
     private Handler mainHandler;
     private boolean isScanning = false;
+    /** 是否已把进程网络绑定到 WiFi/以太网 */
+    private boolean lanNetworkAcquired = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -156,6 +159,10 @@ public class OnvifActivity extends AppCompatActivity {
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         setupToolbar();
+
+        // ONVIF 调试全程访问内网设备：把进程网络绑到 WiFi/以太网，
+        // 避免内网无外网、系统默认网络还是移动数据时探测包发错网卡
+        lanNetworkAcquired = NetworkUtils.acquireLanNetwork(this);
 
         // 初始化线程池（每次创建时初始化）
         executorService = Executors.newCachedThreadPool();
@@ -3326,6 +3333,10 @@ public class OnvifActivity extends AppCompatActivity {
         if (executorService != null) {
             executorService.shutdownNow();
             executorService = null;
+        }
+        if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
         }
     }
 

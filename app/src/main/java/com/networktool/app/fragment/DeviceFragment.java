@@ -13,6 +13,8 @@ import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -50,6 +52,7 @@ import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ScanSpeedConfig;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.UpstreamNetworkDetector;
 import com.networktool.app.util.UrlOpenHelper;
 
 import org.json.JSONArray;
@@ -59,7 +62,9 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 局域网设备页
@@ -103,6 +108,12 @@ public class DeviceFragment extends Fragment {
     private ConnectivityManager.NetworkCallback networkCallback;
     private LanScanManager scanManager;
     private int scanGeneration = 0;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    /**
+     * 上级网段探测结果缓存：key 为本机 /24 前缀，value 为上级网关 IP，
+     * 空字符串表示该网段探测过、没有上级内网（避免每次扫描都白等几秒）。
+     */
+    private static final Map<String, String> UPSTREAM_CACHE = new HashMap<>();
     /** 是否已把进程默认网络切到 WiFi/以太网（内网无外网时必须切，否则探测包会走移动数据） */
     private boolean lanNetworkBound = false;
     /** 绑定时保存的 Application Context，onDestroyView 之后仍能用来解绑 */
@@ -393,7 +404,7 @@ public class DeviceFragment extends Fragment {
         }
 
         isScanning = true;
-        scanStatus = "正在发现局域网设备…";
+        scanStatus = "正在检测相邻网段…";
         updateScanUi();
 
         // 内网没有外网时系统默认网络仍是移动数据，不切网络的话
@@ -425,12 +436,12 @@ public class DeviceFragment extends Fragment {
             addGatewayDevice(gateway);
             searchRouterBackend(gateway);
             addLocalDevice();
-            startLanScan(gateway);
+            detectUpstreamAndScan(gateway);
         } else if (scanLocalIp != null && !scanLocalIp.isEmpty()
                 && !"0.0.0.0".equals(scanLocalIp)) {
             String inferredGateway = inferGatewayFromLocalIp(scanLocalIp);
             addLocalDevice();
-            startLanScan(inferredGateway);
+            detectUpstreamAndScan(inferredGateway);
         } else {
             isScanning = false;
             scanStatus = "未连接到网络";
@@ -438,6 +449,41 @@ public class DeviceFragment extends Fragment {
             updateScanUi();
             updateEmptyState();
         }
+    }
+
+    /**
+     * 先探测上级网段（可路由到、但广播发现不了的上一层内网），再开始扫描。
+     *
+     * 探测结果按本机网段缓存在内存里，同一网段重复扫描不会每次都多花几秒。
+     */
+    private void detectUpstreamAndScan(String gateway) {
+        final String localIpForDetect = scanLocalIp;
+        final String gatewayForScan = gateway;
+        final int detectGeneration = scanGeneration;
+
+        String cached = UPSTREAM_CACHE.get(NetworkUtils.subnetPrefix24(localIpForDetect));
+        if (cached != null) {
+            startLanScan(gatewayForScan, cached.isEmpty() ? null : cached);
+            return;
+        }
+
+        new Thread(() -> {
+            String upstream = null;
+            try {
+                upstream = UpstreamNetworkDetector.detect(localIpForDetect);
+            } catch (Throwable t) {
+                AppErrorLogger.catchThrowable("DeviceFragment", "上级网段探测失败", t);
+            }
+            final String result = upstream;
+            mainHandler.post(() -> {
+                if (!isAdded() || detectGeneration != scanGeneration || !isScanning) return;
+                String prefix = NetworkUtils.subnetPrefix24(localIpForDetect);
+                if (prefix != null) UPSTREAM_CACHE.put(prefix, result == null ? "" : result);
+                scanStatus = "正在发现局域网设备…";
+                updateScanUi();
+                startLanScan(gatewayForScan, result);
+            });
+        }, "upstream-detect").start();
     }
 
     /**
@@ -450,7 +496,7 @@ public class DeviceFragment extends Fragment {
         Context context = getContext();
         if (context == null) return;
         appContextForNetwork = context.getApplicationContext();
-        lanNetworkBound = NetworkUtils.bindProcessToLanNetwork(context);
+        lanNetworkBound = NetworkUtils.acquireLanNetwork(context);
         AppErrorLogger.logDebug("DeviceFragment", "局域网扫描绑定网络: " + lanNetworkBound);
     }
 
@@ -460,7 +506,7 @@ public class DeviceFragment extends Fragment {
         lanNetworkBound = false;
         Context context = appContextForNetwork != null ? appContextForNetwork : getContext();
         if (context == null) return;
-        NetworkUtils.unbindProcessNetwork(context);
+        NetworkUtils.releaseLanNetwork(context);
     }
 
     private String buildScanRangeLabel(String ip) {
@@ -512,7 +558,7 @@ public class DeviceFragment extends Fragment {
         }
     }
 
-    private void startLanScan(String gateway) {
+    private void startLanScan(String gateway, String upstreamGateway) {
         try {
             final int generation = ++scanGeneration;
             scanManager = new LanScanManager(requireContext(), gateway, scanLocalIp,
@@ -584,6 +630,15 @@ public class DeviceFragment extends Fragment {
                     showToast(scanStatus);
                 }
             });
+            if (upstreamGateway != null) {
+                int extraHosts = scanManager.addExtraSubnet(upstreamGateway);
+                if (extraHosts > 0) {
+                    scanRangeLabel = buildScanRangeLabel(scanLocalIp)
+                            + " + " + buildScanRangeLabel(upstreamGateway) + " 上级网段";
+                    AppErrorLogger.logDebug("DeviceFragment",
+                            "追加上级网段 " + upstreamGateway + "，新增主机 " + extraHosts);
+                }
+            }
             scanManager.startScan();
         } catch (Exception e) {
             isScanning = false;

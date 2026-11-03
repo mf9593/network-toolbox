@@ -61,6 +61,8 @@ public class PortScanActivity extends AppCompatActivity {
     private List<PortScanResult> results;
     private ExecutorService executorService;
     private Handler mainHandler;
+    /** 是否已把进程网络绑定到 WiFi/以太网（仅内网目标时绑定） */
+    private boolean lanNetworkAcquired = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -171,6 +173,9 @@ public class PortScanActivity extends AppCompatActivity {
             return;
         }
 
+        // 内网目标：把进程网络绑到 WiFi/以太网，避免内网无外网时扫描包走移动数据
+        updateLanBinding(ip);
+
         results.clear();
         adapter.notifyDataSetChanged();
 
@@ -276,11 +281,30 @@ public class PortScanActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    /**
+     * 目标是内网地址时把进程网络绑到 WiFi/以太网；公网目标保持系统默认网络，
+     * 避免内网 WiFi 没有外网时连不上公网主机。
+     */
+    private void updateLanBinding(String host) {
+        if (NetworkUtils.isLanTarget(host)) {
+            if (!lanNetworkAcquired) {
+                lanNetworkAcquired = NetworkUtils.acquireLanNetwork(this);
+            }
+        } else if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (executorService != null) {
             executorService.shutdownNow();
+        }
+        if (lanNetworkAcquired) {
+            NetworkUtils.releaseLanNetwork(this);
+            lanNetworkAcquired = false;
         }
     }
 }

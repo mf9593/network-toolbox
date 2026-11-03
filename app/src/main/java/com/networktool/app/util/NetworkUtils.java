@@ -119,10 +119,11 @@ public class NetworkUtils {
      * 内网没有外网时，系统的默认网络仍是移动数据，未显式绑定网络的 Socket
      * 会把广播/探测包发到移动数据网卡，导致扫描不到任何内网设备。
      * 扫描前绑定、扫描结束解绑即可，不影响其他功能。
+     * 内部带引用计数，多个页面同时持有不会互相踢掉，最后一个释放时才解绑。
      *
      * @return 是否绑定成功
      */
-    public static boolean bindProcessToLanNetwork(Context context) {
+    public static synchronized boolean acquireLanNetwork(Context context) {
         ConnectivityManager connectivityManager = (ConnectivityManager) context
                 .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connectivityManager == null) return false;
@@ -130,17 +131,21 @@ public class NetworkUtils {
         Network lanNetwork = getLanNetwork(context);
         if (lanNetwork == null) return false;
         try {
-            return connectivityManager.bindProcessToNetwork(lanNetwork);
+            connectivityManager.bindProcessToNetwork(lanNetwork);
+            lanBindRefCount++;
+            return true;
         } catch (Exception ignored) {
             return false;
         }
     }
 
     /**
-     * 解除进程网络绑定，恢复系统默认网络。
+     * 释放一次局域网网络绑定，引用计数归零时恢复系统默认网络。
      */
-    public static void unbindProcessNetwork(Context context) {
+    public static synchronized void releaseLanNetwork(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        if (lanBindRefCount > 0) lanBindRefCount--;
+        if (lanBindRefCount > 0) return;
         try {
             ConnectivityManager connectivityManager = (ConnectivityManager) context
                     .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -149,6 +154,60 @@ public class NetworkUtils {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** 局域网网络绑定的引用计数 */
+    private static int lanBindRefCount = 0;
+
+    /**
+     * 是否内网 IPv4 地址（10/8、172.16/12、192.168/16、169.254/16）
+     */
+    public static boolean isPrivateIpv4(String ip) {
+        if (ip == null) return false;
+        String[] parts = ip.trim().split("\\.");
+        if (parts.length != 4) return false;
+        int a, b;
+        try {
+            a = Integer.parseInt(parts[0]);
+            b = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        if (a == 10) return true;
+        if (a == 172 && b >= 16 && b <= 31) return true;
+        if (a == 192 && b == 168) return true;
+        if (a == 169 && b == 254) return true;
+        return false;
+    }
+
+    /**
+     * 主机名或 IP 是否属于局域网目标。
+     * 私网 IP、不带点的主机名、.local/.lan/.home 之类的名字按内网处理，其余按公网处理。
+     */
+    public static boolean isLanTarget(String host) {
+        if (host == null) return false;
+        String h = host.trim().toLowerCase(Locale.US);
+        if (h.isEmpty()) return false;
+        if (isPrivateIpv4(h)) return true;
+        if (h.indexOf('.') < 0) return true; // localhost、nas 这类单段主机名
+        return h.endsWith(".local") || h.endsWith(".lan") || h.endsWith(".home");
+    }
+
+    /**
+     * 取 IPv4 地址所在 /24 的前缀，例如 192.168.1.23 → "192.168.1."
+     */
+    public static String subnetPrefix24(String ip) {
+        if (ip == null) return null;
+        int lastDot = ip.lastIndexOf('.');
+        if (lastDot <= 0) return null;
+        return ip.substring(0, lastDot + 1);
+    }
+
+    /**
+     * 获取局域网扫描应绑定的 Network（供工具页判断用）
+     */
+    public static Network getLanNetworkForScan(Context context) {
+        return getLanNetwork(context);
     }
 
     /**
