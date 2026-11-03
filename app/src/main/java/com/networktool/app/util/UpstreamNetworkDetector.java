@@ -52,6 +52,8 @@ public class UpstreamNetworkDetector {
             if (hop == null) continue;
             // 公网跳点说明上级没有内网，继续往上找也没意义
             if (!NetworkUtils.isPrivateIpv4(hop)) return null;
+            // 172.16/12 在运营商内部网络、CGNAT、VPN 里大量使用，误判率太高，不当上级局域网
+            if (!NetworkUtils.isCommonLanSubnet(hop)) continue;
             String hopPrefix = NetworkUtils.subnetPrefix24(hop);
             if (hopPrefix == null) continue;
             if (hopPrefix.equals(localPrefix)) continue; // 本机网关，同网段

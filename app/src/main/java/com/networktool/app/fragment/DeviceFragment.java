@@ -114,6 +114,12 @@ public class DeviceFragment extends Fragment {
      * 空字符串表示该网段探测过、没有上级内网（避免每次扫描都白等几秒）。
      */
     private static final Map<String, String> UPSTREAM_CACHE = new HashMap<>();
+    /** 最近一次扫描到的上级网段网关，供首页过滤设备列表用 */
+    private static String lastUpstreamGateway = null;
+
+    public static String getLastUpstreamGateway() {
+        return lastUpstreamGateway;
+    }
     /** 是否已把进程默认网络切到 WiFi/以太网（内网无外网时必须切，否则探测包会走移动数据） */
     private boolean lanNetworkBound = false;
     /** 绑定时保存的 Application Context，onDestroyView 之后仍能用来解绑 */
@@ -633,6 +639,7 @@ public class DeviceFragment extends Fragment {
             if (upstreamGateway != null) {
                 int extraHosts = scanManager.addExtraSubnet(upstreamGateway);
                 if (extraHosts > 0) {
+                    lastUpstreamGateway = upstreamGateway;
                     scanRangeLabel = buildScanRangeLabel(scanLocalIp)
                             + " + " + buildScanRangeLabel(upstreamGateway) + " 上级网段";
                     AppErrorLogger.logDebug("DeviceFragment",

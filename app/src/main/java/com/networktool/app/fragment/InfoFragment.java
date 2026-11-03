@@ -352,8 +352,17 @@ public class InfoFragment extends Fragment {
         if (lastLatencyMs < 0) {
             statLatencyValue.setText("…");
         }
+        final android.content.Context appContext = requireContext().getApplicationContext();
         new Thread(() -> {
-            final long cost = probeLatency(gateway);
+            // 内网网关只有从 WiFi/以太网出发才通，绑定一下再测，
+            // 否则默认网络是移动数据时这个延迟根本测不出来
+            boolean bound = NetworkUtils.acquireLanNetwork(appContext);
+            final long cost;
+            try {
+                cost = probeLatency(gateway);
+            } finally {
+                if (bound) NetworkUtils.releaseLanNetwork(appContext);
+            }
             latencyMeasuring = false;
             if (!isAdded()) return;
             mainHandler.post(() -> {
@@ -541,18 +550,32 @@ public class InfoFragment extends Fragment {
         if (devices == null || devices.isEmpty()) return result;
         String localIp = null;
         try {
-            localIp = NetworkUtils.getActiveLocalIpv4Address(requireContext());
+            // 用 WiFi/以太网的 IP，而不是系统活动网络的 IP：
+            // 内网 WiFi 没外网时活动网络是移动数据，用移动数据网段过滤会把设备全滤掉
+            localIp = NetworkUtils.getLanLocalIpv4Address(requireContext());
+            if (localIp == null || localIp.isEmpty()) {
+                localIp = NetworkUtils.getActiveLocalIpv4Address(requireContext());
+            }
         } catch (Exception ignored) {
         }
         if (localIp == null || localIp.isEmpty() || !localIp.contains(".")) {
             result.addAll(devices);
             return result;
         }
-        String prefix = localIp.substring(0, localIp.lastIndexOf('.') + 1);
+        java.util.List<String> prefixes = new java.util.ArrayList<>();
+        prefixes.add(localIp.substring(0, localIp.lastIndexOf('.') + 1));
+        // 跨网段扫描到的设备在上级网段，也要保留
+        String upstreamPrefix = NetworkUtils.subnetPrefix24(
+                DeviceFragment.getLastUpstreamGateway());
+        if (upstreamPrefix != null) prefixes.add(upstreamPrefix);
         for (com.networktool.app.model.DeviceInfo device : devices) {
             String ip = device.getIp();
-            if (ip != null && ip.startsWith(prefix) && !ip.equals(localIp)) {
-                result.add(device);
+            if (ip == null || ip.equals(localIp)) continue;
+            for (String prefix : prefixes) {
+                if (ip.startsWith(prefix)) {
+                    result.add(device);
+                    break;
+                }
             }
         }
         return result;
@@ -890,9 +913,10 @@ public class InfoFragment extends Fragment {
             }
             if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
                 updateEthernetInfo();
-            } else if (hasWifiConnection()) {
+            } else if (hasWifiConnection() || NetworkUtils.isWifiConnected(requireContext())) {
                 // WiFi 已经连上时以 WiFi 为准：连着摄像头/无外网的局域网时，
-                // 系统默认网络会切到移动数据，但用户实际在用的是 WiFi
+                // 系统默认网络会切到移动数据，但用户实际在用的是 WiFi。
+                // 这里不依赖 SSID（没有附近设备权限时读不到），只按网络类型判断。
                 updateWifiInfo();
             } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                 updateWifiInfo();
@@ -969,13 +993,19 @@ public class InfoFragment extends Fragment {
         String ipv6 = getIpv6Address();
         if (ipv6 == null || ipv6.isEmpty()) ipv6 = "--";
 
-        // 有线优先取「以太网网络」的网关，避免系统活动网络是 WiFi 时显示错网关
-        String gateway = NetworkUtils.getEthernetGateway(requireContext());
+        // 无线卡片只看 WiFi/以太网，不要退回系统活动网络：
+        // 内网 WiFi 没外网时活动网络是移动数据，会把运营商网关当成路由器
+        String gateway = NetworkUtils.getWifiGateway(requireContext());
+        if (gateway == null || gateway.isEmpty()) {
+            gateway = NetworkUtils.getLanGateway(requireContext());
+        }
         if (gateway == null || gateway.isEmpty()) {
             gateway = NetworkUtils.getGateway(requireContext());
         }
-        String dns1 = NetworkUtils.getDns1(requireContext());
-        String dns2 = NetworkUtils.getDns2(requireContext());
+        String dns1 = NetworkUtils.getLanDns1(requireContext());
+        String dns2 = NetworkUtils.getLanDns2(requireContext());
+        if (dns1 == null || dns1.isEmpty()) dns1 = NetworkUtils.getDns1(requireContext());
+        if (dns2 == null || dns2.isEmpty()) dns2 = NetworkUtils.getDns2(requireContext());
         String standard = getWifiStandard(wifiInfo);
 
         boolean unknownSsid = "未知网络".equals(ssid);
@@ -1040,9 +1070,14 @@ public class InfoFragment extends Fragment {
         if (ipv4 == null) ipv4 = "--";
         String ipv6 = getIpv6Address();
         if (ipv6 == null) ipv6 = "--";
-        String gateway = NetworkUtils.getGateway(requireContext());
-        String dns1 = NetworkUtils.getDns1(requireContext());
-        String dns2 = NetworkUtils.getDns2(requireContext());
+        String gateway = NetworkUtils.getEthernetGateway(requireContext());
+        if (gateway == null || gateway.isEmpty()) {
+            gateway = NetworkUtils.getGateway(requireContext());
+        }
+        String dns1 = NetworkUtils.getLanDns1(requireContext());
+        String dns2 = NetworkUtils.getLanDns2(requireContext());
+        if (dns1 == null || dns1.isEmpty()) dns1 = NetworkUtils.getDns1(requireContext());
+        if (dns2 == null || dns2.isEmpty()) dns2 = NetworkUtils.getDns2(requireContext());
 
         currentGateway = gateway;
         wifiLogo.setImageResource(R.drawable.ic_computer);

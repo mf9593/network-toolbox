@@ -181,6 +181,27 @@ public class NetworkUtils {
     }
 
     /**
+     * 是否常见家用/办公局域网网段（192.168.0.0/16、10.0.0.0/8）。
+     *
+     * <p>172.16.0.0/12 虽然也是私网段，但运营商内部网络、CGNAT、VPN、容器网络
+     * 大量使用它，自动探测时把它当成「上级局域网」去扫描，扫到的多半是运营商设备，
+     * 所以自动探测只认这两种。</p>
+     */
+    public static boolean isCommonLanSubnet(String ip) {
+        if (ip == null) return false;
+        String[] parts = ip.trim().split("\\.");
+        if (parts.length != 4) return false;
+        try {
+            int a = Integer.parseInt(parts[0]);
+            int b = Integer.parseInt(parts[1]);
+            if (a == 192 && b == 168) return true;
+            return a == 10;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /**
      * 主机名或 IP 是否属于局域网目标。
      * 私网 IP、不带点的主机名、.local/.lan/.home 之类的名字按内网处理，其余按公网处理。
      */
@@ -264,6 +285,81 @@ public class NetworkUtils {
     }
 
     /**
+     * 获取局域网（WiFi 优先，其次以太网）的网关地址。
+     * 不依赖系统「活动网络」——连着没有外网的 WiFi 时，活动网络会是移动数据，
+     * 用活动网络取网关会拿到运营商的网关，页面上就会显示成移动数据的路由器。
+     */
+    public static String getLanGateway(Context context) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context
+                .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) return null;
+        Network lanNetwork = getLanNetwork(context);
+        if (lanNetwork == null) return null;
+        try {
+            String gateway = extractGateway(connectivityManager.getLinkProperties(lanNetwork));
+            if (gateway != null) return gateway;
+        } catch (Exception ignored) {
+        }
+        // WiFi 网络读不到路由时退回 DHCP
+        String wifiGateway = getWifiDhcpGateway(context);
+        if (wifiGateway != null) return wifiGateway;
+        try {
+            NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(lanNetwork);
+            if (capabilities != null
+                    && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                return extractGateway(connectivityManager.getLinkProperties(lanNetwork));
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * 局域网（WiFi 优先，其次以太网）的本地 IPv4 地址。
+     * 移动数据成为系统活动网络时，页面统计、设备过滤都应该用这个，而不是移动数据的 IP。
+     */
+    public static String getLanLocalIpv4Address(Context context) {
+        String wifiIp = getWifiLocalIpv4Address(context);
+        if (isIpv4(wifiIp) && !"0.0.0.0".equals(wifiIp)) return wifiIp;
+        String ethernetIp = getEthernetLocalIpv4Address(context);
+        if (isIpv4(ethernetIp) && !"0.0.0.0".equals(ethernetIp)) return ethernetIp;
+        return null;
+    }
+
+    /**
+     * 局域网网络的首选 DNS（WiFi/以太网），拿不到返回 null。
+     */
+    public static String getLanDns1(Context context) {
+        List<Inet4Address> servers = getLanDnsServers(context);
+        return servers.isEmpty() ? null : servers.get(0).getHostAddress();
+    }
+
+    /** 局域网网络的备用 DNS，拿不到返回 null */
+    public static String getLanDns2(Context context) {
+        List<Inet4Address> servers = getLanDnsServers(context);
+        return servers.size() < 2 ? null : servers.get(1).getHostAddress();
+    }
+
+    private static List<Inet4Address> getLanDnsServers(Context context) {
+        List<Inet4Address> result = new ArrayList<>();
+        try {
+            ConnectivityManager connectivityManager = (ConnectivityManager) context
+                    .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network lanNetwork = getLanNetwork(context);
+            if (connectivityManager == null || lanNetwork == null) return result;
+            LinkProperties linkProperties = connectivityManager.getLinkProperties(lanNetwork);
+            if (linkProperties == null) return result;
+            for (InetAddress address : linkProperties.getDnsServers()) {
+                if (address instanceof Inet4Address) {
+                    result.add((Inet4Address) address);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return result;
+    }
+
+    /**
      * 获取网关地址
      * @param context 上下文
      * @return 网关IP地址字符串，获取失败返回null
@@ -271,6 +367,11 @@ public class NetworkUtils {
     public static String getGateway(Context context) {
         ConnectivityManager connectivityManager = (ConnectivityManager) context
                 .getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        // 优先用 WiFi/以太网的网关。内网 WiFi 没有外网时，系统活动网络仍是移动数据，
+        // 直接读活动网络会拿到运营商网关，首页「路由器后台」就会指错地方。
+        String lanGateway = getLanGateway(context);
+        if (lanGateway != null) return lanGateway;
 
         // 优先使用当前活动网络的 LinkProperties。它对 WiFi/以太网都适用，
         // 比读取 WiFi DHCP 或 /proc/net/route 更准确。
