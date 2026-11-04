@@ -197,3 +197,45 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
+
+// ==================== 16KB 页对齐 ====================
+// librtmp-jni.so 来自 rtmp-client 3.2.0（ExoPlayer RTMP 扩展的传递依赖），
+// 编译时按 4KB 页对齐。Android 15+ 的 16KB 页设备会提示
+// 「此应用不符合 16KB 对齐要求（ELF 文件对齐检查失败）」。
+// 这里在 so 合并/裁剪完成、打包之前，自动把 LOAD 段补齐到 16KB
+// （只调整文件内偏移，虚拟地址和代码不变，脚本见 tools/align16k.py）。
+def align16kScript = rootProject.file("tools/align16k.py")
+if (align16kScript.exists()) {
+    def align16kPath = align16kScript.absolutePath
+    def nativeLibsRoot = new File(project.buildDir, "intermediates/stripped_native_libs").absolutePath
+    tasks.matching { it.name.startsWith("strip") && it.name.endsWith("DebugSymbols") }.configureEach { t ->
+        def taskLogger = t.logger
+        t.doLast {
+            def soFiles = []
+            def walk
+            walk = { File dir ->
+                File[] children = dir.listFiles()
+                if (children == null) return
+                for (File child : children) {
+                    if (child.isDirectory()) {
+                        walk(child)
+                    } else if (child.name.endsWith(".so")) {
+                        soFiles << child
+                    }
+                }
+            }
+            walk(new File(nativeLibsRoot))
+            if (soFiles.isEmpty()) return
+            try {
+                def cmd = ["python3", align16kPath]
+                soFiles.each { cmd << it.absolutePath }
+                def process = new ProcessBuilder(cmd).redirectErrorStream(true).start()
+                def output = process.inputStream.getText("UTF-8")
+                process.waitFor()
+                taskLogger.lifecycle("[16KB] " + output.trim())
+            } catch (Exception e) {
+                taskLogger.warn("[16KB] 对齐脚本执行失败（不影响构建）：" + e.message)
+            }
+        }
+    }
+}

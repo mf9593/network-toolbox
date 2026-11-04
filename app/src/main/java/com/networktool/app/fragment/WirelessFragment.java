@@ -91,7 +91,8 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     private MaterialButton frequencyFilterButton;
     private MaterialButton standardFilterButton;
     private LinearProgressIndicator scanProgress;
-    private TextView wifiSummary;
+    /** 副标题（第二行）的连接状态文本，扫描/筛选提示会拼在它后面 */
+    private String subtitleBase = "";
     private View emptyView;
     private TextView emptyText;
     private TextView emptyHint;
@@ -167,7 +168,6 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         frequencyFilterButton = null;
         standardFilterButton = view.findViewById(R.id.standardFilterButton);
         scanProgress = view.findViewById(R.id.scanProgress);
-        wifiSummary = view.findViewById(R.id.wifiSummary);
         emptyView = view.findViewById(R.id.emptyView);
         emptyText = view.findViewById(R.id.emptyText);
         emptyHint = view.findViewById(R.id.emptyHint);
@@ -597,16 +597,30 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     }
 
     private void updateSummary() {
-        if (!isAdded() || wifiSummary == null) return;
-        if (scanning) {
-            updateTitle();
-            wifiSummary.setVisibility(View.VISIBLE);
-            wifiSummary.setText("正在扫描附近 WiFi…");
-            return;
-        }
-        // 数量 + 刷新时间都在主标题上，副标题只留筛选状态
+        if (!isAdded()) return;
         updateTitle();
+        renderSubtitle();
+    }
 
+    /** 连接状态写进副标题（第二行），扫描/筛选提示拼在同一行，不再新增第三行 */
+    private void setSubtitle(String base) {
+        subtitleBase = base == null ? "" : base;
+        renderSubtitle();
+    }
+
+    private void renderSubtitle() {
+        if (!isAdded() || currentIp == null) return;
+        StringBuilder sb = new StringBuilder(subtitleBase == null ? "" : subtitleBase);
+        String hint = buildStatusHint();
+        if (!hint.isEmpty()) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(hint);
+        }
+        currentIp.setText(sb.toString());
+    }
+
+    private String buildStatusHint() {
+        if (scanning) return "正在扫描…";
         StringBuilder text = new StringBuilder();
         if (!"全部".equals(frequencyFilter)) {
             text.append(frequencyDisplayName());
@@ -615,12 +629,7 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             if (text.length() > 0) text.append(" · ");
             text.append(standardFilter);
         }
-        if (text.length() == 0) {
-            wifiSummary.setVisibility(View.GONE);
-        } else {
-            wifiSummary.setVisibility(View.VISIBLE);
-            wifiSummary.setText(text.toString());
-        }
+        return text.toString();
     }
 
     /** 主标题只写网络数量与刷新时间，例如「12 个网络 · 19:48」 */
@@ -711,14 +720,14 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         if (!isAdded()) return;
         int themeColor = ThemeManager.getAccessibleThemeColor(requireContext());
         if (wifiManager == null) {
-            currentIp.setText("WiFi 不可用 · 当前设备不支持 WiFi 管理");
+            setSubtitle("WiFi 不可用 · 当前设备不支持 WiFi 管理");
             if (currentMeta != null) currentMeta.setText("--");
             setCurrentSignalIcon(R.drawable.ic_wifi_off,
                     ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 不可用");
             return;
         }
         if (!wifiManager.isWifiEnabled()) {
-            currentIp.setText("WiFi 已关闭");
+            setSubtitle("WiFi 已关闭");
             if (currentMeta != null) currentMeta.setText("开启后可扫描附近网络");
             setCurrentSignalIcon(R.drawable.ic_wifi_off,
                     ThemeManager.getOnSurfaceVariantColor(requireContext()), "WiFi 已关闭");
@@ -758,13 +767,13 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         String standard = getConnectionStandard(info);
         String band = getFrequencyBand(frequency);
 
-        currentIp.setText("已连接 " + ssid + " · " + ip);
+        setSubtitle("已连接 " + ssid + " · " + ip);
         if (currentMeta != null) currentMeta.setText(band + " · " + standard + " · " + rssi + " dBm");
         setCurrentSignalIcon(signalIconRes(rssi), themeColor, "当前 WiFi 信号 " + rssi + " dBm");
     }
 
     private void showDisconnected(int themeColor) {
-        currentIp.setText("未连接 WiFi");
+        setSubtitle("未连接 WiFi");
         if (currentMeta != null) currentMeta.setText("扫描附近网络或连接已知网络");
         setCurrentSignalIcon(R.drawable.ic_signal_wifi_outline_0, themeColor, "WiFi 已开启，未连接网络");
     }

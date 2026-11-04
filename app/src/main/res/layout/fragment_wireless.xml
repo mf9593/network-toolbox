@@ -96,15 +96,6 @@
             android:text="正在读取无线网络信息…"
             android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
 
-        <TextView
-            android:id="@+id/wifiSummary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="正在扫描…"
-            android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
-
     </LinearLayout>
 
     <HorizontalScrollView

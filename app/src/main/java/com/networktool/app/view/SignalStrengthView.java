@@ -148,14 +148,18 @@ public class SignalStrengthView extends View {
         int height = getHeight() - getPaddingTop() - getPaddingBottom();
         if (width <= 0 || height <= 0) return;
 
-        // 左侧留给纵轴文字，宽度按实际文字测量，不同字号下都不会压到曲线上
-        String widestLabel = formatTick(MAX_DBM);
+        // 左侧留给纵轴文字。按「最长的那条标签」测量，不然 -120dBm 会被裁掉左边
+        String widestLabel = formatTick(MIN_DBM);
         float labelGutter = textPaint.measureText(widestLabel) + dp(8);
+
+        // 上下按字体实际高度留白，最上面/最下面那条标签也不会被裁掉
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float halfTextHeight = (fm.descent - fm.ascent) / 2f;
 
         float left = getPaddingLeft() + labelGutter;
         float right = getPaddingLeft() + width - dp(4);
-        float top = getPaddingTop() + dp(6);
-        float bottom = getPaddingTop() + height - dp(6);
+        float top = getPaddingTop() + halfTextHeight + dp(2);
+        float bottom = getPaddingTop() + height - halfTextHeight - dp(2);
         if (right <= left || bottom <= top) return;
 
         if (data.isEmpty()) {
@@ -177,6 +181,9 @@ public class SignalStrengthView extends View {
         int tickCount = (MAX_DBM - MIN_DBM) / TICK_STEP_DBM; // 6 段，7 条线
         float step = (bottom - top) / tickCount;
         float labelHeight = textPaint.getTextSize();
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        // 让文字垂直居中于参考线
+        float baselineOffset = (fm.descent - fm.ascent) / 2f - fm.descent;
 
         // 间距够就每档都标，只够两倍间距就隔一档标，实在挤不下就只画线不标字
         boolean everyLabel = step >= labelHeight * 1.7f;
@@ -193,9 +200,7 @@ public class SignalStrengthView extends View {
 
             String label = formatTick(dbm);
             float labelX = left - dp(6) - textPaint.measureText(label);
-            // baseline 微调，让文字视觉上居中于参考线
-            float baseline = y + labelHeight / 3f;
-            canvas.drawText(label, labelX, baseline, textPaint);
+            canvas.drawText(label, labelX, y + baselineOffset, textPaint);
         }
     }
 
