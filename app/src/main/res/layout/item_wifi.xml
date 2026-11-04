@@ -58,6 +58,17 @@
                     android:contentDescription="加密网络"
                     android:src="@drawable/ic_lock" />
 
+                <!-- 展开/收起箭头（仅同名多 AP 的组显示）。
+                     放在名字这一行里，和锁/钥匙图标共用同一个右边缘，靠右对齐 -->
+                <ImageView
+                    android:id="@+id/expandIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginStart="@dimen/space_1"
+                    android:contentDescription="展开同名网络"
+                    android:src="@drawable/ic_expand_more"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
             <TextView
@@ -146,16 +157,6 @@
             </LinearLayout>
 
         </LinearLayout>
-
-        <!-- 展开/收起箭头（仅同名多 AP 的组显示） -->
-        <ImageView
-            android:id="@+id/expandIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:layout_marginStart="4dp"
-            android:contentDescription="展开同名网络"
-            android:src="@drawable/ic_expand_more"
-            android:visibility="gone" />
 
     </LinearLayout>
 

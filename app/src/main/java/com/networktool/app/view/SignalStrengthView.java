@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -15,12 +16,22 @@ import com.networktool.app.util.ThemeManager;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 首页 WiFi 信号强度曲线。
+ *
+ * <p>纵轴按 20 dBm 一档，共 7 条参考线（-120 ~ 0 dBm）。横屏时控件高度被压扁，
+ * 参考线间距不够放文字就自动隔一条标一次，再不够就只画线不标字，避免文字重叠。</p>
+ *
+ * <p>所有尺寸都按屏幕密度/系统字号换算，不写死像素，横竖屏观感一致。</p>
+ */
 public class SignalStrengthView extends View {
 
     private static final int MAX_POINTS = 20;
-    private static final int MIN_DBM = -127;
+    /** 纵轴下限，低于它的 RSSI 画在最底部 */
+    private static final int MIN_DBM = -120;
     private static final int MAX_DBM = 0;
-    private static final int Y_TICK_COUNT = 4;
+    /** 每一档 20 dBm，0 ~ -120 共 7 条参考线 */
+    private static final int TICK_STEP_DBM = 20;
 
     private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -32,6 +43,11 @@ public class SignalStrengthView extends View {
     private final List<Integer> data = new ArrayList<>();
     private int themeColor;
     private int textColor = Color.GRAY;
+
+    private float labelTextSize;
+    private float valueTextSize;
+    private float dotRadius;
+    private float lineWidth;
 
     public SignalStrengthView(Context context) {
         super(context);
@@ -49,7 +65,6 @@ public class SignalStrengthView extends View {
     }
 
     private void init() {
-        linePaint.setStrokeWidth(3f);
         linePaint.setStyle(Paint.Style.STROKE);
         linePaint.setStrokeCap(Paint.Cap.ROUND);
         linePaint.setStrokeJoin(Paint.Join.ROUND);
@@ -57,12 +72,36 @@ public class SignalStrengthView extends View {
         fillPaint.setStyle(Paint.Style.FILL);
         dotPaint.setStyle(Paint.Style.FILL);
 
-        textPaint.setTextSize(28f);
-
-        currentValuePaint.setTextSize(36f);
         currentValuePaint.setFakeBoldText(true);
 
         updateThemeColors();
+    }
+
+    /**
+     * 文字/线宽按屏幕密度和系统字号换算。
+     * 以前写死 28/36 像素，高密度屏上字偏大，横屏空间一挤就叠在一起。
+     */
+    private void applyScaledSizes() {
+        float density = getResources().getDisplayMetrics().density;
+        labelTextSize = sp(10f);
+        valueTextSize = sp(13f);
+        lineWidth = Math.max(2f, dp(1.5f));
+        dotRadius = Math.max(3f, dp(3f));
+
+        textPaint.setTextSize(labelTextSize);
+        currentValuePaint.setTextSize(valueTextSize);
+        linePaint.setStrokeWidth(lineWidth);
+        gridPaint.setStrokeWidth(Math.max(1f, density));
+    }
+
+    private float dp(float value) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+                getResources().getDisplayMetrics());
+    }
+
+    private float sp(float value) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value,
+                getResources().getDisplayMetrics());
     }
 
     /**
@@ -73,7 +112,6 @@ public class SignalStrengthView extends View {
         textColor = ThemeManager.getOnSurfaceVariantColor(getContext());
 
         gridPaint.setColor(ThemeManager.getOutlineVariantColor(getContext()));
-        gridPaint.setStrokeWidth(1f);
 
         linePaint.setColor(themeColor);
         fillPaint.setColor((themeColor & 0x00FFFFFF) | 0x20000000);
@@ -104,15 +142,24 @@ public class SignalStrengthView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        applyScaledSizes();
+
         int width = getWidth() - getPaddingLeft() - getPaddingRight();
         int height = getHeight() - getPaddingTop() - getPaddingBottom();
-        int left = getPaddingLeft() + 80;
-        int top = getPaddingTop() + 40;
-        int right = left + width - 80;
-        int bottom = top + height - 60;
+        if (width <= 0 || height <= 0) return;
+
+        // 左侧留给纵轴文字，宽度按实际文字测量，不同字号下都不会压到曲线上
+        String widestLabel = formatTick(MAX_DBM);
+        float labelGutter = textPaint.measureText(widestLabel) + dp(8);
+
+        float left = getPaddingLeft() + labelGutter;
+        float right = getPaddingLeft() + width - dp(4);
+        float top = getPaddingTop() + dp(6);
+        float bottom = getPaddingTop() + height - dp(6);
+        if (right <= left || bottom <= top) return;
 
         if (data.isEmpty()) {
-            textPaint.setTextSize(32f);
+            textPaint.setTextSize(sp(12f));
             textPaint.setColor(textColor);
             canvas.drawText("等待信号数据...", left, (top + bottom) / 2f, textPaint);
             return;
@@ -122,23 +169,41 @@ public class SignalStrengthView extends View {
         drawDataLine(canvas, left, top, right, bottom);
     }
 
-    private void drawGrid(Canvas canvas, int left, int top, int right, int bottom) {
-        float yRange = MAX_DBM - MIN_DBM;
-        for (int i = 0; i <= Y_TICK_COUNT; i++) {
-            int dbm = MAX_DBM - (int) (i * yRange / Y_TICK_COUNT);
-            float y = top + (bottom - top) * i / Y_TICK_COUNT;
+    private String formatTick(int dbm) {
+        return dbm + "dBm";
+    }
+
+    private void drawGrid(Canvas canvas, float left, float top, float right, float bottom) {
+        int tickCount = (MAX_DBM - MIN_DBM) / TICK_STEP_DBM; // 6 段，7 条线
+        float step = (bottom - top) / tickCount;
+        float labelHeight = textPaint.getTextSize();
+
+        // 间距够就每档都标，只够两倍间距就隔一档标，实在挤不下就只画线不标字
+        boolean everyLabel = step >= labelHeight * 1.7f;
+        boolean everyOtherLabel = step * 2 >= labelHeight * 1.7f;
+
+        textPaint.setColor(textColor);
+        for (int i = 0; i <= tickCount; i++) {
+            int dbm = MAX_DBM - i * TICK_STEP_DBM;
+            float y = top + step * i;
             canvas.drawLine(left, y, right, y, gridPaint);
-            textPaint.setColor(textColor);
-            textPaint.setTextSize(28f);
-            canvas.drawText(dbm + "dBm", left - 75, y + 10, textPaint);
+
+            boolean drawLabel = everyLabel || (everyOtherLabel && i % 2 == 0);
+            if (!drawLabel) continue;
+
+            String label = formatTick(dbm);
+            float labelX = left - dp(6) - textPaint.measureText(label);
+            // baseline 微调，让文字视觉上居中于参考线
+            float baseline = y + labelHeight / 3f;
+            canvas.drawText(label, labelX, baseline, textPaint);
         }
     }
 
-    private void drawDataLine(Canvas canvas, int left, int top, int right, int bottom) {
+    private void drawDataLine(Canvas canvas, float left, float top, float right, float bottom) {
         int n = data.size();
         float yRange = MAX_DBM - MIN_DBM;
         float xStep = (right - left) / (float) (MAX_POINTS - 1);
-        int startX = right - (n - 1) * (int) xStep;
+        float startX = right - (n - 1) * xStep;
         if (startX < left) startX = left;
 
         Path linePath = new Path();
@@ -148,8 +213,7 @@ public class SignalStrengthView extends View {
         for (int i = 0; i < n; i++) {
             int rssi = data.get(i);
             float x = startX + i * xStep;
-            float y = bottom - (bottom - top) * (rssi - MIN_DBM) / yRange;
-            y = Math.max(top, Math.min(bottom, y));
+            float y = valueToY(rssi, top, bottom, yRange);
 
             if (first) {
                 linePath.moveTo(x, y);
@@ -164,8 +228,6 @@ public class SignalStrengthView extends View {
 
         if (n > 0) {
             float lastX = startX + (n - 1) * xStep;
-            float lastY = bottom - (bottom - top) * (data.get(n - 1) - MIN_DBM) / yRange;
-            lastY = Math.max(top, Math.min(bottom, lastY));
             fillPath.lineTo(lastX, bottom);
             fillPath.close();
         }
@@ -175,15 +237,23 @@ public class SignalStrengthView extends View {
 
         if (n > 0) {
             float lastX = startX + (n - 1) * xStep;
-            float lastY = bottom - (bottom - top) * (data.get(n - 1) - MIN_DBM) / yRange;
-            lastY = Math.max(top, Math.min(bottom, lastY));
-            canvas.drawCircle(lastX, lastY, 8, dotPaint);
+            float lastY = valueToY(data.get(n - 1), top, bottom, yRange);
+            canvas.drawCircle(lastX, lastY, dotRadius, dotPaint);
 
             String val = data.get(n - 1) + " dBm";
             float textWidth = currentValuePaint.measureText(val);
-            float textX = lastX - textWidth - 16;
+            float textX = lastX - textWidth - dp(6);
             if (textX < left) textX = left;
-            canvas.drawText(val, textX, lastY - 16, currentValuePaint);
+            float textY = lastY - dp(6);
+            // 别画到图外
+            if (textY < top + valueTextSize) textY = lastY + valueTextSize + dp(2);
+            canvas.drawText(val, textX, textY, currentValuePaint);
         }
+    }
+
+    private float valueToY(int rssi, float top, float bottom, float yRange) {
+        int clamped = Math.max(MIN_DBM, Math.min(MAX_DBM, rssi));
+        float y = bottom - (bottom - top) * (clamped - MIN_DBM) / yRange;
+        return Math.max(top, Math.min(bottom, y));
     }
 }
