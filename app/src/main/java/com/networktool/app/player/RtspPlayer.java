@@ -151,6 +151,9 @@ public class RtspPlayer {
         @Override
         public void onRenderedFirstFrame() {
             if (released) return;
+            // 画面已经出来了，就不用再等「连接超时」了
+            // （直播源可能长时间停在 BUFFERING，以前会误报 15 秒超时）
+            cancelRenderTimeout();
             scheduleStallWatchdog();
             writeBreadcrumb("首帧已渲染（画面确认输出）"
                     + (compatProxy != null
@@ -472,6 +475,11 @@ public class RtspPlayer {
             notifyEvent(EVENT_ERROR, "播放地址为空");
             return;
         }
+        // 每次用户主动开始播放都恢复音频轨：
+        // 「禁用音频轨」是给 ExoPlayer 实例下发的参数，换源复用实例时不会自动恢复，
+        // 不重置会导致前面某个无声轨的摄像头把后面所有直播的音频都关掉。
+        audioDisabled = false;
+        audioDisabledRetried = false;
         // 换地址时重置「传输重试」标记
         if (currentUrl == null || !inputUrl.equals(currentUrl)) {
             transportRetried = false;
@@ -481,12 +489,13 @@ public class RtspPlayer {
             rtspPreflightUrl = null;
             rtspSdpIsH265 = false;
             rtspPreflightRunning = false;
-            audioDisabled = false;
-            audioDisabledRetried = false;
             closeCompatProxy();
         }
         // 已在播放同一地址则跳过
-        if (prepared && !paused && inputUrl.equals(currentUrl)) return;
+        if (prepared && !paused && inputUrl.equals(currentUrl)) {
+            applyAudioTrackState();
+            return;
+        }
         // 暂停中恢复
         if (prepared && paused && inputUrl.equals(currentUrl)) {
             try {
@@ -564,6 +573,9 @@ public class RtspPlayer {
             try {
                 exoPlayer.setVolume(volume / 100f);
             } catch (Throwable ignored) {}
+
+            // 音频轨开关必须每次 prepare 前重新下发（实例复用时会保留上一次的选择）
+            applyAudioTrackState();
 
             // 加载流：按协议分流（RTSP 需专用 MediaSource，渐进源不支持 rtsp:// 协议）
             // 先整理地址：把 ?username=&password= 搬到 userInfo，否则服务器会返回 401
@@ -718,20 +730,36 @@ public class RtspPlayer {
         exoPlayer.addListener(playerListener);
         // 实例重建后解码器的缩放模式会回到默认值，这里按当前视图模式重新贴一次
         applyVideoScalingMode();
-        // 上一轮卡在首帧时禁过音频，这次重建继续禁用
-        if (audioDisabled) {
-            try {
-                exoPlayer.setTrackSelectionParameters(
-                        new com.google.android.exoplayer2.trackselection.TrackSelectionParameters.Builder()
-                                .setTrackTypeDisabled(
-                                        com.google.android.exoplayer2.C.TRACK_TYPE_AUDIO, true)
-                                .build());
-                writeBreadcrumb("音频轨已禁用（上一轮卡在首帧，只用视频继续播）");
-            } catch (Throwable t) {
-                writeBreadcrumb("禁用音频轨失败: " + t.getMessage());
-            }
-        }
         writeBreadcrumb("ExoPlayer 已创建并初始化");
+    }
+
+    /**
+     * 把当前的音频轨开关下发给播放器实例。
+     *
+     * <p>TrackSelectionParameters 是实例级的，同一个 ExoPlayer 换源后不会自动恢复，
+     * 所以每次 prepare 前都要显式下发一次（启用也要下发，否则会一直沿用上次的禁用）。</p>
+     */
+    private void applyAudioTrackState() {
+        if (exoPlayer == null) return;
+        try {
+            exoPlayer.setTrackSelectionParameters(
+                    new com.google.android.exoplayer2.trackselection.TrackSelectionParameters.Builder()
+                            .setTrackTypeDisabled(
+                                    com.google.android.exoplayer2.C.TRACK_TYPE_AUDIO, audioDisabled)
+                            .build());
+            if (audioDisabled) {
+                writeBreadcrumb("音频轨已禁用（上一轮卡在首帧，只用视频继续播）");
+            }
+        } catch (Throwable t) {
+            writeBreadcrumb("设置音频轨状态失败: " + t.getMessage());
+        }
+    }
+
+    /** 当前输入地址是否是 RTSP（摄像头）流 */
+    private boolean isRtspInputUrl() {
+        if (inputUrl == null) return false;
+        String lower = inputUrl.toLowerCase(java.util.Locale.ROOT);
+        return lower.startsWith("rtsp://") || lower.startsWith("rtsps://");
     }
 
     /** 释放 ExoPlayer 实例 */
@@ -757,6 +785,9 @@ public class RtspPlayer {
      */
     private void scheduleStallWatchdog() {
         cancelStallWatchdog();
+        // 这套兜底是给摄像头（RTSP）写的：IPC 常在 SDP 里声明音频轨却一个包都不发。
+        // 直播源（HLS/HTTP）卡在 BUFFERING 另有原因，禁用音频只会让人彻底没声音。
+        if (!isRtspInputUrl()) return;
         if (audioDisabledRetried && transportRetried) return;
         stallWatchdogRunnable = () -> {
             stallWatchdogRunnable = null;
