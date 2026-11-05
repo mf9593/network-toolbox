@@ -513,9 +513,10 @@
                             android:paddingHorizontal="@dimen/card_padding">
 
                             <TextView
+                                android:id="@+id/batteryPowerLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="充电功率"
+                                android:text="实时功率"
                                 android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
 
                             <TextView

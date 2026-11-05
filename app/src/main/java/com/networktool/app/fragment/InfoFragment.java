@@ -77,6 +77,7 @@ public class InfoFragment extends Fragment {
     private TextView batteryPercent;
     private TextView batteryVoltage;
     private TextView batteryPower;
+    private TextView batteryPowerLabel;
     private TextView batteryTemperature;
     private View heroContent;
 
@@ -267,6 +268,7 @@ public class InfoFragment extends Fragment {
         batteryPercent = view.findViewById(R.id.batteryPercent);
         batteryVoltage = view.findViewById(R.id.batteryVoltage);
         batteryPower = view.findViewById(R.id.batteryPower);
+        batteryPowerLabel = view.findViewById(R.id.batteryPowerLabel);
         batteryTemperature = view.findViewById(R.id.batteryTemperature);
         heroContent = view.findViewById(R.id.heroContent);
 
@@ -712,12 +714,12 @@ public class InfoFragment extends Fragment {
     }
 
     /**
-     * 读取并显示电池硬件信息：电量百分比、电压、充电功率、温度。
+     * 读取并显示电池硬件信息：电量百分比、电压、功率、温度。
      *
      * - 电量通过 BatteryManager 的 BATTERY_PROPERTY_CAPACITY 获取
-     * - 电压/温度/充电电流通过注册 ACTION_BATTERY_CHANGED 广播获取
+     * - 电压/温度/电流通过注册 ACTION_BATTERY_CHANGED 广播获取
      *   （这些字段不在 BatteryManager 属性里，只能从 sticky intent 读）
-     * - 充电功率 = 电压 × 充电电流（仅充电时有意义，放电时显示"—"）
+     * - 功率 = 电压 × 电流：充电时是充电功率，未充电时是实时功耗
      */
     private void updateBatteryInfo() {
         if (!isAdded() || batteryPercent == null) return;
@@ -779,19 +781,23 @@ public class InfoFragment extends Fragment {
                 batteryTemperature.setText("--");
             }
 
-            // 充电功率：仅充电状态下计算（电流取绝对值）
+            // 功率：充电时显示充电功率，未充电时显示实时功耗（电流取绝对值，各机型正负号不一致）
             boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
                     || status == BatteryManager.BATTERY_STATUS_FULL
                     || plugged != 0;
-            if (charging && voltageValid && current != Integer.MIN_VALUE && current != 0) {
+            boolean hasCurrent = current != Integer.MIN_VALUE && current != 0;
+            if (batteryPowerLabel != null) {
+                batteryPowerLabel.setText(charging ? "充电功率" : "实时功率");
+            }
+            if (voltageValid && hasCurrent) {
                 double amps = Math.abs(current) / 1_000_000.0;
                 double watts = (voltage / 1000.0) * amps;
-                batteryPower.setText(String.format(Locale.US, "%.1fW", watts));
-            } else if (!charging) {
-                batteryPower.setText("未充电");
-            } else {
+                batteryPower.setText(formatWatts(watts));
+            } else if (charging) {
                 // 充电中但读不到电流：至少说明在充电，而不是显示无意义的 "--"
                 batteryPower.setText("充电中");
+            } else {
+                batteryPower.setText("--");
             }
             if (com.networktool.app.BuildConfig.DEBUG) {
                 android.util.Log.d("InfoFragment", "硬件信息刷新: 电量=" + batteryPercent.getText()
@@ -804,6 +810,16 @@ public class InfoFragment extends Fragment {
             // 读取失败不影响页面其它内容
             if (batteryPercent != null) batteryPercent.setText("--");
         }
+    }
+
+    /**
+     * 功率显示：10W 以上保留 1 位小数，小功率保留 2 位，
+     * 避免待机功耗（0.2~0.5W）被四舍五入成 0.0W。
+     */
+    private static String formatWatts(double watts) {
+        return watts >= 10
+                ? String.format(Locale.US, "%.1fW", watts)
+                : String.format(Locale.US, "%.2fW", watts);
     }
 
     /**
