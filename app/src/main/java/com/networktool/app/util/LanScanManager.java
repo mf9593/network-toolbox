@@ -776,6 +776,8 @@ public class LanScanManager {
         for (int i = 0; i < ports.length; i++) {
             if (!isScanning) return;
             if (!isPortOpen(ip, ports[i], 250)) continue;
+            RuntimeLogStore.record(RuntimeLogStore.P_SERVICE, ip,
+                    "端口开放", "TCP " + ports[i] + " 连接成功");
 
             String label = labels[i];
             int icon = icons[i];
@@ -803,14 +805,24 @@ public class LanScanManager {
             String request = "OPTIONS rtsp://" + ip + ":" + port + "/ RTSP/1.0\r\n"
                     + "CSeq: 1\r\n"
                     + "User-Agent: NetworkToolbox\r\n\r\n";
+            RuntimeLogStore.record(RuntimeLogStore.P_SERVICE, ip,
+                    "发送 RTSP OPTIONS", request.trim());
             socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
             socket.getOutputStream().flush();
-            byte[] buffer = new byte[64];
+            byte[] buffer = new byte[512];
             int read = socket.getInputStream().read(buffer);
-            if (read <= 0) return false;
+            if (read <= 0) {
+                RuntimeLogStore.record(RuntimeLogStore.P_SERVICE, ip,
+                        "RTSP 未响应", "OPTIONS 请求未收到任何数据（800ms 超时）");
+                return false;
+            }
             String head = new String(buffer, 0, read, StandardCharsets.UTF_8).trim();
+            RuntimeLogStore.record(RuntimeLogStore.P_SERVICE, ip, "收到 RTSP 响应", head);
             return head.startsWith("RTSP/1.0") || head.startsWith("RTSP/2.0");
         } catch (Exception e) {
+            RuntimeLogStore.record(RuntimeLogStore.P_SERVICE, ip,
+                    "RTSP 探测异常",
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
             return false;
         } finally {
             if (socket != null) {
@@ -907,7 +919,12 @@ public class LanScanManager {
         try {
             Process process = Runtime.getRuntime().exec("ping -c 1 -W 1 " + ip);
             int exitCode = process.waitFor();
-            return exitCode == 0;
+            if (exitCode == 0) {
+                // 记入运行报文：设备详情里点「Ping探测」标签时能看到是哪台主机回了包
+                RuntimeLogStore.record(RuntimeLogStore.P_PING, ip, "响应", "ICMP Echo Reply（主机在线）");
+                return true;
+            }
+            return false;
         } catch (Exception e) {
             return false;
         }

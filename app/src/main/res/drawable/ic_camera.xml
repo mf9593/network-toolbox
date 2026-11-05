@@ -1,16 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 网络摄像头图标（线条风格，与路由器/打印机/手机等设备图标保持一致） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="?attr/colorControlNormal">
-    <!-- 网络摄像头图标 (Material Design webcam) -->
+    android:viewportHeight="24">
+
+    <!-- 机身轮廓 -->
     <path
-        android:fillColor="@android:color/white"
-        android:pathData="M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z" />
-    <!-- 摄像头镜头圆圈 -->
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,7.5h11a1.5,1.5 0 0 1 1.5,1.5v6a1.5,1.5 0 0 1 -1.5,1.5h-11a1.5,1.5 0 0 1 -1.5,-1.5v-6a1.5,1.5 0 0 1 1.5,-1.5z"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+
+    <!-- 右侧云台/镜头口 -->
     <path
-        android:fillColor="@android:color/white"
-        android:pathData="M12,12m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M16.5,10.2L20.7,7.4v9.2l-4.2,-2.8"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+
+    <!-- 镜头（空心圆，中间不填色） -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M9.5,12m-2.7,0a2.7,2.7 0 1 1,5.4 0a2.7,2.7 0 1 1,-5.4 0"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeWidth="2" />
 </vector>
