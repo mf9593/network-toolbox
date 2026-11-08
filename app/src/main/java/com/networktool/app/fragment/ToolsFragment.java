@@ -67,7 +67,7 @@ public class ToolsFragment extends Fragment
     private static final String KEY_RECENT = "recent_tools";
     private static final String KEY_FAVORITES = "favorite_tools";
     /** 常用工具上限 */
-    private static final int MAX_FAVORITES = 5;
+    private static final int MAX_FAVORITES = 10;
 
     private RecyclerView recyclerView;
     private TextInputEditText searchEdit;

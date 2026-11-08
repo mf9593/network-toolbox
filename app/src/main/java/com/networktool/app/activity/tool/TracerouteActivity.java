@@ -124,20 +124,25 @@ public class TracerouteActivity extends AppCompatActivity {
 
     /** 常见目标快捷标签：baidu.com / bing.com */
     private void setupHostChips() {
-        Chip chipBaidu = findViewById(R.id.chipBaidu);
-        Chip chipBing = findViewById(R.id.chipBing);
-        if (chipBaidu != null) {
-            chipBaidu.setOnClickListener(v -> {
-                ipEditText.setText("baidu.com");
-                startTraceroute();
-            });
-        }
-        if (chipBing != null) {
-            chipBing.setOnClickListener(v -> {
-                ipEditText.setText("bing.com");
-                startTraceroute();
-            });
-        }
+        styleHostChip(findViewById(R.id.chipBaidu), "baidu.com");
+        styleHostChip(findViewById(R.id.chipBing), "bing.com");
+    }
+
+    /**
+     * 常见目标标签：背景色跟随主题，与所在大卡片同色；
+     * 点击后填入目标并立即开始跟踪。
+     */
+    private void styleHostChip(Chip chip, String host) {
+        if (chip == null) return;
+        int surfaceColor = ThemeManager.getSurfaceColor(this);
+        chip.setChipBackgroundColor(android.content.res.ColorStateList.valueOf(surfaceColor));
+        chip.setTextColor(ThemeManager.getOnSurfaceColor(this));
+        chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(
+                ThemeManager.getOnSurfaceVariantColor(this)));
+        chip.setOnClickListener(v -> {
+            ipEditText.setText(host);
+            startTraceroute();
+        });
     }
 
     private void startTraceroute() {

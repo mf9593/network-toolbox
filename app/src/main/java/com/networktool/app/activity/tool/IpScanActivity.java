@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -36,7 +37,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -60,6 +64,12 @@ public class IpScanActivity extends AppCompatActivity {
     private LinearLayout gridContainer;
 
     private ExecutorService executorService;
+    /** 点击 IP 时请求网页标题用的客户端（短超时，忽略自签名证书） */
+    private okhttp3.OkHttpClient webClient;
+
+    /** 网页标题匹配（大小写不敏感，允许跨行） */
+    private static final Pattern TITLE_PATTERN =
+            Pattern.compile("<title[^>]*>(.*?)</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     
     // 扫描状态
     private AtomicInteger totalIps = new AtomicInteger(0);
@@ -86,6 +96,7 @@ public class IpScanActivity extends AppCompatActivity {
         setupListeners();
 
         executorService = Executors.newCachedThreadPool();
+        webClient = buildWebClient();
         
         // 默认填充网关IP
         fillDefaultIp();
@@ -344,26 +355,140 @@ public class IpScanActivity extends AppCompatActivity {
         cell.setBackgroundColor(getResources().getColor(android.R.color.darker_gray, getTheme()));
         cell.setTextColor(getResources().getColor(android.R.color.white, getTheme()));
         
-        // 点击事件
-        cell.setOnClickListener(v -> {
-            String ip = prefix + "." + number;
-            Boolean online = scanResults.get(ip);
-            String status = (online != null && online) ? "在线" : "离线";
-            
-            new MaterialAlertDialogBuilder(this)
-                .setTitle("IP: " + ip)
-                .setMessage("状态：" + status)
-                .setPositiveButton("复制IP", (dialog, which) -> {
-                    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    ClipData clip = ClipData.newPlainText("IP", ip);
-                    clipboard.setPrimaryClip(clip);
-                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("取消", null)
-                .show();
-        });
-        
+        // 点击事件：在线 IP 尝试获取网页标题，没有后台就提示
+        cell.setOnClickListener(v -> onIpCellClick(prefix + "." + number));
+
         return cell;
+    }
+
+    /**
+     * 点击扫描网格中的 IP。
+     * 在线设备会尝试请求网页标题（80 / 8080 / 443），拿到标题后可一键打开；
+     * 没有网页标题就提示「无后台地址」。
+     */
+    private void onIpCellClick(String ip) {
+        Boolean online = scanResults.get(ip);
+        boolean isOnline = online != null && online;
+        if (!isOnline) {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("IP: " + ip)
+                    .setMessage("状态：离线\n没有探测到该地址的在线设备。")
+                    .setPositiveButton("复制IP", (dialog, which) -> copyIp(ip))
+                    .setNegativeButton("关闭", null)
+                    .show();
+            return;
+        }
+
+        Toast.makeText(this, "正在获取 " + ip + " 的网页标题…", Toast.LENGTH_SHORT).show();
+        executorService.execute(() -> {
+            final String[] webInfo = fetchWebInfo(ip);
+            runOnUiThread(() -> showWebInfoResult(ip, webInfo));
+        });
+    }
+
+    /** 依次尝试常见 Web 端口，返回 {网页地址, 标题}，取不到返回 null */
+    private String[] fetchWebInfo(String ip) {
+        String[] candidates = {
+                "http://" + ip,
+                "http://" + ip + ":8080",
+                "https://" + ip
+        };
+        for (String url : candidates) {
+            try {
+                okhttp3.Request request = new okhttp3.Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android) NetworkToolbox")
+                        .build();
+                try (okhttp3.Response response = webClient.newCall(request).execute()) {
+                    if (!response.isSuccessful() || response.body() == null) continue;
+                    String html = response.peekBody(256 * 1024).string();
+                    String title = extractTitle(html);
+                    if (!TextUtils.isEmpty(title)) {
+                        return new String[]{url, title};
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** 从 HTML 里取 <title>，顺便解码实体并压缩空白 */
+    private String extractTitle(String html) {
+        if (html == null || html.isEmpty()) return null;
+        Matcher matcher = TITLE_PATTERN.matcher(html);
+        if (!matcher.find()) return null;
+        String raw = matcher.group(1);
+        if (raw == null) return null;
+        String text = android.text.Html.fromHtml(raw.trim(),
+                android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+        text = text.replaceAll("\\s+", " ").trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    /** 显示网页标题结果：有标题给「打开网页」，没有就提示无后台地址 */
+    private void showWebInfoResult(String ip, String[] webInfo) {
+        if (isFinishing() || isDestroyed()) return;
+        if (webInfo == null || webInfo.length < 2 || TextUtils.isEmpty(webInfo[1])) {
+            Toast.makeText(this, "无后台地址", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String url = webInfo[0];
+        String title = webInfo[1];
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("IP: " + ip)
+                .setMessage("网页标题：" + title)
+                .setPositiveButton("打开网页", (dialog, which) -> openWebPage(url))
+                .setNeutralButton("复制IP", (dialog, which) -> copyIp(ip))
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private void openWebPage(String url) {
+        try {
+            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(url)));
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开网页", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void copyIp(String ip) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText("IP", ip));
+        Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
+    }
+
+    /** 构建请求网页标题的 OkHttp 客户端：短超时 + 接受局域网自签名证书 */
+    private okhttp3.OkHttpClient buildWebClient() {
+        okhttp3.OkHttpClient.Builder builder = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(1200, TimeUnit.MILLISECONDS)
+                .readTimeout(2000, TimeUnit.MILLISECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true);
+        try {
+            javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[]{
+                    new javax.net.ssl.X509TrustManager() {
+                        public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                        }
+
+                        public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                        }
+
+                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                            return new java.security.cert.X509Certificate[0];
+                        }
+                    }
+            };
+            javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAll, new java.security.SecureRandom());
+            builder.sslSocketFactory(sslContext.getSocketFactory(),
+                    (javax.net.ssl.X509TrustManager) trustAll[0]);
+            builder.hostnameVerifier((hostname, session) -> true);
+        } catch (Exception ignored) {
+        }
+        return builder.build();
     }
 
     /**
@@ -449,9 +574,38 @@ public class IpScanActivity extends AppCompatActivity {
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_ip_scan, menu);
+        MenuItem help = menu.findItem(R.id.action_help);
+        if (help != null && help.getIcon() != null) {
+            help.getIcon().setTint(ThemeManager.getOnSurfaceColor(this));
+        }
+        return true;
+    }
+
+    /** 标题栏帮助：说明扫描范围与点击行为 */
+    private void showHelpDialog() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("IP 扫描说明")
+                .setMessage("· 起始/结束 IP 段：按第 3 段网段扫描，"
+                        + "例如 192.168.1.1 ~ 192.168.2.254 会扫描 192.168.1.x 和 192.168.2.x，"
+                        + "第 4 段固定扫描 1~255。\n\n"
+                        + "· 扫描结果：高亮为在线，灰色为离线或未扫描。\n\n"
+                        + "· 点击在线 IP：自动请求该地址的网页标题（80 / 8080 / 443 端口），"
+                        + "有标题可一键打开网页；没有网页标题会提示「无后台地址」。\n\n"
+                        + "· 保存：把本次扫描结果导出为 JSON 文件。")
+                .setPositiveButton("知道了", null)
+                .show();
+    }
+
+    @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
             finish();
+            return true;
+        }
+        if (item.getItemId() == R.id.action_help) {
+            showHelpDialog();
             return true;
         }
         return super.onOptionsItemSelected(item);
