@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.text.method.LinkMovementMethod;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -17,6 +18,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.networktool.app.BuildConfig;
 import com.networktool.app.NetworkToolApplication;
 import com.networktool.app.R;
+import com.networktool.app.util.QqGroupHelper;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.UrlOpenHelper;
 import com.networktool.app.util.UpdateChecker;
@@ -96,6 +98,22 @@ public class AboutActivity extends AppCompatActivity {
 
         TextView sponsorListText = findViewById(R.id.sponsorListText);
         sponsorListText.setText("感谢每一位使用和支持网络工具箱的用户");
+
+        // QQ 群卡片：配色跟随主题，点击跳转 QQ 群名片
+        View qqGroupCard = findViewById(R.id.qqGroupCard);
+        ImageView qqGroupIcon = findViewById(R.id.qqGroupIcon);
+        ImageView qqGroupArrow = findViewById(R.id.qqGroupArrow);
+        if (qqGroupIcon != null) {
+            qqGroupIcon.setImageTintList(android.content.res.ColorStateList.valueOf(
+                    ThemeManager.getAccessibleThemeColor(this)));
+        }
+        if (qqGroupArrow != null) {
+            qqGroupArrow.setImageTintList(android.content.res.ColorStateList.valueOf(
+                    ThemeManager.getOnSurfaceVariantColor(this)));
+        }
+        if (qqGroupCard != null) {
+            qqGroupCard.setOnClickListener(v -> QqGroupHelper.open(this));
+        }
 
         // 重置数据
         View resetButton = findViewById(R.id.resetDataButton);

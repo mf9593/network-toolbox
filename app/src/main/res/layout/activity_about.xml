@@ -157,6 +157,70 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 加入 QQ 群 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/qqGroupCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardCornerRadius="@dimen/card_corner"
+                app:cardElevation="0dp"
+                app:rippleColor="?attr/colorPrimary"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:id="@+id/qqGroupIcon"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="12dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_feedback" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="加入 QQ 群"
+                            android:textColor="?attr/colorOnSurface"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/qqGroupSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="群号 559711374 · 问题反馈与技术交流"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/qqGroupArrow"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_arrow_forward" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 开源地址 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
