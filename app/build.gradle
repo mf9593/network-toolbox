@@ -69,8 +69,8 @@ android {
         minSdk 21
         // 目标 SDK 版本 (Android 14)
         targetSdk 34
-        versionCode 210
-        versionName "2.1.0"
+        versionCode 211
+        versionName "2.1.1"
 
         // GitHub 仓库配置：发布前在 gradle.properties 填写 owner，或直接修改这里
         def githubOwner = project.findProperty('github.owner') ?: ''

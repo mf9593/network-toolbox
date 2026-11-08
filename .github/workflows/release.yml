@@ -5,7 +5,7 @@ name: Release APK
 # 不需要手工创建 Personal Access Token。
 #
 # 使用方式（二选一）：
-#   1. 网页：Actions → Release APK → Run workflow，填 tag（默认 v2.1.0）
+#   1. 网页：Actions → Release APK → Run workflow，填 tag（默认 v2.1.1）
 #   2. 打标签：git tag v2.1.1 && git push origin v2.1.1
 #
 # 注意：debug 包使用仓库 Secret `DEBUG_KEYSTORE_B64` 里的签名证书，
@@ -17,7 +17,7 @@ on:
       tag:
         description: '发布标签（已存在则替换资产，不存在则新建 Release）'
         required: true
-        default: 'v2.1.0'
+        default: 'v2.1.1'
       prerelease:
         description: '标记为预发布（不推荐，应用内更新只读 latest）'
         type: boolean
