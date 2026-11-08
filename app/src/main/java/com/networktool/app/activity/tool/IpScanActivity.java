@@ -426,18 +426,16 @@ public class IpScanActivity extends AppCompatActivity {
         return text.isEmpty() ? null : text;
     }
 
-    /** 显示网页标题结果：有标题给「打开网页」，没有就提示无后台地址 */
+    /** 显示网页标题结果：无论有没有后台都弹窗，保证还能复制 IP / 打开网页 */
     private void showWebInfoResult(String ip, String[] webInfo) {
         if (isFinishing() || isDestroyed()) return;
-        if (webInfo == null || webInfo.length < 2 || TextUtils.isEmpty(webInfo[1])) {
-            Toast.makeText(this, "无后台地址", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String url = webInfo[0];
-        String title = webInfo[1];
+        boolean hasTitle = webInfo != null && webInfo.length >= 2
+                && !TextUtils.isEmpty(webInfo[1]);
+        String url = hasTitle ? webInfo[0] : "http://" + ip;
+        String message = hasTitle ? "网页标题：" + webInfo[1] : "无后台地址";
         new MaterialAlertDialogBuilder(this)
                 .setTitle("IP: " + ip)
-                .setMessage("网页标题：" + title)
+                .setMessage(message)
                 .setPositiveButton("打开网页", (dialog, which) -> openWebPage(url))
                 .setNeutralButton("复制IP", (dialog, which) -> copyIp(ip))
                 .setNegativeButton("关闭", null)
