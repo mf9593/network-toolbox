@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager.BadTokenException;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
@@ -50,8 +51,10 @@ import com.networktool.app.model.DeviceInfo;
 import com.networktool.app.util.LanScanManager;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
+import com.networktool.app.util.RuntimeLogStore;
 import com.networktool.app.util.ScanSpeedConfig;
 import com.networktool.app.util.ThemeManager;
+import com.networktool.app.util.TitlePriorityConfig;
 import com.networktool.app.util.UpstreamNetworkDetector;
 import com.networktool.app.util.UrlOpenHelper;
 
@@ -440,7 +443,7 @@ public class DeviceFragment extends Fragment {
 
         if (gateway != null && !"0.0.0.0".equals(gateway)) {
             addGatewayDevice(gateway);
-            searchRouterBackend(gateway);
+            searchRouterBackend();
             addLocalDevice();
             detectUpstreamAndScan(gateway);
         } else if (scanLocalIp != null && !scanLocalIp.isEmpty()
@@ -702,41 +705,62 @@ public class DeviceFragment extends Fragment {
         }
     }
 
-    private void searchRouterBackend(String currentGateway) {
+    private void searchRouterBackend() {
         new Thread(() -> {
+            int tried = 0;
+            int matched = 0;
             for (String[] router : routerDomains) {
+                if (getActivity() == null) break;
+                tried++;
                 try {
                     java.net.InetAddress address = java.net.InetAddress.getByName(router[1]);
                     String ip = address.getHostAddress();
-                    if (isPrivateIP(ip) && !ip.equals(currentGateway)) {
-                        final String finalIp = ip;
-                        final String routerLink = router[1];
-                        final String brand = router[0];
-                        if (getActivity() == null) return;
-                        getActivity().runOnUiThread(() -> {
-                            for (DeviceInfo device : deviceList) {
-                                if (finalIp.equals(device.getIp())) {
-                                    if (device.getDescription() == null || device.getDescription().isEmpty()) {
-                                        device.setDescription("http://" + routerLink);
-                                    }
-                                    device.addProtocolName("路由器", brand + " - " + routerLink);
-                                    applyFilter();
-                                    return;
+                    if (!isPrivateIP(ip)) continue;
+                    matched++;
+                    final String finalIp = ip;
+                    final String routerLink = router[1];
+                    final String brand = router[0];
+                    // 记入运行报文：设备详情 →「路由器」协议标签可核对
+                    RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, ip, "域名命中",
+                            brand + " | " + routerLink + " → " + ip);
+                    if (getActivity() == null) break;
+                    getActivity().runOnUiThread(() -> {
+                        if (!isAdded()) return;
+                        for (DeviceInfo device : deviceList) {
+                            if (finalIp.equals(device.getIp())) {
+                                if (device.getDescription() == null || device.getDescription().isEmpty()) {
+                                    device.setDescription("http://" + routerLink);
                                 }
+                                device.addProtocolName("路由器", brand + " - " + routerLink);
+                                // 路由器品牌按用户配置的优先级覆盖旧标题（默认高于 NetBIOS）
+                                int routerRank = TitlePriorityConfig.rank(requireContext(), "路由器");
+                                int currentRank = device.getTitleSource() == null
+                                        ? Integer.MAX_VALUE
+                                        : TitlePriorityConfig.rank(requireContext(), device.getTitleSource());
+                                if (routerRank <= currentRank) {
+                                    device.setTitle("【路由器】" + brand);
+                                    device.setTitleSource("路由器");
+                                    device.setIconType(DeviceInfo.ICON_ROUTER);
+                                }
+                                applyFilter();
+                                return;
                             }
-                            DeviceInfo device = new DeviceInfo();
-                            device.setIp(finalIp);
-                            device.setTitle("【路由器】" + brand);
-                            device.setDescription("http://" + routerLink);
-                            device.setIconType(DeviceInfo.ICON_ROUTER);
-                            device.addProtocolName("路由器", brand + " - " + routerLink);
-                            deviceList.add(device);
-                            applyFilter();
-                        });
-                    }
+                        }
+                        DeviceInfo device = new DeviceInfo();
+                        device.setIp(finalIp);
+                        device.setTitle("【路由器】" + brand);
+                        device.setTitleSource("路由器");
+                        device.setDescription("http://" + routerLink);
+                        device.setIconType(DeviceInfo.ICON_ROUTER);
+                        device.addProtocolName("路由器", brand + " - " + routerLink);
+                        deviceList.add(device);
+                        applyFilter();
+                    });
                 } catch (Exception ignored) {
                 }
             }
+            RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, "", "扫描完成",
+                    "尝试 " + tried + " 个路由器域名，命中 " + matched + " 个");
         }).start();
     }
 
@@ -898,6 +922,8 @@ public class DeviceFragment extends Fragment {
         protocols.setText(protocolText.isEmpty() ? "未知" : protocolText);
         // 生成可点击的协议标签，点击后跳转运行日志查看该协议原始报文
         populateProtocolChips(protocolChips, device);
+        // 同一设备被多种协议发现时，把所有名称都列出来（点击可复制）
+        populateNameList(view.findViewById(R.id.detailNameList), device);
 
         int themeColor = ThemeManager.getThemeColor();
         int accentColor = ThemeManager.getAccessibleThemeColor(requireContext());
@@ -1070,6 +1096,61 @@ public class DeviceFragment extends Fragment {
         }
     }
 
+    /**
+     * 展示所有协议识别到的名称。
+     * 同一设备常被多种协议发现（路由器/NetBIOS/mDNS/HTTP…），
+     * 名称不一定相同，这里全部列出；当前标题高亮，点击任意名称可复制。
+     */
+    private void populateNameList(LinearLayout container, DeviceInfo device) {
+        if (container == null || device == null) return;
+        container.removeAllViews();
+        Map<String, String> names = device.getProtocolNames();
+        if (names == null || names.isEmpty()) return;
+
+        int onSurface = ThemeManager.getOnSurfaceColor(requireContext());
+        int variant = ThemeManager.getOnSurfaceVariantColor(requireContext());
+        int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+        String currentTitle = device.getTitle();
+        String titleSource = device.getTitleSource();
+
+        for (Map.Entry<String, String> entry : names.entrySet()) {
+            String protocol = entry.getKey();
+            String name = entry.getValue();
+            if (name == null || name.isEmpty()) continue;
+
+            boolean isCurrent = (titleSource != null && titleSource.equals(protocol))
+                    || (currentTitle != null && currentTitle.equals(name));
+
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dpToPx(5), 0, dpToPx(5));
+
+            TextView protocolView = new TextView(requireContext());
+            protocolView.setText(protocol);
+            protocolView.setTextSize(12);
+            protocolView.setTextColor(variant);
+            row.addView(protocolView, new LinearLayout.LayoutParams(
+                    dpToPx(76), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+            TextView nameView = new TextView(requireContext());
+            nameView.setText(isCurrent ? name + "（当前标题）" : name);
+            nameView.setTextSize(14);
+            nameView.setTextColor(isCurrent ? accent : onSurface);
+            nameView.setMaxLines(2);
+            nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            row.addView(nameView, new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            android.util.TypedValue tv = new android.util.TypedValue();
+            requireContext().getTheme().resolveAttribute(
+                    android.R.attr.selectableItemBackground, tv, true);
+            row.setBackgroundResource(tv.resourceId);
+            row.setOnClickListener(v -> copyText(name, "名称"));
+            container.addView(row);
+        }
+    }
+
     private void openHttp(DeviceInfo device) {
         String ip = device.getIp();
         if (ip == null || ip.isEmpty()) {
@@ -1156,6 +1237,21 @@ public class DeviceFragment extends Fragment {
         applyRadioTheme(speedGroup);
         applyRadioTheme(modeGroup);
 
+        // 标题来源优先级：越靠上越优先
+        LinearLayout priorityList = dialogView.findViewById(R.id.priorityList);
+        List<String> priorityOrder = TitlePriorityConfig.getOrder(requireContext());
+        renderPriorityList(priorityList, priorityOrder);
+
+        MaterialButton resetPriority = dialogView.findViewById(R.id.btnResetPriority);
+        if (resetPriority != null) {
+            resetPriority.setTextColor(ThemeManager.getAccessibleThemeColor(requireContext()));
+            resetPriority.setOnClickListener(v -> {
+                priorityOrder.clear();
+                priorityOrder.addAll(TitlePriorityConfig.getDefaultOrder());
+                renderPriorityList(priorityList, priorityOrder);
+            });
+        }
+
         dialogView.findViewById(R.id.btnSave).setOnClickListener(v -> {
             int speedId = speedGroup.getCheckedRadioButtonId();
             String newSpeed = ScanSpeedConfig.SPEED_STANDARD;
@@ -1169,8 +1265,10 @@ public class DeviceFragment extends Fragment {
             else if (modeId == R.id.modeQuiet) newMode = LanScanManager.MODE_QUIET;
             prefs.edit().putString("scan_mode", newMode).apply();
 
+            TitlePriorityConfig.saveOrder(requireContext(), priorityOrder);
+
             dialog.dismiss();
-            showToast("设置已保存，刷新后生效");
+            showToast("设置已保存，重新扫描后生效");
         });
 
         MaterialButton btnSave = dialogView.findViewById(R.id.btnSave);
@@ -1178,6 +1276,80 @@ public class DeviceFragment extends Fragment {
         btnSave.setBackgroundTintList(ColorStateList.valueOf(themeColor));
         btnSave.setTextColor(ThemeManager.getContrastColor(themeColor));
         dialog.show();
+    }
+
+    /**
+     * 渲染标题优先级列表：序号 + 协议名 + 上移/下移。
+     * 第一项用主题色强调，表示当前最优先的标题来源。
+     */
+    private void renderPriorityList(LinearLayout container, List<String> order) {
+        if (container == null || order == null) return;
+        container.removeAllViews();
+        int onSurface = ThemeManager.getOnSurfaceColor(requireContext());
+        int variant = ThemeManager.getOnSurfaceVariantColor(requireContext());
+        int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+
+        for (int i = 0; i < order.size(); i++) {
+            final int index = i;
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            int pad = dpToPx(4);
+            row.setPadding(pad, pad, pad, pad);
+
+            TextView indexView = new TextView(requireContext());
+            indexView.setText(String.valueOf(i + 1));
+            indexView.setTextSize(12);
+            indexView.setTextColor(variant);
+            indexView.setGravity(android.view.Gravity.CENTER);
+            row.addView(indexView, new LinearLayout.LayoutParams(
+                    dpToPx(22), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+            TextView nameView = new TextView(requireContext());
+            nameView.setText(order.get(i));
+            nameView.setTextSize(14);
+            nameView.setTextColor(i == 0 ? accent : onSurface);
+            row.addView(nameView, new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView up = buildPriorityArrow("↑", i > 0);
+            up.setOnClickListener(v -> {
+                if (index > 0) {
+                    java.util.Collections.swap(order, index, index - 1);
+                    renderPriorityList(container, order);
+                }
+            });
+            row.addView(up, new LinearLayout.LayoutParams(dpToPx(40), dpToPx(36)));
+
+            TextView down = buildPriorityArrow("↓", i < order.size() - 1);
+            down.setOnClickListener(v -> {
+                if (index < order.size() - 1) {
+                    java.util.Collections.swap(order, index, index + 1);
+                    renderPriorityList(container, order);
+                }
+            });
+            row.addView(down, new LinearLayout.LayoutParams(dpToPx(40), dpToPx(36)));
+
+            container.addView(row, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        }
+    }
+
+    /** 优先级列表里的上移/下移箭头 */
+    private TextView buildPriorityArrow(String text, boolean enabled) {
+        TextView view = new TextView(requireContext());
+        view.setText(text);
+        view.setTextSize(18);
+        view.setGravity(android.view.Gravity.CENTER);
+        int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+        view.setTextColor(enabled ? accent : ThemeManager.getOnSurfaceVariantColor(requireContext()));
+        view.setAlpha(enabled ? 1f : 0.3f);
+        view.setEnabled(enabled);
+        android.util.TypedValue tv = new android.util.TypedValue();
+        requireContext().getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackgroundBorderless, tv, true);
+        view.setBackgroundResource(tv.resourceId);
+        return view;
     }
 
     private void applyRadioTheme(RadioGroup group) {

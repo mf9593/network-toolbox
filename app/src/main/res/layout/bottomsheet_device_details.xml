@@ -66,6 +66,20 @@
         app:chipSpacingVertical="@dimen/space_1" />
 
     <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_4"
+        android:text="各协议识别名称（点击复制）"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Label" />
+
+    <LinearLayout
+        android:id="@+id/detailNameList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:orientation="vertical" />
+
+    <TextView
         android:id="@+id/detailProtocols"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

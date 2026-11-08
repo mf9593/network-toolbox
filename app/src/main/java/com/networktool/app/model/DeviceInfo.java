@@ -66,6 +66,8 @@ public class DeviceInfo {
     private java.util.Set<Integer> ports = new java.util.LinkedHashSet<>();
     /** 发现优先级（数字越小越优先，决定列表排序；默认取最低优先级） */
     private int discoveryPriority = Integer.MAX_VALUE;
+    /** 当前标题来自哪个协议（用于按用户配置的优先级判断能否被覆盖） */
+    private String titleSource;
 
     /**
      * 获取设备显示标题
@@ -213,6 +215,20 @@ public class DeviceInfo {
      */
     public Map<String, String> getProtocolNames() {
         return protocolNames;
+    }
+
+    /**
+     * 当前标题来自哪个协议（可为空，表示本地兜底标题）
+     */
+    public String getTitleSource() {
+        return titleSource;
+    }
+
+    /**
+     * 记录当前标题来源的协议名，供标题优先级比较使用
+     */
+    public void setTitleSource(String titleSource) {
+        this.titleSource = titleSource;
     }
 
     /**

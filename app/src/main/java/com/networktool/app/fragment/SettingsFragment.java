@@ -65,6 +65,10 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         recyclerView.setPadding(0, dp(4), 0, dp(16));
         recyclerView.setClipToPadding(false);
+        View qqGroupCard = view.findViewById(R.id.qqGroupCard);
+        if (qqGroupCard != null) {
+            qqGroupCard.setOnClickListener(v -> openQqGroup());
+        }
     }
 
     private void setupSettings() {
@@ -259,12 +263,32 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
     }
 
     private void onFeedback(SettingItem setting) {
+        openQqGroup();
+    }
+
+    /** QQ 群号（反馈群） */
+    private static final String QQ_GROUP_NUMBER = "559711374";
+
+    /** 打开 QQ 群名片；未安装 QQ 时复制群号兜底 */
+    private void openQqGroup() {
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin=559711374&card_type=group&source=qrcode"));
+            intent.setData(Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin="
+                    + QQ_GROUP_NUMBER + "&card_type=group&source=qrcode"));
             startActivity(intent);
         } catch (Exception e) {
-            showToast("没有安装 QQ");
+            try {
+                android.content.ClipboardManager clipboard =
+                        (android.content.ClipboardManager) requireContext()
+                                .getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                            "QQ群号", QQ_GROUP_NUMBER));
+                }
+                showToast("未安装 QQ，群号已复制：" + QQ_GROUP_NUMBER);
+            } catch (Exception ignored) {
+                showToast("未安装 QQ，群号：" + QQ_GROUP_NUMBER);
+            }
         }
     }
 

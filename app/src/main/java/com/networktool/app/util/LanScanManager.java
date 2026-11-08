@@ -241,6 +241,8 @@ public class LanScanManager {
     private final Map<String, String> deviceNames = new HashMap<>();
     private final Map<String, Integer> devicePriorities = new HashMap<>();
     private final Map<String, Boolean> scannedIps = new HashMap<>();
+    /** 协议名 → 标题优先级权重（越小越优先，来自用户在设置里的排序） */
+    private final Map<String, Integer> protocolRanks = new HashMap<>();
     
     // 路由器列表
     private final List<RouterInfo> routerList = new ArrayList<>();
@@ -298,6 +300,16 @@ public class LanScanManager {
         loadScanSpeed();
         loadScanMode();
         loadRouterList();
+        loadTitlePriorities();
+    }
+
+    /** 读取用户配置的标题优先级（扫描期间不变，避免每次设备更新都读 SharedPreferences） */
+    private void loadTitlePriorities() {
+        protocolRanks.clear();
+        java.util.List<String> order = TitlePriorityConfig.getOrder(context);
+        for (int i = 0; i < order.size(); i++) {
+            protocolRanks.put(order.get(i), i);
+        }
     }
 
     /**
@@ -913,21 +925,49 @@ public class LanScanManager {
     
     /**
      * 判断主机是否在线
-     * 使用系统 ping 命令（ICMP），不需要 root，比 TCP 端口探测更可靠
+     * 使用系统 ping 命令（ICMP），不需要 root，比 TCP 端口探测更可靠。
+     * 探测结果（延迟 + 原始输出）会记入运行报文，方便核对。
      */
     private boolean pingHost(String ip) {
+        Process process = null;
         try {
-            Process process = Runtime.getRuntime().exec("ping -c 1 -W 1 " + ip);
+            process = Runtime.getRuntime().exec("ping -c 1 -W 1 " + ip);
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append('\n');
+                }
+            }
             int exitCode = process.waitFor();
+            String text = output.toString().trim();
             if (exitCode == 0) {
-                // 记入运行报文：设备详情里点「Ping探测」标签时能看到是哪台主机回了包
-                RuntimeLogStore.record(RuntimeLogStore.P_PING, ip, "响应", "ICMP Echo Reply（主机在线）");
+                String latency = parsePingLatency(text);
+                StringBuilder detail = new StringBuilder();
+                detail.append("延迟 ").append(latency == null ? "未知" : latency + " ms");
+                if (!text.isEmpty()) {
+                    detail.append('\n').append(text);
+                }
+                // 记入运行报文：设备详情里点「Ping探测」标签时能看到延迟和原始输出
+                RuntimeLogStore.record(RuntimeLogStore.P_PING, ip, "响应", detail.toString());
                 return true;
             }
             return false;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (process != null) process.destroy();
         }
+    }
+
+    /** 从 ping 输出里取 time=xx ms（兼容 time<1 ms） */
+    private static String parsePingLatency(String output) {
+        if (output == null || output.isEmpty()) return null;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("time[=<]\\s*([0-9.]+)\\s*ms")
+                .matcher(output);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /**
@@ -1813,13 +1853,13 @@ public class LanScanManager {
                         boolean group = (flags & 0x8000) != 0;
                         int score;
                         if (group) {
-                            score = 0;              // 工作组/域，仅在别无选择时用
+                            score = 0;              // 工作组/域，不能当主机名
                         } else if (suffix == 0x00) {
                             score = 3;              // 工作站名，最准
-                        } else if (suffix == 0x20) {
-                            score = 2;              // 文件服务名
                         } else {
-                            score = 1;
+                            // 0x20 文件服务名（路由器/NAS 的共享服务常见）、0x03 信使名、
+                            // 0x1B/0x1C 域控名等都不是主机名，不能拿来当标题
+                            score = 0;
                         }
                         if (score > bestScore) {
                             bestScore = score;
@@ -1830,9 +1870,9 @@ public class LanScanManager {
                 offset = rdataStart + rdLength;
             }
 
-            if (best == null) return null;
+            if (best == null || bestScore <= 0) return null;
             // 只拿到工作组名时不当作标题
-            if (isWorkgroupName(best) && bestScore <= 0) return null;
+            if (isWorkgroupName(best)) return null;
             return best;
         } catch (Exception e) {
             return null;
@@ -2643,28 +2683,43 @@ public class LanScanManager {
             Thread.currentThread().interrupt();
         }
         
-        // 最后单独扫网关，取HTTP标题匹配品牌
+        // 最后单独扫网关，取 HTTP 标题匹配品牌。
+        // 注意：网关通常早已被 ARP/NetBIOS 发现，这里不能因为“已存在”就跳过，
+        // 否则路由器品牌永远盖不过 NetBIOS 名称。
         if (isScanning && gateway != null) {
             httpExecutor.execute(() -> {
                 if (!isScanning) return;
-                // 如果网关已被hostname方式添加，不再重复加
-                synchronized (scannedIps) {
-                    if (scannedIps.containsKey(gateway)) return;
-                }
-                
+
                 String[] result = httpFetchTitle(gateway, 80);
-                if (result == null && isScanning) result = httpFetchTitle(gateway, 443);
+                int matchedPort = 80;
+                if (result == null && isScanning) {
+                    result = httpFetchTitle(gateway, 443);
+                    matchedPort = 443;
+                }
                 if (result != null && isScanning) {
                     String title = result[0];
                     if (title == null || title.isEmpty()) title = "HTTP服务 (网关)";
-                    String matchedBrand = null;
-                    for (RouterInfo router : routerList) {
-                        if (title.toLowerCase().contains(router.brand.replace("路由", "").toLowerCase())) {
-                            matchedBrand = router.brand;
-                            break;
+                    String matchedBrand = RouterBrandMatcher.match(title);
+                    if (matchedBrand == null) {
+                        for (RouterInfo router : routerList) {
+                            if (title.toLowerCase().contains(router.brand.replace("路由", "").toLowerCase())) {
+                                matchedBrand = router.brand;
+                                break;
+                            }
                         }
                     }
-                    addDeviceWithPriority(gateway, matchedBrand != null ? matchedBrand : title, DeviceInfo.ICON_UNKNOWN, PRIORITY_ROUTER);
+                    String url = (matchedPort == 443 ? "https://" : "http://") + gateway;
+                    RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, gateway, "网关标题",
+                            "GET " + url + " → " + title
+                                    + (matchedBrand == null ? "（未匹配到品牌）" : "（品牌：" + matchedBrand + "）"));
+                    addDeviceWithPriority(gateway,
+                            matchedBrand != null ? "【路由器】" + matchedBrand : title,
+                            matchedBrand != null ? url : null,
+                            matchedBrand != null ? DeviceInfo.ICON_ROUTER : DeviceInfo.ICON_HTTP,
+                            PRIORITY_ROUTER);
+                } else if (isScanning) {
+                    RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, gateway, "网关标题",
+                            "80 / 443 均未取到 HTTP 标题");
                 }
             });
         }
@@ -2681,7 +2736,10 @@ public class LanScanManager {
                 socket.connect(new InetSocketAddress(router.link, port), 500);
                 String ip = socket.getInetAddress().getHostAddress();
                 if (ip != null && isPrivateIP(ip)) {
-                    addDeviceWithPriority(ip, router.brand, router.link, DeviceInfo.ICON_UNKNOWN, PRIORITY_ROUTER);
+                    RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, ip, "域名命中",
+                            router.brand + " | " + router.link + " | 端口 " + port);
+                    addDeviceWithPriority(ip, "【路由器】" + router.brand, router.link,
+                            DeviceInfo.ICON_ROUTER, PRIORITY_ROUTER);
                     String finalIp = ip;
                     String finalUrl = router.link;
                     httpExecutor.execute(() -> {
@@ -2735,10 +2793,11 @@ public class LanScanManager {
         final String finalTitle = title != null ? title : "未知设备";
         final String finalDesc = description;
         final int finalIconType = iconType;
-        final int finalPriority = priority;
         final String finalMac = mac;
         final Integer finalPort = port;
         final String protocolLabel = PROTOCOL_LABELS.getOrDefault(priority, "未知协议");
+        // 用用户配置的排序权重代替固定数字：越小越优先，决定最终显示哪个名称
+        final int finalPriority = protocolRanks.getOrDefault(protocolLabel, priority + 100);
         
         mainHandler.post(() -> {
             // 检查是否已存在
@@ -2753,11 +2812,20 @@ public class LanScanManager {
                         device.addPort(finalPort);
                     }
                     Integer currentPriority = devicePriorities.get(finalIp);
+                    // 设备页直接设置过标题时（例如路由器品牌），以 titleSource 的优先级为准
+                    String currentSource = device.getTitleSource();
+                    if (currentSource != null) {
+                        Integer sourceRank = protocolRanks.get(currentSource);
+                        if (sourceRank != null) {
+                            currentPriority = sourceRank;
+                        }
+                    }
                     boolean betterName = currentPriority == null || finalPriority <= currentPriority
                             || (device.getIconType() == DeviceInfo.ICON_PING
                             && finalIconType != DeviceInfo.ICON_PING);
                     if (betterName) {
                         device.setTitle(finalTitle);
+                        device.setTitleSource(protocolLabel);
                         device.setIconType(finalIconType);
                         if (finalDesc != null) device.setDescription(finalDesc);
                         devicePriorities.put(finalIp, finalPriority);
@@ -2777,6 +2845,7 @@ public class LanScanManager {
             DeviceInfo device = new DeviceInfo();
             device.setIp(finalIp);
             device.setTitle(finalTitle);
+            device.setTitleSource(protocolLabel);
             device.setIconType(finalIconType);
             device.setDiscoveryPriority(finalPriority);
             if (finalDesc != null) device.setDescription(finalDesc);
