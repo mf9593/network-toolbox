@@ -39,8 +39,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -64,12 +62,13 @@ public class IpScanActivity extends AppCompatActivity {
     private LinearLayout gridContainer;
 
     private ExecutorService executorService;
-    /** 点击 IP 时请求网页标题用的客户端（短超时，忽略自签名证书） */
-    private okhttp3.OkHttpClient webClient;
 
-    /** 网页标题匹配（大小写不敏感，允许跨行） */
-    private static final Pattern TITLE_PATTERN =
-            Pattern.compile("<title[^>]*>(.*?)</title>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    /** 点击 IP 时探测的常见后台 / 摄像头端口 */
+    private static final int[] COMMON_PORTS = {
+            80, 443, 554, 8000, 8080, 8081, 8443, 8888, 9000, 37777, 34567
+    };
+    /** 单个端口的连接超时 */
+    private static final int PORT_SCAN_TIMEOUT_MS = 400;
     
     // 扫描状态
     private AtomicInteger totalIps = new AtomicInteger(0);
@@ -96,7 +95,6 @@ public class IpScanActivity extends AppCompatActivity {
         setupListeners();
 
         executorService = Executors.newCachedThreadPool();
-        webClient = buildWebClient();
         
         // 默认填充网关IP
         fillDefaultIp();
@@ -355,7 +353,7 @@ public class IpScanActivity extends AppCompatActivity {
         cell.setBackgroundColor(getResources().getColor(android.R.color.darker_gray, getTheme()));
         cell.setTextColor(getResources().getColor(android.R.color.white, getTheme()));
         
-        // 点击事件：在线 IP 尝试获取网页标题，没有后台就提示
+        // 点击事件：在线 IP 扫描常见后台/摄像头端口
         cell.setOnClickListener(v -> onIpCellClick(prefix + "." + number));
 
         return cell;
@@ -363,8 +361,8 @@ public class IpScanActivity extends AppCompatActivity {
 
     /**
      * 点击扫描网格中的 IP。
-     * 在线设备会尝试请求网页标题（80 / 8080 / 443），拿到标题后可一键打开；
-     * 没有网页标题就提示「无后台地址」。
+     * 在线设备会探测常见后台 / 摄像头端口，把开放端口和用途显示在弹窗里，
+     * 用户可以直接复制 IP 或打开网页。
      */
     private void onIpCellClick(String ip) {
         Boolean online = scanResults.get(ip);
@@ -379,67 +377,103 @@ public class IpScanActivity extends AppCompatActivity {
             return;
         }
 
-        Toast.makeText(this, "正在获取 " + ip + " 的网页标题…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "正在扫描 " + ip + " 的常见端口…", Toast.LENGTH_SHORT).show();
         executorService.execute(() -> {
-            final String[] webInfo = fetchWebInfo(ip);
-            runOnUiThread(() -> showWebInfoResult(ip, webInfo));
+            final java.util.List<Integer> openPorts = scanCommonPorts(ip);
+            runOnUiThread(() -> showPortResult(ip, openPorts));
         });
     }
 
-    /** 依次尝试常见 Web 端口，返回 {网页地址, 标题}，取不到返回 null */
-    private String[] fetchWebInfo(String ip) {
-        String[] candidates = {
-                "http://" + ip,
-                "http://" + ip + ":8080",
-                "https://" + ip
-        };
-        for (String url : candidates) {
-            try {
-                okhttp3.Request request = new okhttp3.Request.Builder()
-                        .url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android) NetworkToolbox")
-                        .build();
-                try (okhttp3.Response response = webClient.newCall(request).execute()) {
-                    if (!response.isSuccessful() || response.body() == null) continue;
-                    String html = response.peekBody(256 * 1024).string();
-                    String title = extractTitle(html);
-                    if (!TextUtils.isEmpty(title)) {
-                        return new String[]{url, title};
-                    }
+    /** 并行探测常见后台 / 摄像头端口，返回开放的端口（升序） */
+    private java.util.List<Integer> scanCommonPorts(String ip) {
+        final java.util.List<Integer> openPorts =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.List<java.util.concurrent.Future<?>> tasks = new java.util.ArrayList<>();
+        for (final int port : COMMON_PORTS) {
+            tasks.add(executorService.submit(() -> {
+                try (java.net.Socket socket = new java.net.Socket()) {
+                    socket.connect(new java.net.InetSocketAddress(ip, port), PORT_SCAN_TIMEOUT_MS);
+                    openPorts.add(port);
+                } catch (Exception ignored) {
                 }
+            }));
+        }
+        for (java.util.concurrent.Future<?> task : tasks) {
+            try {
+                task.get(1500, TimeUnit.MILLISECONDS);
             } catch (Exception ignored) {
             }
         }
-        return null;
+        java.util.Collections.sort(openPorts);
+        return openPorts;
     }
 
-    /** 从 HTML 里取 <title>，顺便解码实体并压缩空白 */
-    private String extractTitle(String html) {
-        if (html == null || html.isEmpty()) return null;
-        Matcher matcher = TITLE_PATTERN.matcher(html);
-        if (!matcher.find()) return null;
-        String raw = matcher.group(1);
-        if (raw == null) return null;
-        String text = android.text.Html.fromHtml(raw.trim(),
-                android.text.Html.FROM_HTML_MODE_LEGACY).toString();
-        text = text.replaceAll("\\s+", " ").trim();
-        return text.isEmpty() ? null : text;
+    /** 端口用途说明 */
+    private static String portLabel(int port) {
+        switch (port) {
+            case 80:
+                return "HTTP 后台（大概率有网页管理界面）";
+            case 443:
+                return "HTTPS 后台";
+            case 554:
+                return "RTSP 视频流（摄像头）";
+            case 8000:
+                return "常见后台 / 摄像头服务（海康等）";
+            case 8080:
+                return "HTTP 备用后台";
+            case 8081:
+                return "HTTP 备用后台";
+            case 8443:
+                return "HTTPS 备用后台";
+            case 8888:
+                return "常见后台 / 摄像头 Web";
+            case 9000:
+                return "常见后台服务";
+            case 37777:
+                return "大华设备服务";
+            case 34567:
+                return "雄迈 / 通用摄像头";
+            default:
+                return "开放端口";
+        }
     }
 
-    /** 显示网页标题结果：无论有没有后台都弹窗，保证还能复制 IP / 打开网页 */
-    private void showWebInfoResult(String ip, String[] webInfo) {
+    /** 显示端口探测结果：无论有没有开放端口都弹窗，保证还能复制 IP / 打开网页 */
+    private void showPortResult(String ip, java.util.List<Integer> ports) {
         if (isFinishing() || isDestroyed()) return;
-        boolean hasTitle = webInfo != null && webInfo.length >= 2
-                && !TextUtils.isEmpty(webInfo[1]);
-        String url = hasTitle ? webInfo[0] : "http://" + ip;
-        String message = hasTitle ? "网页标题：" + webInfo[1] : "无后台地址";
+        StringBuilder message = new StringBuilder();
+        if (ports == null || ports.isEmpty()) {
+            message.append("未发现常见后台端口。\n")
+                    .append("该 IP 可能没有网页管理界面，或服务端口不在常见范围内。");
+        } else {
+            message.append("开放端口：\n");
+            for (int port : ports) {
+                message.append(port).append("  ").append(portLabel(port)).append("\n");
+            }
+            message.append("\n提示：80 / 8080 等 Web 端口开放，大概率可以打开网页后台。");
+        }
         new MaterialAlertDialogBuilder(this)
                 .setTitle("IP: " + ip)
-                .setMessage(message)
-                .setPositiveButton("打开网页", (dialog, which) -> openWebPage(url))
+                .setMessage(message.toString())
+                .setPositiveButton("打开网页", (dialog, which) -> openWebPage(bestWebUrl(ip, ports)))
                 .setNeutralButton("复制IP", (dialog, which) -> copyIp(ip))
                 .setNegativeButton("关闭", null)
                 .show();
+    }
+
+    /** 根据开放端口挑一个最可能打开后台的地址 */
+    private String bestWebUrl(String ip, java.util.List<Integer> ports) {
+        if (ports != null) {
+            if (ports.contains(8443)) return "https://" + ip + ":8443";
+            if (ports.contains(443)) return "https://" + ip;
+            if (ports.contains(80)) return "http://" + ip;
+            if (ports.contains(8080)) return "http://" + ip + ":8080";
+            if (ports.contains(8081)) return "http://" + ip + ":8081";
+            if (ports.contains(8000)) return "http://" + ip + ":8000";
+            if (ports.contains(8888)) return "http://" + ip + ":8888";
+            if (ports.contains(9000)) return "http://" + ip + ":9000";
+        }
+        return "http://" + ip;
     }
 
     private void openWebPage(String url) {
@@ -456,37 +490,6 @@ public class IpScanActivity extends AppCompatActivity {
         if (clipboard == null) return;
         clipboard.setPrimaryClip(ClipData.newPlainText("IP", ip));
         Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
-    }
-
-    /** 构建请求网页标题的 OkHttp 客户端：短超时 + 接受局域网自签名证书 */
-    private okhttp3.OkHttpClient buildWebClient() {
-        okhttp3.OkHttpClient.Builder builder = new okhttp3.OkHttpClient.Builder()
-                .connectTimeout(1200, TimeUnit.MILLISECONDS)
-                .readTimeout(2000, TimeUnit.MILLISECONDS)
-                .followRedirects(true)
-                .followSslRedirects(true);
-        try {
-            javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[]{
-                    new javax.net.ssl.X509TrustManager() {
-                        public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                        }
-
-                        public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                        }
-
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                            return new java.security.cert.X509Certificate[0];
-                        }
-                    }
-            };
-            javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
-            sslContext.init(null, trustAll, new java.security.SecureRandom());
-            builder.sslSocketFactory(sslContext.getSocketFactory(),
-                    (javax.net.ssl.X509TrustManager) trustAll[0]);
-            builder.hostnameVerifier((hostname, session) -> true);
-        } catch (Exception ignored) {
-        }
-        return builder.build();
     }
 
     /**
@@ -589,8 +592,11 @@ public class IpScanActivity extends AppCompatActivity {
                         + "例如 192.168.1.1 ~ 192.168.2.254 会扫描 192.168.1.x 和 192.168.2.x，"
                         + "第 4 段固定扫描 1~255。\n\n"
                         + "· 扫描结果：高亮为在线，灰色为离线或未扫描。\n\n"
-                        + "· 点击在线 IP：自动请求该地址的网页标题（80 / 8080 / 443 端口），"
-                        + "有标题可一键打开网页；没有网页标题会提示「无后台地址」。\n\n"
+                        + "· 点击在线 IP：探测常见后台 / 摄像头端口"
+                        + "（80、443、554、8000、8080、8081、8443、8888、9000、37777、34567），"
+                        + "并在弹窗里列出开放的端口和用途。\n\n"
+                        + "· 80 / 8080 等 Web 端口开放，大概率有网页后台，可点「打开网页」直接访问；"
+                        + "554 开放一般是 RTSP 摄像头。\n\n"
                         + "· 保存：把本次扫描结果导出为 JSON 文件。")
                 .setPositiveButton("知道了", null)
                 .show();
