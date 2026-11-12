@@ -208,6 +208,9 @@ public class ScanActivity extends AppCompatActivity {
 
     private void handleScanResult(String result) {
         if (result == null || result.isEmpty() || isHandlingResult) return;
+        // 统一换行符：\r、\u2028 等在 TextView 里不换行，复制出去却是换行，显示/保存/复制必须一致
+        result = com.networktool.app.util.ScanResultSheet.normalizeLineBreaks(result);
+        if (result.isEmpty()) return;
         isHandlingResult = true;
         try {
             barcodeView.pause();

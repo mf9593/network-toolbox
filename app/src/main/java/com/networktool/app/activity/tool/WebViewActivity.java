@@ -12,6 +12,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.webkit.HttpAuthHandler;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -20,6 +21,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebViewDatabase;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
@@ -32,6 +34,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDialog;
 import androidx.core.content.ContextCompat;
@@ -102,6 +105,9 @@ public class WebViewActivity extends AppCompatActivity {
     private boolean isLoading = false;
     private boolean isHomePage = true;
     private boolean enableDebug = false;
+
+    /** HTTP 认证（Basic / Digest）对话框是否已弹出，避免子资源并发请求时叠出多个窗口 */
+    private boolean httpAuthDialogShowing = false;
 
     // 用于接收清理缓存页面的返回结果
     private ActivityResultLauncher<Intent> clearCacheLauncher;
@@ -469,6 +475,12 @@ public class WebViewActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler handler,
+                                                  String host, String realm) {
+                showHttpAuthDialog(handler, host, realm);
+            }
+
+            @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, android.net.http.SslError error) {
                 String message = "SSL证书错误: " + (error != null ? error.toString() : "未知错误");
                 new MaterialAlertDialogBuilder(WebViewActivity.this)
@@ -525,6 +537,99 @@ public class WebViewActivity extends AppCompatActivity {
         });
 
         return newWebView;
+    }
+
+    /**
+     * HTTP 认证（Basic / Digest）账号密码弹窗。
+     *
+     * <p>WebView 默认不弹框：不实现 {@code onReceivedHttpAuthRequest} 时请求会被静默取消，
+     * 页面表现就是一直打不开。这里补上和系统 / Chrome 一致的账号密码输入框。</p>
+     */
+    private void showHttpAuthDialog(HttpAuthHandler handler, String host, String realm) {
+        if (handler == null) return;
+        if (isFinishing() || isDestroyed() || httpAuthDialogShowing) {
+            try {
+                handler.cancel();
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        httpAuthDialogShowing = true;
+
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_http_auth, null);
+        TextView targetText = dialogView.findViewById(R.id.authTargetText);
+        EditText usernameEdit = dialogView.findViewById(R.id.authUsernameEdit);
+        EditText passwordEdit = dialogView.findViewById(R.id.authPasswordEdit);
+        android.widget.CheckBox rememberCheck = dialogView.findViewById(R.id.authRememberCheck);
+
+        String safeHost = TextUtils.isEmpty(host) ? "该网站" : host;
+        String target = TextUtils.isEmpty(realm)
+                ? safeHost + " 需要身份验证"
+                : safeHost + " 需要身份验证\n" + realm;
+        if (targetText != null) targetText.setText(target);
+
+        // 以前记住过的凭据自动回填，省去重复输入
+        try {
+            String[] saved = WebViewDatabase.getInstance(this)
+                    .getHttpAuthUsernamePassword(host, realm);
+            if (saved != null && saved.length >= 2) {
+                if (usernameEdit != null && !TextUtils.isEmpty(saved[0])) {
+                    usernameEdit.setText(saved[0]);
+                }
+                if (passwordEdit != null && !TextUtils.isEmpty(saved[1])) {
+                    passwordEdit.setText(saved[1]);
+                }
+            }
+        } catch (Exception e) {
+            AppErrorLogger.logError(TAG, "读取站点账号密码失败", e);
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle("需要登录")
+                .setView(dialogView)
+                .setPositiveButton("登录", null)
+                .setNegativeButton("取消", (d, which) -> {
+                    try {
+                        handler.cancel();
+                    } catch (Exception ignored) {
+                    }
+                })
+                .setOnCancelListener(d -> {
+                    try {
+                        handler.cancel();
+                    } catch (Exception ignored) {
+                    }
+                })
+                .create();
+
+        // 点「登录」时先校验，不直接关窗；空用户名留在弹窗里提示
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    String username = usernameEdit == null || usernameEdit.getText() == null
+                            ? "" : usernameEdit.getText().toString().trim();
+                    String password = passwordEdit == null || passwordEdit.getText() == null
+                            ? "" : passwordEdit.getText().toString();
+                    if (TextUtils.isEmpty(username)) {
+                        Toast.makeText(this, "请输入用户名", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (rememberCheck == null || rememberCheck.isChecked()) {
+                        try {
+                            WebViewDatabase.getInstance(this)
+                                    .setHttpAuthUsernamePassword(host, realm, username, password);
+                        } catch (Exception e) {
+                            AppErrorLogger.logError(TAG, "保存站点账号密码失败", e);
+                        }
+                    }
+                    try {
+                        handler.proceed(username, password);
+                    } catch (Exception e) {
+                        AppErrorLogger.logError(TAG, "提交站点账号密码失败", e);
+                    }
+                    dialog.dismiss();
+                }));
+        dialog.setOnDismissListener(d -> httpAuthDialogShowing = false);
+        dialog.show();
     }
 
     /**

@@ -284,7 +284,9 @@ public class ScanHistoryActivity extends AppCompatActivity {
      */
     private void copyToClipboard(String text) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        ClipData clip = ClipData.newPlainText("Scan Result", text);
+        // 老记录可能还留着 \r 等换行符，复制前统一成 \n，和弹窗显示保持一致
+        ClipData clip = ClipData.newPlainText("Scan Result",
+                com.networktool.app.util.ScanResultSheet.normalizeLineBreaks(text));
         clipboard.setPrimaryClip(clip);
     }
 }

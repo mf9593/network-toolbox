@@ -27,13 +27,31 @@ public final class ScanResultSheet {
     private ScanResultSheet() {
     }
 
+    /**
+     * 统一各种换行符为 {@code \n}。
+     *
+     * <p>Android 的 TextView 只把 {@code \n} 当作换行：单独的 {@code \r}（老式 Mac 换行）、
+     * Unicode 行分隔符 {@code \u2028} / 段分隔符 {@code \u2029}、{@code \u0085} 等在排版时
+     * 宽度为 0，整段内容会被挤成一行；而复制到剪贴板时这些字符原样保留，粘贴到别处又能看到换行。
+     * 所以显示、保存、复制前都要先经过这里，保证三处一致。</p>
+     */
+    public static String normalizeLineBreaks(String text) {
+        if (text == null) return "";
+        return text.replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace('\u2028', '\n')
+                .replace('\u2029', '\n')
+                .replace('\u0085', '\n')
+                .replace('\u000B', '\n')
+                .replace('\f', '\n');
+    }
+
     /** 填入识别结果并按主题上色 */
     public static void bind(View sheetView, String result) {
         if (sheetView == null) return;
         TextView resultText = sheetView.findViewById(R.id.resultText);
         if (resultText != null) {
-            // 统一换行符：Windows 风格的 \r\n 在部分控件里会多出空行
-            resultText.setText(result == null ? "" : result.replace("\r\n", "\n"));
+            resultText.setText(normalizeLineBreaks(result));
             capScrollHeight(sheetView, resultText);
         }
         MaterialButton copyButton = sheetView.findViewById(R.id.copyButton);
