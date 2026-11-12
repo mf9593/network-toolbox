@@ -216,7 +216,7 @@ public class LanChatManager {
             startMulticastDiscovery();
 
             // 8. 启动文件传输服务（端口 = 聊天端口 + 1）
-            LanChatFileManager.getInstance().start(tcpServerPort);
+            LanChatFileManager.getInstance().start(appContext, tcpServerPort);
             Log.d(TAG, "File transfer server started on port " + (tcpServerPort + 1));
 
             // 9. 定期刷新任务

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 相机（拍照）图标：线条风格，与其它操作图标保持一致 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 机身 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M2,9.5a1.5,1.5 0 0 1 1.5,-1.5h17a1.5,1.5 0 0 1 1.5,1.5v8a1.5,1.5 0 0 1 -1.5,1.5h-17a1.5,1.5 0 0 1 -1.5,-1.5z"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+
+    <!-- 顶部取景凸起 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8.5,8l1.2,-2h4.6l1.2,2"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+
+    <!-- 镜头 -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,13.3m-3,0a3,3 0 1 1,6 0a3,3 0 1 1,-6 0"
+        android:strokeColor="?attr/colorAccent"
+        android:strokeWidth="1.8" />
+</vector>

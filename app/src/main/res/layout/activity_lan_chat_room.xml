@@ -215,7 +215,7 @@
 
             </LinearLayout>
 
-            <!-- 拍摄 -->
+            <!-- 相机 -->
             <LinearLayout
                 android:id="@+id/sendCameraButton"
                 android:layout_width="0dp"
@@ -234,8 +234,8 @@
                         android:layout_width="28dp"
                         android:layout_height="28dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_camera"
-                        android:contentDescription="拍摄"
+                        android:src="@drawable/ic_photo_camera"
+                        android:contentDescription="相机"
                         app:tint="?attr/colorOnSurfaceVariant" />
 
                 </FrameLayout>
@@ -243,7 +243,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="拍摄"
+                    android:text="相机"
                     android:textSize="12sp"
                     android:layout_marginTop="6dp"
                     android:textColor="?attr/colorOnSurfaceVariant" />

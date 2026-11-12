@@ -1338,33 +1338,16 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
 
     private void sendFileWithPeerInternal(Uri fileUri, LanChatManager.LanPeer peer) {
 
-        // 获取文件名和大小
-        String fileName = "file";
-        long fileSize = 0;
-        File tempFile = null;
+        // 解析成真实文件：ACTION_GET_CONTENT 选「下载」里的 txt 时查不到 _data 列，
+        // 以前直接判失败，表现就是文本文件根本发不出去
+        File tempFile = resolveFileForSend(fileUri);
+        String fileName = tempFile != null ? tempFile.getName() : "file";
+        long fileSize = tempFile != null ? tempFile.length() : 0;
 
-        try {
-            // 将Uri转换为File
-            String filePath = getPathFromUri(fileUri);
-            if (filePath != null) {
-                tempFile = new File(filePath);
-                fileName = tempFile.getName();
-                fileSize = tempFile.length();
-            } else {
-                android.database.Cursor cursor = getContentResolver().query(fileUri, null, null, null, null);
-                if (cursor != null) {
-                    if (cursor.moveToFirst()) { // 检查是否有数据
-                        int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                        int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
-                        if (nameIndex >= 0) fileName = cursor.getString(nameIndex);
-                        if (sizeIndex >= 0) fileSize = cursor.getLong(sizeIndex);
-                    }
-                    cursor.close();
-                }
-            }
-        } catch (Exception e) {
-            // 忽略异常，使用默认值
-            AppErrorLogger.logError("LanChatRoom", "获取文件信息失败", e);
+        if (tempFile == null || !tempFile.exists()) {
+            runOnUiThread(() -> Toast.makeText(LanChatRoomActivity.this,
+                    "读取文件失败，请换一个文件管理器再选一次", Toast.LENGTH_SHORT).show());
+            return;
         }
 
         // 显示发送消息
@@ -1373,6 +1356,8 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
         msg.setContent("[文件] " + fileName);
         msg.setFileName(fileName);
         msg.setFileSize(fileSize);
+        // 记下本地路径，发送方气泡点「下载/打开」时能直接找到文件
+        msg.setFilePath(tempFile.getAbsolutePath());
         msg.setSender(chatManager.getUserName());
         msg.setTimestamp(System.currentTimeMillis());
 
@@ -1393,7 +1378,7 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
         Toast.makeText(this, "正在发送文件：" + fileName, Toast.LENGTH_SHORT).show();
 
         // 通过新的文件传输管理器发送（独立TCP连接 + 分块传输 + CRC32校验）
-        if (peer != null && tempFile != null && tempFile.exists()) {
+        if (peer != null && tempFile.exists()) {
             final File sendFile = tempFile;
             final LanChatManager.LanPeer sendPeer = peer;
             
@@ -1401,6 +1386,11 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
                 sendPeer.getIp(),
                 sendPeer.getTcpPort(),
                 sendFile,
+                chatManager != null ? chatManager.getUserName() : null,
+                NetworkUtils.getLocalIpAddress(),
+                chatManager != null ? chatManager.getTcpServerPort() : 0,
+                isRoomChat ? roomCode : null,
+                isRoomChat ? roomName : null,
                 new LanChatFileManager.OnFileTransferListener() {
                     @Override
                     public void onFileOfferReceived(LanChatFileManager.FileTransferOffer offer) {
@@ -1692,27 +1682,52 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
                 boolean[] checked = new boolean[ssids.length];
 
                 runOnUiThread(() -> {
-                    new MaterialAlertDialogBuilder(this)
+                    androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                             .setTitle("选择要发送的WiFi数据")
-                            .setMultiChoiceItems(ssids, checked, (dialog, which, isChecked) -> {
-                                checked[which] = isChecked;
-                            })
-                            .setPositiveButton("发送", (dialog, which) -> {
-                                // 收集选中的WiFi数据
-                                java.util.List<WifiDataItem> selectedList = new ArrayList<>();
-                                for (int i = 0; i < ssids.length; i++) {
-                                    if (checked[i]) {
-                                        selectedList.add(wifiList.get(i));
-                                    }
-                                }
-                                if (selectedList.isEmpty()) {
-                                    Toast.makeText(this, "请选择要发送的WiFi", Toast.LENGTH_SHORT).show();
-                                    return;
-                                }
-                                sendWifiBackupData(selectedList);
-                            })
+                            .setMultiChoiceItems(ssids, checked, (d, which, isChecked) -> checked[which] = isChecked)
+                            .setPositiveButton("发送", null)
                             .setNegativeButton("取消", null)
-                            .show();
+                            .setNeutralButton("全选", null)
+                            .create();
+                    dialog.setOnShowListener(d -> {
+                        // 「全选 / 取消全选」：条目多的时候不用一个个点
+                        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+                                .setOnClickListener(v -> {
+                                    boolean allSelected = true;
+                                    for (boolean b : checked) {
+                                        if (!b) {
+                                            allSelected = false;
+                                            break;
+                                        }
+                                    }
+                                    boolean selectAll = !allSelected;
+                                    for (int i = 0; i < checked.length; i++) {
+                                        checked[i] = selectAll;
+                                        if (dialog.getListView() != null) {
+                                            dialog.getListView().setItemChecked(i, selectAll);
+                                        }
+                                    }
+                                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)
+                                            .setText(selectAll ? "取消全选" : "全选");
+                                });
+                        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                                .setOnClickListener(v -> {
+                                    // 收集选中的WiFi数据
+                                    java.util.List<WifiDataItem> selectedList = new ArrayList<>();
+                                    for (int i = 0; i < ssids.length; i++) {
+                                        if (checked[i]) {
+                                            selectedList.add(wifiList.get(i));
+                                        }
+                                    }
+                                    if (selectedList.isEmpty()) {
+                                        Toast.makeText(this, "请选择要发送的WiFi", Toast.LENGTH_SHORT).show();
+                                        return;
+                                    }
+                                    dialog.dismiss();
+                                    sendWifiBackupData(selectedList);
+                                });
+                    });
+                    dialog.show();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> Toast.makeText(this, "读取WiFi数据失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
@@ -1940,6 +1955,63 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
         return filePath;
     }
 
+    /**
+     * 把选择的 Uri 解析成可发送的真实文件。
+     *
+     * <p>下载目录、网盘、SAF 返回的 content Uri 通常没有 {@code _data} 列，
+     * 只能拿到 DISPLAY_NAME；这种情况把内容复制到应用私有目录再发送。</p>
+     */
+    private File resolveFileForSend(Uri uri) {
+        if (uri == null) return null;
+        try {
+            String path = getPathFromUri(uri);
+            if (!TextUtils.isEmpty(path)) {
+                File direct = new File(path);
+                if (direct.exists() && direct.isFile()) {
+                    return direct;
+                }
+            }
+
+            String displayName = null;
+            android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null) {
+                try {
+                    if (cursor.moveToFirst()) {
+                        int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (nameIndex >= 0) displayName = cursor.getString(nameIndex);
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+            if (TextUtils.isEmpty(displayName)) {
+                displayName = "file_" + System.currentTimeMillis();
+            }
+            // 去掉路径分隔符，避免写到目录外
+            displayName = displayName.replace('/', '_').replace('\\', '_');
+
+            File dir = new File(getFilesDir(), "chat_send");
+            if (!dir.exists()) dir.mkdirs();
+            File outFile = new File(dir, displayName);
+
+            InputStream is = getContentResolver().openInputStream(uri);
+            if (is == null) return null;
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, len);
+            }
+            fos.flush();
+            fos.close();
+            is.close();
+            return outFile.exists() ? outFile : null;
+        } catch (Exception e) {
+            AppErrorLogger.logError("LanChatRoom", "解析待发送文件失败", e);
+            return null;
+        }
+    }
+
     // ==================== OnPeerChangeListener ====================
 
     /**
@@ -1964,8 +2036,36 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
                         public void onFileReceived(String fileId, String fileName,
                                                    String filePath, long fileSize) {
                             if (isFinishing() || isDestroyed()) return;
-                            runOnUiThread(() -> Toast.makeText(LanChatRoomActivity.this,
-                                    "已接收文件：" + fileName, Toast.LENGTH_SHORT).show());
+                            runOnUiThread(() -> {
+                                Toast.makeText(LanChatRoomActivity.this,
+                                        "已接收文件：" + fileName, Toast.LENGTH_SHORT).show();
+                                // 补一条文件消息，聊天里能直接看到并再次打开/导入
+                                try {
+                                    LanChatManager.ChatMessage msg = new LanChatManager.ChatMessage();
+                                    msg.setType("file");
+                                    msg.setContent("[文件] " + fileName);
+                                    msg.setFileName(fileName);
+                                    msg.setFileSize(fileSize);
+                                    msg.setFilePath(filePath);
+                                    msg.setSender(currentPeer != null && currentPeer.getUserName() != null
+                                            ? currentPeer.getUserName() : "对方");
+                                    msg.setTimestamp(System.currentTimeMillis());
+
+                                    messageList.add(msg);
+                                    messageAdapter.addMessage(msg);
+                                    messageRecyclerView.smoothScrollToPosition(messageList.size() - 1);
+
+                                    if (database != null) {
+                                        if (isRoomChat && roomCode != null) {
+                                            database.saveMessage(null, roomCode, msg);
+                                        } else if (peerIp != null) {
+                                            database.saveMessage(peerIp, peerName, msg);
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    AppErrorLogger.logError("LanChatRoom", "保存接收文件消息失败", e);
+                                }
+                            });
                         }
 
                         @Override

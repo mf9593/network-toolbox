@@ -2,6 +2,7 @@ package com.networktool.app.util;
 
 import android.content.Context;
 import android.os.Environment;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.google.gson.Gson;
@@ -56,6 +57,9 @@ public class LanChatFileManager {
     // 文件传输回调
     private OnFileTransferListener fileListener;
 
+    // 应用上下文，用于写入聊天记录 / 弹通知 / 选可写目录
+    private android.content.Context appContext;
+
     private static LanChatFileManager instance;
 
     public static synchronized LanChatFileManager getInstance() {
@@ -74,6 +78,16 @@ public class LanChatFileManager {
      * @param chatPort 聊天TCP端口，文件传输端口 = chatPort + 1
      */
     public void start(int chatPort) {
+        start(null, chatPort);
+    }
+
+    /**
+     * 启动文件传输服务（带上下文：没有聊天页面在前台时也能收文件）
+     */
+    public void start(android.content.Context context, int chatPort) {
+        if (context != null) {
+            appContext = context.getApplicationContext();
+        }
         if (isRunning) return;
 
         int filePort = chatPort + FILE_TRANSFER_PORT_OFFSET;
@@ -131,19 +145,26 @@ public class LanChatFileManager {
                     return;
                 }
 
-                // 通知UI层有文件传输请求
-                if (fileListener != null) {
-                    android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-                    mainHandler.post(() -> fileListener.onFileOfferReceived(offer));
-                }
-
                 // 等待用户接受或拒绝（通过acceptFileTransfer或rejectFileTransfer方法）
                 // 这里使用阻塞等待，超时30秒
                 FileTransferTask task = new FileTransferTask(offer.getFileId(), offer.getFileName(), offer.getFileSize());
                 activeTransfers.put(offer.getFileId(), task);
 
-                synchronized (task) {
-                    task.wait(30000); // 等待30秒
+                OnFileTransferListener listener = fileListener;
+                if (listener == null) {
+                    // 聊天页面没打开（或已退出）：直接收下文件。
+                    // 以前这里一律等 30 秒后按「拒绝」处理，发送方看到的就是「文件发送失败」。
+                    task.setAccepted(true);
+                } else {
+                    // 通知UI层有文件传输请求
+                    android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+                    mainHandler.post(() -> listener.onFileOfferReceived(offer));
+
+                    synchronized (task) {
+                        if (!task.isAccepted()) {
+                            task.wait(30000); // 等待30秒
+                        }
+                    }
                 }
 
                 if (!task.isAccepted()) {
@@ -227,9 +248,13 @@ public class LanChatFileManager {
             // 发送FILE_DONE
             if (received >= offer.getFileSize()) {
                 task.setCompleted(true);
-                if (fileListener != null) {
+                OnFileTransferListener listener = fileListener;
+                if (listener != null) {
                     android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-                    mainHandler.post(() -> fileListener.onFileReceived(offer.getFileId(), offer.getFileName(), saveFile.getAbsolutePath(), offer.getFileSize()));
+                    mainHandler.post(() -> listener.onFileReceived(offer.getFileId(), offer.getFileName(), saveFile.getAbsolutePath(), offer.getFileSize()));
+                } else {
+                    // 聊天页面没打开，文件已经直接收下：补一条聊天记录 + 通知，打开会话就能看到
+                    notifyFileReceivedInBackground(offer, saveFile);
                 }
                 Log.d(TAG, "File received successfully: " + offer.getFileName());
             }
@@ -244,6 +269,16 @@ public class LanChatFileManager {
      * 发送文件给peer（通过独立TCP连接）
      */
     public void sendFile(String peerIp, int peerTcpPort, File file, OnFileTransferListener listener) {
+        sendFile(peerIp, peerTcpPort, file, null, null, 0, null, null, listener);
+    }
+
+    /**
+     * 发送文件（携带发送者信息：对方不在聊天页面时也能落库 + 弹通知）
+     */
+    public void sendFile(String peerIp, int peerTcpPort, File file,
+                         String senderName, String senderIp, int senderPort,
+                         String roomCode, String roomName,
+                         OnFileTransferListener listener) {
         if (peerIp == null || file == null || !file.exists()) {
             if (listener != null) {
                 listener.onFileTransferError("参数错误");
@@ -253,6 +288,11 @@ public class LanChatFileManager {
 
         int filePort = peerTcpPort + FILE_TRANSFER_PORT_OFFSET;
         String fileId = "f-" + System.currentTimeMillis();
+        final String offerSenderName = senderName;
+        final String offerSenderIp = senderIp;
+        final int offerSenderPort = senderPort;
+        final String offerRoomCode = roomCode;
+        final String offerRoomName = roomName;
 
         executorService.execute(() -> {
             Socket socket = null;
@@ -268,7 +308,8 @@ public class LanChatFileManager {
 
                 // 2. 发送FILE_OFFER
                 FileTransferOffer offer = new FileTransferOffer(
-                    "FILE_OFFER", fileId, file.getName(), file.length(), CHUNK_SIZE
+                    "FILE_OFFER", fileId, file.getName(), file.length(), CHUNK_SIZE,
+                    offerSenderName, offerSenderIp, offerSenderPort, offerRoomCode, offerRoomName
                 );
                 out.writeUTF(gson.toJson(offer));
                 out.flush();
@@ -391,7 +432,75 @@ public class LanChatFileManager {
         if (!dir.exists()) {
             dir.mkdirs();
         }
+        if (dir.isDirectory() && dir.canWrite()) {
+            return dir;
+        }
+        // 没有「所有文件访问」权限时公共下载目录写不进去，退回应用专属目录，
+        // 否则接收方一写文件就抛异常，发送方看到的就是「文件发送失败」
+        if (appContext != null) {
+            File base = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            if (base == null) {
+                base = appContext.getFilesDir();
+            }
+            if (base != null) {
+                File fallback = new File(base, SAVE_DIR);
+                if (!fallback.exists()) {
+                    fallback.mkdirs();
+                }
+                if (fallback.isDirectory() && fallback.canWrite()) {
+                    Log.w(TAG, "Public download dir not writable, use " + fallback.getAbsolutePath());
+                    return fallback;
+                }
+            }
+        }
         return dir;
+    }
+
+    /**
+     * 没有聊天页面时收到文件：写入聊天记录 + 发通知。
+     * 这样对方不用一直停在聊天页，文件也能收下并在会话里看到。
+     */
+    private void notifyFileReceivedInBackground(FileTransferOffer offer, File file) {
+        if (appContext == null || offer == null || file == null) return;
+        final String senderName = offer.getSenderName();
+        final String senderIp = offer.getSenderIp();
+        final String roomCode = offer.getRoomCode();
+        try {
+            LanChatManager.ChatMessage msg = new LanChatManager.ChatMessage();
+            msg.setType("file");
+            msg.setContent("[文件] " + offer.getFileName());
+            msg.setFileName(offer.getFileName());
+            msg.setFileSize(offer.getFileSize());
+            msg.setFilePath(file.getAbsolutePath());
+            msg.setSender(TextUtils.isEmpty(senderName) ? "对方" : senderName);
+            msg.setSenderIp(senderIp);
+            msg.setSenderPort(offer.getSenderPort());
+            msg.setTimestamp(System.currentTimeMillis());
+
+            LanChatDatabase database = LanChatDatabase.getInstance(appContext);
+            if (!TextUtils.isEmpty(roomCode)) {
+                database.saveMessage(null, roomCode, msg);
+            } else if (!TextUtils.isEmpty(senderIp)) {
+                database.saveMessage(senderIp, TextUtils.isEmpty(senderName) ? "对方" : senderName, msg);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "保存接收到的文件记录失败: " + e.getMessage());
+        }
+
+        try {
+            LanChatNotificationManager notifier = LanChatNotificationManager.getInstance(appContext);
+            String text = "收到文件：" + offer.getFileName() + "\n已保存到 " + file.getParent();
+            if (!TextUtils.isEmpty(roomCode)) {
+                notifier.showMessageNotification(
+                        TextUtils.isEmpty(senderName) ? "局域网聊天" : senderName, senderIp,
+                        text, true, roomCode, offer.getRoomName());
+            } else {
+                notifier.showMessageNotification(
+                        TextUtils.isEmpty(senderName) ? "局域网聊天" : senderName, senderIp, text);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "文件接收通知失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -443,6 +552,12 @@ public class LanChatFileManager {
         private String fileName;
         private long fileSize;
         private int chunkSize;
+        // 发送者信息（旧版本客户端没有这些字段，Gson 会留空）
+        private String senderName;
+        private String senderIp;
+        private int senderPort;
+        private String roomCode;
+        private String roomName;
 
         public FileTransferOffer(String type, String fileId, String fileName, long fileSize, int chunkSize) {
             this.type = type;
@@ -452,11 +567,27 @@ public class LanChatFileManager {
             this.chunkSize = chunkSize;
         }
 
+        public FileTransferOffer(String type, String fileId, String fileName, long fileSize, int chunkSize,
+                                 String senderName, String senderIp, int senderPort,
+                                 String roomCode, String roomName) {
+            this(type, fileId, fileName, fileSize, chunkSize);
+            this.senderName = senderName;
+            this.senderIp = senderIp;
+            this.senderPort = senderPort;
+            this.roomCode = roomCode;
+            this.roomName = roomName;
+        }
+
         public String getType() { return type; }
         public String getFileId() { return fileId; }
         public String getFileName() { return fileName; }
         public long getFileSize() { return fileSize; }
         public int getChunkSize() { return chunkSize; }
+        public String getSenderName() { return senderName; }
+        public String getSenderIp() { return senderIp; }
+        public int getSenderPort() { return senderPort; }
+        public String getRoomCode() { return roomCode; }
+        public String getRoomName() { return roomName; }
     }
 
     /**
