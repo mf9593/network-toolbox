@@ -1055,7 +1055,7 @@ public class RtspPlayer {
                     return;
                 }
                 closeCompatProxy();
-                proxy = RtspCompatProxy.start(host, port);
+                proxy = RtspCompatProxy.start(host, port, normalized);
                 final String proxiedUrl = RtspCompatProxy.toProxyUrl(normalized, proxy.getLocalPort());
                 compatProxy = proxy;
                 writeBreadcrumb("兼容代理就绪：127.0.0.1:" + proxy.getLocalPort()

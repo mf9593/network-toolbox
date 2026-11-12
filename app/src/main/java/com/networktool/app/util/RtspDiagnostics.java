@@ -346,6 +346,25 @@ public final class RtspDiagnostics {
         return summary.toString();
     }
 
+    /**
+     * 生成 Basic 鉴权头的值（供 RTSP 探测复用）。
+     *
+     * @return 形如 {@code Basic YWRtaW46MTIzNDU2}；用户名为空时返回 null
+     */
+    public static String basicAuthorization(String user, String password) {
+        return basicHeader(user, password);
+    }
+
+    /**
+     * 根据 401 的 WWW-Authenticate 挑战生成 Digest 鉴权头的值（供 RTSP 探测复用）。
+     *
+     * @return 形如 {@code Digest username="..", realm="..", ...}；无法生成时返回 null
+     */
+    public static String buildDigestAuthorization(String authenticate, String user, String password,
+                                                  String method, String uri) {
+        return buildDigestHeader(authenticate, user, password, method, uri);
+    }
+
     private static String basicHeader(String user, String password) {
         if (user == null) return null;
         // minSdk 21 上 java.util.Base64 不可用，用 android.util.Base64

@@ -56,6 +56,11 @@ public final class RtspCompatProxy implements Closeable {
     private final ServerSocket serverSocket;
     private final String targetHost;
     private final int targetPort;
+    /** 原始 RTSP 地址（带账号密码），用于补 SDP 里缺失的参数集 */
+    private final String sessionUrl;
+    /** 已探测到的 fmtp 属性串（缺 fmtp 的设备只探一次） */
+    private volatile String injectedFmtp;
+    private volatile boolean fmtpProbed;
     private final List<Socket> liveSockets = new CopyOnWriteArrayList<>();
     private volatile boolean closed;
     /** 已改写的响应头数量，用于面包屑日志确认兼容逻辑是否生效 */
@@ -77,10 +82,12 @@ public final class RtspCompatProxy implements Closeable {
     private final java.util.Set<Integer> loggedNalTypes =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-    private RtspCompatProxy(ServerSocket serverSocket, String targetHost, int targetPort) {
+    private RtspCompatProxy(ServerSocket serverSocket, String targetHost, int targetPort,
+                            String sessionUrl) {
         this.serverSocket = serverSocket;
         this.targetHost = targetHost;
         this.targetPort = targetPort;
+        this.sessionUrl = sessionUrl;
     }
 
     /**
@@ -90,10 +97,21 @@ public final class RtspCompatProxy implements Closeable {
      * @param port RTSP 端口
      */
     public static RtspCompatProxy start(String host, int port) throws IOException {
+        return start(host, port, null);
+    }
+
+    /**
+     * 启动代理（带上原始地址：STP 里缺 fmtp 时用它回连摄像头抓参数集）。
+     *
+     * @param host       摄像头地址
+     * @param port       RTSP 端口
+     * @param sessionUrl 原始 RTSP 地址（可带账号密码）
+     */
+    public static RtspCompatProxy start(String host, int port, String sessionUrl) throws IOException {
         ServerSocket serverSocket = new ServerSocket();
         serverSocket.setReuseAddress(true);
         serverSocket.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 4);
-        RtspCompatProxy proxy = new RtspCompatProxy(serverSocket, host, port);
+        RtspCompatProxy proxy = new RtspCompatProxy(serverSocket, host, port, sessionUrl);
         proxy.startAcceptLoop();
         return proxy;
     }
@@ -260,13 +278,20 @@ public final class RtspCompatProxy implements Closeable {
                     }
                     // 部分摄像头的 H.265 sprop-* 参数损坏，会让 ExoPlayer 解析 SPS 时数组越界闪退
                     rememberHevcPayloadTypes(body);
+                    // 顺序很重要：先修掉写坏的 sprop，再补缺失的参数集
                     byte[] sanitized = sanitizeSdp(body);
-                    if (sanitized.length != body.length) {
-                        patched = replaceContentLength(patched, sanitized.length);
+                    if (sanitized != body) {
+                        body = sanitized;
+                        patched = replaceContentLength(patched, body.length);
                         sdpRewrites++;
                         rewrittenHeaders++;
                     }
-                    body = sanitized;
+                    byte[] withFmtp = injectMissingFmtp(body);
+                    if (withFmtp != body) {
+                        body = withFmtp;
+                        patched = replaceContentLength(patched, body.length);
+                        rewrittenHeaders++;
+                    }
                 }
 
                 out.write(patched.getBytes(StandardCharsets.ISO_8859_1));
@@ -322,6 +347,113 @@ public final class RtspCompatProxy implements Closeable {
             if (i < lines.length - 1) rebuilt.append("\r\n");
         }
         return rebuilt.toString();
+    }
+
+    /**
+     * 给缺少 fmtp 的 H.264 / H.265 视频轨补上参数集。
+     *
+     * <p>有的设备（LIBZRTSP 之类）SDP 里只有 {@code a=rtpmap:96 H265/90000}，
+     * 既没有 fmtp 也没有 sprop，ExoPlayer 建轨时会直接抛
+     * {@code IllegalArgumentException: missing attribute fmtp}。
+     * 这里先用一次极短会话从码流里抓 VPS/SPS/PPS，再写进 fmtp。</p>
+     *
+     * @return 补好 fmtp 的 SDP；不需要补或补不上时原样返回（同一个数组引用）
+     */
+    private byte[] injectMissingFmtp(byte[] sdp) {
+        if (sdp == null || sdp.length == 0) return sdp;
+        String text;
+        try {
+            text = new String(sdp, StandardCharsets.ISO_8859_1);
+        } catch (Throwable t) {
+            return sdp;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (!lower.contains("h265") && !lower.contains("hevc") && !lower.contains("h264")) {
+            return sdp;
+        }
+
+        String newline = text.contains("\r\n") ? "\r\n" : "\n";
+        String[] lines = text.split("\r\n|\n", -1);
+
+        // 先框出第一条视频轨的范围
+        int videoStart = -1;
+        int videoEnd = lines.length;
+        for (int i = 0; i < lines.length; i++) {
+            String trimmed = lines[i].trim().toLowerCase(Locale.ROOT);
+            if (!trimmed.startsWith("m=")) continue;
+            if (videoStart >= 0) {
+                videoEnd = i;
+                break;
+            }
+            if (trimmed.startsWith("m=video")) videoStart = i;
+        }
+        if (videoStart < 0) return sdp;
+
+        // 再在视频轨里找编码、负载类型和已有的 fmtp
+        String codec = null;
+        String payloadType = null;
+        int existingFmtpAt = -1;
+        boolean hasSprop = false;
+        for (int i = videoStart + 1; i < videoEnd; i++) {
+            String line = lines[i].trim();
+            String lineLower = line.toLowerCase(Locale.ROOT);
+            if (lineLower.startsWith("a=rtpmap:")) {
+                String value = line.substring("a=rtpmap:".length()).trim();
+                int space = value.indexOf(' ');
+                if (space <= 0) continue;
+                String name = value.substring(space + 1).trim().toUpperCase(Locale.ROOT);
+                if (name.startsWith("H265") || name.startsWith("HEVC")) {
+                    codec = "H265";
+                } else if (name.startsWith("H264")) {
+                    codec = "H264";
+                }
+                if (codec != null) payloadType = value.substring(0, space).trim();
+            } else if (lineLower.startsWith("a=fmtp:")) {
+                if (payloadType != null && lineLower.startsWith("a=fmtp:" + payloadType)) {
+                    if (lineLower.contains("sprop")) {
+                        hasSprop = true;
+                    } else {
+                        existingFmtpAt = i;
+                    }
+                }
+            }
+        }
+        if (codec == null || payloadType == null) return sdp;
+        if (hasSprop) return sdp;
+
+        if (!fmtpProbed) {
+            fmtpProbed = true;
+            String fmtp = com.networktool.app.util.RtspSpropProbe.probeFmtp(
+                    sessionUrl, 3500, message -> log(message));
+            if (fmtp != null) {
+                injectedFmtp = fmtp;
+                log("SDP 缺少参数集，已从码流抓到并补上（" + codec + "）");
+            } else {
+                log("SDP 缺少参数集，且未能从码流抓到（" + codec + "）");
+            }
+        }
+        if (injectedFmtp == null) return sdp;
+
+        StringBuilder out = new StringBuilder(text.length() + 160);
+        for (int i = 0; i < lines.length; i++) {
+            if (i == existingFmtpAt) {
+                out.append(lines[i].trim()).append(';').append(injectedFmtp).append(newline);
+            } else if (i == videoEnd) {
+                // 没有 fmtp 时补在视频轨末尾（下一条 m= 之前）
+                out.append("a=fmtp:").append(payloadType).append(' ')
+                        .append(injectedFmtp).append(newline);
+                out.append(lines[i]);
+                if (i < lines.length - 1) out.append(newline);
+            } else {
+                out.append(lines[i]);
+                if (i < lines.length - 1) out.append(newline);
+            }
+        }
+        if (existingFmtpAt < 0 && videoEnd == lines.length) {
+            out.append("a=fmtp:").append(payloadType).append(' ')
+                    .append(injectedFmtp).append(newline);
+        }
+        return out.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
 
     /** 修正 {@code rtsp://rtsp://host/path/} 这类重复协议头，并保证以 / 结尾 */
