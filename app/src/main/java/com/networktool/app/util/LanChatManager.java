@@ -2,6 +2,10 @@ package com.networktool.app.util;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -22,12 +26,14 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.Iterator;
@@ -100,6 +106,7 @@ public class LanChatManager {
     
     // Socket相关
     private WifiManager.MulticastLock multicastLock;  // WiFi多播锁，确保能接收广播/组播包
+    private volatile String lastLanInterfaceName;    // 上次记录过的组播出口网卡名（避免重复记日志）
     private MulticastSocket negotiationSocket;  // 用于端口协商的组播socket（公共通道）
     private ServerSocket tcpServerSocket;
     private boolean isRunning = false;
@@ -352,8 +359,9 @@ public class LanChatManager {
             try {
                 InetAddress groupAddr = InetAddress.getByName(MULTICAST_ADDRESS);
                 negotiationSocket = new MulticastSocket(UDP_MULTICAST_NEGOTIATION_PORT);
+                applyLanInterface(negotiationSocket);
                 negotiationSocket.setReuseAddress(true);
-                negotiationSocket.joinGroup(groupAddr);
+                joinGroupOnLan(negotiationSocket, groupAddr, UDP_MULTICAST_NEGOTIATION_PORT);
                 negotiationSocket.setSoTimeout(1000);
                 byte[] buffer = new byte[65535];
                 while (isRunning) {
@@ -634,6 +642,105 @@ public class LanChatManager {
     }
     
     /**
+     * 选出当前承载局域网的网卡（Wi-Fi / 以太网）。
+     *
+     * <p>手机同时开着移动数据时，默认路由往往落在 rmnet 上。组播 socket 如果不指定网卡，
+     * 内核就会按路由表选出口，"在线宣告"直接发到 4G 去了——表现就是"两台设备明明连着
+     * 同一个 Wi-Fi，却互相刷不出来"。这里优先按 ConnectivityManager 的传输类型精确挑网卡，
+     * 拿不到再按接口名（wlan/eth/ap）兜底，并排除移动数据接口。</p>
+     *
+     * @return 局域网网卡；没有可用网卡时返回 null
+     */
+    private NetworkInterface lanNetworkInterface() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager)
+                    appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                for (Network network : cm.getAllNetworks()) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+                    if (caps == null) continue;
+                    if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                            && !caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                        continue;
+                    }
+                    LinkProperties properties = cm.getLinkProperties(network);
+                    if (properties == null) continue;
+                    String name = properties.getInterfaceName();
+                    if (name == null || name.isEmpty()) continue;
+                    NetworkInterface ni = NetworkInterface.getByName(name);
+                    if (ni != null && ni.isUp()) return ni;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 兜底：按接口名挑，排除 rmnet/pdp/ccmni 等移动数据接口
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                String name = ni.getName().toLowerCase(java.util.Locale.ROOT);
+                if (!name.startsWith("wlan") && !name.startsWith("eth") && !name.startsWith("ap")) {
+                    continue;
+                }
+                for (InetAddress address : Collections.list(ni.getInetAddresses())) {
+                    if (address instanceof java.net.Inet4Address && !address.isLoopbackAddress()) {
+                        return ni;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * 把组播 socket 的出口网卡固定到局域网网卡。
+     *
+     * <p>对应 setsockopt 的 IP_MULTICAST_IF，只影响组播包的发送；拿不到网卡时保持系统默认。</p>
+     */
+    private void applyLanInterface(MulticastSocket socket) {
+        if (socket == null || socket.isClosed()) return;
+        NetworkInterface ni = lanNetworkInterface();
+        if (ni == null) return;
+        try {
+            socket.setNetworkInterface(ni);
+            String name = ni.getName();
+            if (!name.equals(lastLanInterfaceName)) {
+                lastLanInterfaceName = name;
+                Log.d(TAG, "组播出口网卡: " + name);
+                DebugLogger.logDiscovery("LanChat", "组播出口网卡", name);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "绑定组播出口网卡失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 在局域网网卡上加入组播组。
+     *
+     * <p>不要用单参数的 {@code joinGroup(InetAddress)}：它同样按路由表选网卡，
+     * 移动数据在默认路由时会加入错误的组，收到的组播包自然也是空的。</p>
+     */
+    private void joinGroupOnLan(MulticastSocket socket, InetAddress group, int port) {
+        if (socket == null || socket.isClosed() || group == null) return;
+        NetworkInterface ni = lanNetworkInterface();
+        try {
+            if (ni != null) {
+                socket.joinGroup(new InetSocketAddress(group, port), ni);
+            } else {
+                socket.joinGroup(group);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "加入组播组失败: " + e.getMessage());
+            try {
+                socket.joinGroup(group);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /**
      * 处理自动添加好友
      */
     private void handleAutoFriendAdd(String peerIp, String peerName, long peerUid) {
@@ -746,6 +853,7 @@ public class LanChatManager {
                 try {
                     InetAddress multicastAddr = InetAddress.getByName(MULTICAST_ADDRESS);
                     MulticastSocket multicastSendSocket = new MulticastSocket();
+                    applyLanInterface(multicastSendSocket);
                     try {
                         DatagramPacket multicastPacket = new DatagramPacket(data, data.length, multicastAddr, UDP_MULTICAST_DISCOVERY_PORT);
                         multicastSendSocket.send(multicastPacket);
@@ -774,6 +882,7 @@ public class LanChatManager {
             MulticastSocket sendSocket = null;
             try {
                 sendSocket = new MulticastSocket();
+                applyLanInterface(sendSocket);
                 if (sendSocket.isClosed()) {
                     Log.e(TAG, "Multicast send socket closed");
                     return;
@@ -939,6 +1048,7 @@ public class LanChatManager {
             MulticastSocket sendSocket = null;
             try {
                 sendSocket = new MulticastSocket();
+                applyLanInterface(sendSocket);
                 if (sendSocket.isClosed()) {
                     Log.e(TAG, "Multicast send socket closed");
                     return;
@@ -988,6 +1098,7 @@ public class LanChatManager {
                     try {
                         InetAddress multicastAddr = InetAddress.getByName(MULTICAST_ADDRESS);
                         multicastSendSocket = new MulticastSocket();
+                        applyLanInterface(multicastSendSocket);
                         DatagramPacket multicastPacket = new DatagramPacket(data, data.length, multicastAddr, UDP_MULTICAST_DISCOVERY_PORT);
                         multicastSendSocket.send(multicastPacket);
                     } catch (Exception e) {
@@ -1062,6 +1173,7 @@ public class LanChatManager {
                 DatagramPacket packet = new DatagramPacket(data, data.length, multicastAddr, port);
                 
                 MulticastSocket sendSocket = new MulticastSocket();
+                applyLanInterface(sendSocket);
                 try {
                     sendSocket.send(packet);
                     Log.d(TAG, "Sent NACK request for seq " + fromSeq + "-" + toSeq + " in room " + roomCode);
@@ -1109,6 +1221,7 @@ public class LanChatManager {
                         DatagramPacket packet = new DatagramPacket(data, data.length, multicastAddr, port);
                         
                         MulticastSocket sendSocket = new MulticastSocket();
+                        applyLanInterface(sendSocket);
                         try {
                             sendSocket.send(packet);
                             Log.d(TAG, "Retransmitted message seq=" + seq);
@@ -1159,6 +1272,7 @@ public class LanChatManager {
                 try {
                     InetAddress multicastAddr = InetAddress.getByName(MULTICAST_ADDRESS);
                     MulticastSocket multicastSendSocket = new MulticastSocket();
+                    applyLanInterface(multicastSendSocket);
                     try {
                         DatagramPacket multicastPacket = new DatagramPacket(data, data.length, multicastAddr, UDP_MULTICAST_DISCOVERY_PORT);
                         multicastSendSocket.send(multicastPacket);
@@ -1677,9 +1791,10 @@ public class LanChatManager {
             InetAddress multicastAddress = InetAddress.getByName(multicastAddr);
             // 创建组播socket并加入组
             java.net.MulticastSocket socket = new java.net.MulticastSocket(port);
+            applyLanInterface(socket);
             multicastSockets.put(port, socket);
             multicastPortAddresses.put(port, multicastAddr);
-            socket.joinGroup(multicastAddress);
+            joinGroupOnLan(socket, multicastAddress, port);
             socket.setSoTimeout(1000);  // 设置超时，避免阻塞
             
             // 组播消息去重：记录最近处理过的消息ID，防止网络层重复投递
