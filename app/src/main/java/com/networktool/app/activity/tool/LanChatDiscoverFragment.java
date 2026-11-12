@@ -280,7 +280,8 @@ public class LanChatDiscoverFragment extends Fragment {
         // 打开聊天页面
         Intent intent = new Intent(requireContext(), LanChatRoomActivity.class);
         intent.putExtra("peer_ip", ip);
-        intent.putExtra("peer_name", "手动添加");
+        // 用 IP 占位：连上后握手响应里会带回对方真实昵称并自动更新
+        intent.putExtra("peer_name", ip);
         if (port > 0) {
             intent.putExtra("peer_port", port);
         }

@@ -457,6 +457,22 @@ public class LanChatDatabase extends SQLiteOpenHelper {
     }
     
     /**
+     * 删除某个 IP 下 uid 为 0 的「手动添加」占位行。
+     *
+     * <p>手动添加时只知道 IP，先按 uid=0 存一条；握手后拿到真实 uid 会再存一条，
+     * 不删占位行的话同一个 IP 会在好友列表里出现两次。</p>
+     */
+    public void deleteManualPlaceholder(String peerIp) {
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            db.delete(TABLE_FRIENDS,
+                    COL_FRIEND_IP + " = ? AND " + COL_FRIEND_UID + " = 0",
+                    new String[]{peerIp});
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
      * 删除好友
      */
     public void deleteFriend(String peerIp) {

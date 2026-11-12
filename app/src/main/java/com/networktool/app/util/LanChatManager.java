@@ -784,6 +784,10 @@ public class LanChatManager {
             long dbUid = peer != null ? peer.getUid() : peerUid;
             // 即使已经是好友，也更新信息
             db.addFriend(saveIp, dbUid, peerName, null, peer != null ? peer.getTcpPort() : 0);
+            if (dbUid != 0) {
+                // 手动添加时先按 uid=0 存过一条占位，这里拿到了真实 uid，删掉避免重复
+                db.deleteManualPlaceholder(saveIp);
+            }
             Log.d(TAG, "Auto-added friend to DB: " + peerName + " @ " + saveIp + " uid=" + dbUid);
             DebugLogger.logDiscovery("LanChat", "自动添加好友", peerName + " @ " + saveIp);
         }
@@ -794,6 +798,18 @@ public class LanChatManager {
         }
     }
     
+    /**
+     * 主动通知界面刷新好友列表。
+     *
+     * <p>手动添加好友、学到对方昵称这类"本地改了 peer 但没有新消息"的场景，
+     * 需要主动推一次，否则好友列表要等到下一次组播宣告才更新。</p>
+     */
+    public void notifyPeerListChanged() {
+        for (OnPeerChangeListener listener : peerChangeListeners) {
+            mainHandler.post(() -> listener.onPeerListChanged(new ArrayList<>(peers)));
+        }
+    }
+
     /**
      * 刷新发现（重新发送广播）
      */
@@ -2546,6 +2562,7 @@ public class LanChatManager {
 
                     if (isAutoAccept) {
                         response.setSender(userName);
+                        response.setUid(myUid);   // 让「手动添加」的一端能学到真实 UID，避免好友重复
                         response.setContent("success");
                         writer.println(new Gson().toJson(response));
                         writer.flush();
@@ -2555,6 +2572,7 @@ public class LanChatManager {
                         handleAutoFriendAdd(clientIp, handshakeMsg.getSender(), remoteUid);
                     } else {
                         response.setSender(userName);
+                        response.setUid(myUid);
                         response.setContent("not_discoverable");
                         writer.println(new Gson().toJson(response));
                         writer.flush();
@@ -3047,7 +3065,26 @@ public class LanChatManager {
                     if (chatMsg != null) {
                         // 过滤握手响应消息，不作为聊天消息处理
                         if ("handshake_response".equals(chatMsg.getType())) {
-                            Log.d(TAG, "Received handshake_response from peer " + peer.getUserName() + ": " + chatMsg.getContent());
+                            Log.d(TAG, "Received handshake_response from peer " + peer.getUserName()
+                                    + ": " + chatMsg.getContent());
+                            // 手动添加时本地只有 IP 占位名，这里把对方的真实昵称/UID 补上
+                            boolean renamed = false;
+                            String remoteName = chatMsg.getSender();
+                            if (remoteName != null && !remoteName.isEmpty()
+                                    && !remoteName.equals(peer.getUserName())) {
+                                peer.setUserName(remoteName);
+                                renamed = true;
+                            }
+                            if (chatMsg.getUid() != 0 && chatMsg.getUid() != peer.getUid()) {
+                                peer.setUid(chatMsg.getUid());
+                                renamed = true;
+                            }
+                            if (renamed) {
+                                saveFriend(peer);
+                                notifyPeerListChanged();
+                                DebugLogger.logDiscovery("LanChat", "握手成功",
+                                        peer.getDisplayName() + " @ " + peer.getIp());
+                            }
                             continue;
                         }
 
@@ -3446,11 +3483,47 @@ public class LanChatManager {
                 return p;
             }
         }
+        // 再放宽到 IP+端口：手动添加时用的是 IP 占位名，对方真实昵称学到后会改名，
+        // 只按名字匹配会重复创建一条好友记录
+        if (peer.getTcpPort() > 0) {
+            for (LanPeer p : peers) {
+                if (p.getIp() != null && p.getIp().equals(peer.getIp())
+                        && p.getTcpPort() == peer.getTcpPort()) {
+                    if (!p.isOnline() || p.getWriter() == null) {
+                        connectToPeer(p);
+                    }
+                    return p;
+                }
+            }
+        }
         // 不存在，添加并连接
         peer.setFriend(true);
         peers.add(peer);
+        // 手动添加的好友要落库，否则退出重进后好友列表里就没了
+        saveFriend(peer);
         connectToPeer(peer);
+        notifyPeerListChanged();
         return peer;
+    }
+
+    /**
+     * 把内存里的 peer 写进好友表（冲突时覆盖）。
+     *
+     * <p>学到真实 uid 后要删掉早期 uid=0 的占位行，否则同一个 IP 会出现两条好友。</p>
+     */
+    private void saveFriend(LanPeer peer) {
+        if (peer == null || appContext == null) return;
+        try {
+            LanChatDatabase db = LanChatDatabase.getInstance(appContext);
+            String ip = peer.getIp();
+            if (ip == null || ip.isEmpty()) return;
+            db.addFriend(ip, peer.getUid(), peer.getUserName(), null, peer.getTcpPort());
+            if (peer.getUid() != 0) {
+                db.deleteManualPlaceholder(ip);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "保存好友失败: " + e.getMessage());
+        }
     }
     
     /**

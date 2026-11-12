@@ -2124,6 +2124,15 @@ public class LanChatRoomActivity extends AppCompatActivity implements LanChatMan
             }
         } catch (Exception ignored) {
         }
+        // 手动添加的好友连上后会从占位名换成真实昵称，这里同步刷新标题
+        if (!isRoomChat && currentPeer != null && getSupportActionBar() != null) {
+            String newTitle = currentPeer.getDisplayName();
+            if (newTitle != null && !newTitle.isEmpty()
+                    && !newTitle.contentEquals(getSupportActionBar().getTitle() == null
+                    ? "" : getSupportActionBar().getTitle())) {
+                getSupportActionBar().setTitle(newTitle);
+            }
+        }
         // 房间模式下更新房间信息栏（在线人数、房主等）
         if (isRoomChat) {
             runOnUiThread(() -> updateRoomInfoBar());

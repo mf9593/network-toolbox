@@ -215,7 +215,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="开启：双方自动出现在好友列表\n关闭：需要手动添加好友"
+                    android:text="开启后消息气泡会显示对方 IP\n好友默认自动互加，无需手动添加"
                     android:textSize="12sp"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:layout_marginTop="4dp" />
