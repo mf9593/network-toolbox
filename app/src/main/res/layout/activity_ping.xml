@@ -20,6 +20,7 @@
         app:titleTextColor="?attr/colorOnSurface" />
 
     <ScrollView
+        android:id="@+id/scrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
@@ -32,6 +33,84 @@
             android:paddingTop="@dimen/space_1"
             android:paddingEnd="@dimen/page_margin"
             android:paddingBottom="@dimen/space_5">
+
+            <!-- 运行中摘要条：开始 Ping 后替代整个输入区，让结果直接顶到最上面，
+                 同时「停止 / 再次 Ping」和「参数」始终在手边，不用下滑去找 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/runningBar"
+                style="@style/Widget.NetworkTool.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_3"
+                android:visibility="gone"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/card_padding">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/runningTargetText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:singleLine="true"
+                            android:text="192.168.2.1"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+                        <TextView
+                            android:id="@+id/runningMetaText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:singleLine="true"
+                            android:text="10 次 · 间隔 1 秒"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/paramsButton"
+                        style="@style/Widget.NetworkTool.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/space_3"
+                        android:minWidth="0dp"
+                        android:text="参数"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/runningActionButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="@dimen/space_3"
+                        android:minWidth="0dp"
+                        android:paddingStart="@dimen/space_3"
+                        android:paddingEnd="@dimen/space_3"
+                        android:text="停止"
+                        android:textSize="13sp"
+                        app:cornerRadius="12dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 输入区：开始 Ping 后整块收起，由上面的摘要条代替 -->
+            <LinearLayout
+                android:id="@+id/setupSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
             <!-- 目标地址与参数 -->
             <com.google.android.material.card.MaterialCardView
@@ -221,6 +300,9 @@
                     android:layout_marginTop="@dimen/space_1" />
 
             </LinearLayout>
+
+            </LinearLayout>
+            <!-- /输入区 -->
 
             <!-- 结果 -->
             <com.google.android.material.card.MaterialCardView

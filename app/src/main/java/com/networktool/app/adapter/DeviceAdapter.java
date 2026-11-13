@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -91,7 +92,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.portsText.setVisibility(View.VISIBLE);
         }
 
-        // 分类标签：设备类型从标题前缀【】挪到这里，标题只保留设备名
+        // 分类标签：设备类型从标题前缀【】挪到这里，标题只保留设备名。
+        // 标签放在端口那一行靠左，不挤在标题行右侧（会把标题行撑高）
         String category = categoryLabel(device);
         if (category == null) {
             holder.categoryText.setVisibility(View.GONE);
@@ -111,6 +113,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.categoryText.setBackground(categoryBadge);
             holder.categoryText.setVisibility(View.VISIBLE);
         }
+
+        // 分类标签和端口共用一行；两个都没有时整行隐藏，避免白占 3dp 间距
+        holder.tagRow.setVisibility(
+                (category == null && holder.portsText.getVisibility() == View.GONE)
+                        ? View.GONE : View.VISIBLE);
 
         boolean ipv6 = device.getIpVersion() == DeviceInfo.IPV6;
         holder.ipVersionText.setText(ipv6 ? "IPv6" : "IPv4");
@@ -248,6 +255,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         final TextView macText;
         final TextView ipVersionText;
         final TextView categoryText;
+        final LinearLayout tagRow;
         final TextView protocolText;
         final TextView portsText;
 
@@ -261,6 +269,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             macText = itemView.findViewById(R.id.macText);
             ipVersionText = itemView.findViewById(R.id.ipVersionText);
             categoryText = itemView.findViewById(R.id.categoryText);
+            tagRow = itemView.findViewById(R.id.tagRow);
             protocolText = itemView.findViewById(R.id.protocolText);
             portsText = itemView.findViewById(R.id.portsText);
         }

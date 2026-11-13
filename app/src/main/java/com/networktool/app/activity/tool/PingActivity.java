@@ -10,6 +10,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -62,6 +63,16 @@ public class PingActivity extends AppCompatActivity {
     private MaterialButton clearHistoryButton;
     private TextView resultTextView;
     private MaterialButton connectButton;
+
+    /* 运行态视图：开始 Ping 后隐藏整块输入区，用 runningBar 顶替，
+       让结果卡直接顶到最上面，不用下滑很久才能看到输出 */
+    private ScrollView scrollView;
+    private View setupSection;
+    private View runningBar;
+    private TextView runningTargetText;
+    private TextView runningMetaText;
+    private MaterialButton paramsButton;
+    private MaterialButton runningActionButton;
 
     private ExecutorService executorService;
     private Handler mainHandler;
@@ -134,8 +145,17 @@ public class PingActivity extends AppCompatActivity {
         resultTextView = findViewById(R.id.resultTextView);
         connectButton = findViewById(R.id.connectButton);
 
+        scrollView = findViewById(R.id.scrollView);
+        setupSection = findViewById(R.id.setupSection);
+        runningBar = findViewById(R.id.runningBar);
+        runningTargetText = findViewById(R.id.runningTargetText);
+        runningMetaText = findViewById(R.id.runningMetaText);
+        paramsButton = findViewById(R.id.paramsButton);
+        runningActionButton = findViewById(R.id.runningActionButton);
+
         ThemeManager.setupResultCard(findViewById(R.id.pingInputCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.quickSelectCard), this);
+        ThemeManager.setupResultCard(findViewById(R.id.runningBar), this);
         ThemeManager.setupResultCard(findViewById(R.id.resultCard), this);
     }
 
@@ -251,20 +271,13 @@ public class PingActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        connectButton.setOnClickListener(v -> {
-            if (isPinging) {
-                if (currentProcess != null) {
-                    currentProcess.destroy();
-                    currentProcess = null;
-                }
-                isPinging = false;
-                connectButton.setText("开始 Ping");
-                pingResult.append("\n[用户手动停止Ping]\n");
-                resultTextView.setText(pingResult.toString());
-            } else {
-                performPing();
-            }
-        });
+        // 输入区里的「开始 Ping / 停止」和摘要条里的「停止 / 再次 Ping」
+        // 走同一套逻辑，避免两处状态不一致
+        connectButton.setOnClickListener(v -> onPingActionClicked());
+        runningActionButton.setOnClickListener(v -> onPingActionClicked());
+
+        // 回到完整输入区改参数；Ping 不中断，改完可以再点一次重新开始
+        paramsButton.setOnClickListener(v -> exitRunningMode());
 
         clearHistoryButton.setOnClickListener(v -> {
             new MaterialAlertDialogBuilder(this)
@@ -283,10 +296,75 @@ public class PingActivity extends AppCompatActivity {
         applyThemeColors();
     }
 
+    /**
+     * 开始 / 停止 Ping 的统一入口（输入区和摘要条共用）。
+     */
+    private void onPingActionClicked() {
+        if (isPinging) {
+            stopPing();
+        } else {
+            performPing();
+        }
+    }
+
+    private void stopPing() {
+        if (currentProcess != null) {
+            currentProcess.destroy();
+            currentProcess = null;
+        }
+        isPinging = false;
+        updatePingStateUi(false);
+        pingResult.append("\n[用户手动停止Ping]\n");
+        resultTextView.setText(pingResult.toString());
+    }
+
+    /**
+     * 进入运行态：收起整块输入区，用一行摘要条顶替。
+     *
+     * <p>以前输入卡、快速选择、历史记录全堆在结果卡上面，开始 Ping 后要往下滑
+     * 一大段才看得到输出；输出越滚越长时还得一直跟着滑。现在开始 Ping 就把
+     * 上面三块收起，结果卡直接顶到屏幕最上方，停止和改参数仍然在眼睛高度。</p>
+     */
+    private void enterRunningMode(String host, int count, int interval, int packetSize) {
+        runningTargetText.setText(host);
+        runningMetaText.setText(count + " 次 · 间隔 " + interval + " 秒 · 包大小 " + packetSize);
+        setupSection.setVisibility(View.GONE);
+        runningBar.setVisibility(View.VISIBLE);
+        scrollToTop();
+    }
+
+    /**
+     * 退出运行态，恢复完整输入区（Ping 本身不中断）。
+     */
+    private void exitRunningMode() {
+        runningBar.setVisibility(View.GONE);
+        setupSection.setVisibility(View.VISIBLE);
+        scrollToTop();
+    }
+
+    private void scrollToTop() {
+        if (scrollView == null) return;
+        // 等布局重排完再滚，否则滚的是旧的控件高度
+        scrollView.post(() -> scrollView.scrollTo(0, 0));
+    }
+
+    /**
+     * 统一刷新两个按钮的文字，避免只有 connectButton 跟着状态变、
+     * 摘要条上的按钮还停在旧文案。
+     */
+    private void updatePingStateUi(boolean pinging) {
+        connectButton.setText(pinging ? "停止" : "开始 Ping");
+        runningActionButton.setText(pinging ? "停止" : "再次 Ping");
+    }
+
     private void applyThemeColors() {
         ThemeManager.applyPrimaryButton(connectButton);
+        ThemeManager.applyPrimaryButton(runningActionButton);
         clearHistoryButton.setTextColor(ThemeManager.getAccessibleThemeColor(this));
+        paramsButton.setTextColor(ThemeManager.getAccessibleThemeColor(this));
         resultTextView.setTextColor(ThemeManager.getOnSurfaceColor(this));
+        runningTargetText.setTextColor(ThemeManager.getOnSurfaceColor(this));
+        runningMetaText.setTextColor(ThemeManager.getOnSurfaceVariantColor(this));
     }
 
     private void performPing() {
@@ -326,7 +404,9 @@ public class PingActivity extends AppCompatActivity {
         pingResult.setLength(0);
         resultTextView.setText("正在Ping " + host + "...\n");
         isPinging = true;
-        connectButton.setText("停止");
+        updatePingStateUi(true);
+        // 先把输入区收起来，结果卡直接顶到最上面
+        enterRunningMode(host, finalCount, finalInterval, finalPacketSize);
 
         // 添加到历史记录
         addHistory(host);
@@ -366,7 +446,7 @@ public class PingActivity extends AppCompatActivity {
                     pingResult.append(finishMsg).append("\n");
                     resultTextView.setText(pingResult.toString());
                     isPinging = false;
-                    connectButton.setText("开始 Ping");
+                    updatePingStateUi(false);
                 });
 
             } catch (java.io.InterruptedIOException e) {
@@ -374,7 +454,7 @@ public class PingActivity extends AppCompatActivity {
                 mainHandler.post(() -> {
                     isPinging = false;
                     currentProcess = null;
-                    connectButton.setText("开始 Ping");
+                    updatePingStateUi(false);
                 });
             } catch (Exception e) {
                 AppErrorLogger.logError(TAG, "Ping执行失败: " + e.getMessage(), e);
@@ -383,7 +463,7 @@ public class PingActivity extends AppCompatActivity {
                     resultTextView.setText(pingResult.toString());
                     isPinging = false;
                     currentProcess = null;
-                    connectButton.setText("开始 Ping");
+                    updatePingStateUi(false);
                 });
             }
         });
