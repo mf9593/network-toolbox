@@ -24,7 +24,7 @@ public final class TitlePriorityConfig {
     /** 默认顺序：路由器品牌优先，避免被 NetBIOS 的共享服务名覆盖 */
     private static final List<String> DEFAULT_ORDER = Arrays.asList(
             "路由器", "mDNS", "NetBIOS", "SADP", "SSDP", "ARP表", "UDP广播",
-            "HTTP", "Ping探测", "IPv6", "端口探测", "ONVIF");
+            "HTTP", "Ping探测", "IPv6", "端口探测", "ONVIF", "WS-Discovery");
 
     private TitlePriorityConfig() {
     }

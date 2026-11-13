@@ -81,10 +81,13 @@ public class LanScanManager {
     public static final int PRIORITY_IPV6 = 10;
     public static final int PRIORITY_SERVICE = 11;
     public static final int PRIORITY_ONVIF = 12;
+    /** WS-Discovery 发现的非 ONVIF 设备（如 Windows 电脑） */
+    public static final int PRIORITY_WSD = 13;
 
     private static final java.util.Map<Integer, String> PROTOCOL_LABELS = new java.util.HashMap<>();
     static {
         PROTOCOL_LABELS.put(PRIORITY_ONVIF, "ONVIF");
+        PROTOCOL_LABELS.put(PRIORITY_WSD, "WS-Discovery");
         PROTOCOL_LABELS.put(PRIORITY_SADP, "SADP");
         PROTOCOL_LABELS.put(PRIORITY_ROUTER, "路由器");
         PROTOCOL_LABELS.put(PRIORITY_SSDP, "SSDP");
@@ -1325,10 +1328,12 @@ public class LanScanManager {
                     if (kind == null) continue;
                     if (kind.kind == WsdDeviceKind.COMPUTER) {
                         // 电脑：不抢 mDNS/SMB 给出的名称，仅在没别的名字时用 IP 兜底
-                        // 标题给「电脑」即可：ONVIF 在名称优先级里是最低档，
-                        // mDNS/NetBIOS 拿到准确主机名时会自动覆盖掉这个占位
+                        // 标题给「电脑」即可：WS-Discovery 在名称优先级里是最低档，
+                        // mDNS/NetBIOS 拿到准确主机名时会自动覆盖掉这个占位。
+                        // 协议标签用 WS-Discovery 而不是 ONVIF——电脑不是 ONVIF 设备，
+                        // 否则详情页会冒出「ONVIF 调试」入口，筛选器也会把它算进 ONVIF
                         addDeviceWithPriority(senderIp, "电脑",
-                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_ONVIF, null,
+                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_WSD, null,
                                 extractOnvifPort(responseStr));
                         continue;
                     }
@@ -1431,7 +1436,7 @@ public class LanScanManager {
                     if (kindV6 == null) continue;
                     if (kindV6.kind == WsdDeviceKind.COMPUTER) {
                         addDeviceWithPriority(senderIp, "电脑",
-                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_IPV6, null,
+                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_WSD, null,
                                 extractOnvifPort(responseStr));
                         continue;
                     }
