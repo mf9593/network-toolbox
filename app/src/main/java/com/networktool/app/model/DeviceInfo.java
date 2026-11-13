@@ -38,6 +38,13 @@ public class DeviceInfo {
     public static final int ICON_ONVIF = 11;
     /** 图标类型常量：ARP设备 */
     public static final int ICON_ARP = 12;
+    /**
+     * 图标类型常量：SADP 设备（海康私有发现协议）。
+     *
+     * <p>不能复用 {@link #ICON_ONVIF}：SADP 是海康自己的 UDP 协议，不是 ONVIF，
+     * 复用会导致详情页把设备当成 ONVIF 设备而弹出「ONVIF 调试」入口。</p>
+     */
+    public static final int ICON_SADP = 13;
 
     /** IP版本常量：IPv4 */
     public static final int IPV4 = 4;

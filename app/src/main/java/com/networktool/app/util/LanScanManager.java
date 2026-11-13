@@ -1345,7 +1345,9 @@ public class LanScanManager {
                     }
                     String title = extractOnvifTitle(responseStr);
                     if (title == null) {
-                        title = kind.label == null ? "【ONVIF】设备" : "【ONVIF】" + kind.label;
+                        // 标题不再带「【ONVIF】」分类前缀：分类改由列表右侧的
+                        // 分类标签展示，标题只放设备本身的名称，避免同一信息重复两遍
+                        title = kind.label == null ? "ONVIF 设备" : kind.label;
                     }
                     Integer onvifPort = extractOnvifPort(responseStr);
                     addDeviceWithPriority(senderIp, title, kind.label,
@@ -1449,7 +1451,7 @@ public class LanScanManager {
                     String titleV6 = extractOnvifTitle(responseStr);
                     if (titleV6 == null) {
                         titleV6 = kindV6.label == null
-                                ? "【ONVIF】设备(IPv6)" : "【ONVIF】" + kindV6.label + "(IPv6)";
+                                ? "ONVIF 设备 (IPv6)" : kindV6.label + " (IPv6)";
                     }
                     Integer onvifPortV6 = extractOnvifPort(responseStr);
                     addDeviceWithPriority(senderIp, titleV6, kindV6.label,
@@ -1503,7 +1505,7 @@ public class LanScanManager {
 
                     String serial = extractXmlValue(responseStr, "DeviceSN");
                     String model = extractXmlValue(responseStr, "DeviceModel");
-                    String title = "【SADP】";
+                    String title = "";
                     if (model != null && !model.isEmpty()) {
                         title += model;
                     } else {
@@ -1512,8 +1514,10 @@ public class LanScanManager {
                     if (serial != null && !serial.isEmpty()) {
                         title += " (" + serial + ")";
                     }
+                    // 用 SADP 专属图标，不要借用 ONVIF 的：SADP 是海康私有协议，
+                    // 借用会让详情页把它当成 ONVIF 设备而显示「ONVIF 调试」入口
                     addDeviceWithPriority(senderIp, title,
-                            DeviceInfo.ICON_ONVIF, PRIORITY_SADP);
+                            DeviceInfo.ICON_SADP, PRIORITY_SADP);
                 } catch (SocketTimeoutException e) {
                     break;
                 }
@@ -2156,9 +2160,9 @@ public class LanScanManager {
                     if (name.equals(server) || name.equals("SSDP设备")) {
                         // 描述抓取失败时退回用 Server 头分类
                         if (responseStr.contains("Windows")) {
-                            name = "【电脑】Windows设备";
+                            name = "Windows 设备";
                         } else if (responseStr.contains("DLNA")) {
-                            name = "【投屏】DLNA设备";
+                            name = "DLNA 设备";
                         } else if (server != null) {
                             name = parseUpnpServerName(server);
                         }
@@ -2251,9 +2255,9 @@ public class LanScanManager {
                     String name = server != null ? server : "SSDP设备(IPv6)";
 
                     if (server != null && server.contains("Windows")) {
-                        name = "【电脑】Windows设备(IPv6)";
+                        name = "Windows 设备 (IPv6)";
                     } else if (server != null && server.contains("DLNA")) {
-                        name = "【投屏】DLNA设备(IPv6)";
+                        name = "DLNA 设备 (IPv6)";
                     } else if (server != null) {
                         name = parseUpnpServerName(server);
                     }
@@ -2830,10 +2834,13 @@ public class LanScanManager {
                     RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, gateway, "网关标题",
                             "GET " + url + " → " + title
                                     + (matchedBrand == null ? "（未匹配到品牌）" : "（品牌：" + matchedBrand + "）"));
+                    // 标题优先用页面自己的名字（如「中国电信智能网关」），品牌只用来
+                    // 补设备分类和图标。以前直接把标题换成「{品牌} 路由器」，既丢掉了
+                    // 页面真实名称，又会出现「电信路由 路由器」这种叠词
                     addDeviceWithPriority(gateway,
-                            matchedBrand != null ? "【路由器】" + matchedBrand : title,
-                            matchedBrand != null ? url : null,
-                            matchedBrand != null ? DeviceInfo.ICON_ROUTER : DeviceInfo.ICON_HTTP,
+                            title,
+                            url,
+                            DeviceInfo.ICON_ROUTER,
                             PRIORITY_ROUTER);
                 } else if (isScanning) {
                     RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, gateway, "网关标题",
@@ -2856,7 +2863,7 @@ public class LanScanManager {
                 if (ip != null && isPrivateIP(ip)) {
                     RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, ip, "域名命中",
                             router.brand + " | " + router.link + " | 端口 " + port);
-                    addDeviceWithPriority(ip, "【路由器】" + router.brand, router.link,
+                    addDeviceWithPriority(ip, router.brand, router.link,
                             DeviceInfo.ICON_ROUTER, PRIORITY_ROUTER);
                     String finalIp = ip;
                     String finalUrl = router.link;
@@ -2948,10 +2955,12 @@ public class LanScanManager {
                         if (finalDesc != null) device.setDescription(finalDesc);
                         devicePriorities.put(finalIp, finalPriority);
                         deviceNames.put(finalIp, finalTitle);
-                        
-                        if (listener != null) {
-                            listener.onDeviceUpdated(device);
-                        }
+                    }
+                    // 名称没被覆盖也要通知界面：端口、MAC、协议标签、描述都可能刚补充进来。
+                    // 以前只在 betterName 时回调，导致「网关先由页面塞了占位名」这类情况下
+                    // 界面永远收不到后续更新（名字被挡在占位名上改不掉）
+                    if (listener != null) {
+                        listener.onDeviceUpdated(device);
                     }
                     cachedDevices = new ArrayList<>(deviceList);
                     notifySnapshotChanged(cachedDevices);

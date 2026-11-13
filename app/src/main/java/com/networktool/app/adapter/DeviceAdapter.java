@@ -91,6 +91,27 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.portsText.setVisibility(View.VISIBLE);
         }
 
+        // 分类标签：设备类型从标题前缀【】挪到这里，标题只保留设备名
+        String category = categoryLabel(device);
+        if (category == null) {
+            holder.categoryText.setVisibility(View.GONE);
+        } else {
+            holder.categoryText.setText(category);
+            holder.categoryText.setTextColor(
+                    ThemeManager.getBadgeTextColor(holder.itemView.getContext()));
+            GradientDrawable categoryBadge = new GradientDrawable();
+            categoryBadge.setColor(
+                    ThemeManager.getBadgeSurfaceColor(holder.itemView.getContext()));
+            // 1dp 描边：浅色底 + 同色系边框，深色/浅色主题下都能看出这是一个标签，
+            // 不会像之前那样和卡片底色糊成一片
+            categoryBadge.setStroke(
+                    Math.max(1, (int) dp(holder.itemView, 1)),
+                    ThemeManager.getBadgeStrokeColor(holder.itemView.getContext()));
+            categoryBadge.setCornerRadius(dp(holder.itemView, 6));
+            holder.categoryText.setBackground(categoryBadge);
+            holder.categoryText.setVisibility(View.VISIBLE);
+        }
+
         boolean ipv6 = device.getIpVersion() == DeviceInfo.IPV6;
         holder.ipVersionText.setText(ipv6 ? "IPv6" : "IPv4");
         holder.ipVersionText.setTextColor(ipv6
@@ -139,6 +160,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             case DeviceInfo.ICON_ARP:
                 iconRes = R.drawable.ic_arp;
                 break;
+            case DeviceInfo.ICON_SADP:
+                iconRes = R.drawable.ic_sadp;
+                break;
             default:
                 iconRes = R.drawable.ic_computer;
                 break;
@@ -167,6 +191,45 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         return builder.toString();
     }
 
+    /**
+     * 设备分类标签文本（显示在 IPv4 徽标下方的第二个小标签）。
+     *
+     * <p>以前这些分类直接写进设备标题里（如「【ONVIF】摄像头」），
+     * 标题又长又难认，同一台设备还会因为不同协议给出不同前缀。
+     * 现在标题只放设备名，分类单独用一个标签展示。</p>
+     *
+     * @return 分类文本；无明确分类时返回 null（不显示标签）
+     */
+    private String categoryLabel(DeviceInfo device) {
+        switch (device.getIconType()) {
+            case DeviceInfo.ICON_ROUTER:
+                return "路由器";
+            case DeviceInfo.ICON_COMPUTER:
+                return "电脑";
+            case DeviceInfo.ICON_CAMERA:
+                return "摄像头";
+            case DeviceInfo.ICON_PHONE:
+                return "手机";
+            case DeviceInfo.ICON_PRINTER:
+                return "打印机";
+            case DeviceInfo.ICON_DLNA:
+                return "投屏";
+            case DeviceInfo.ICON_NVR:
+                return "录像机";
+            case DeviceInfo.ICON_ONVIF:
+                return "摄像头";
+            case DeviceInfo.ICON_SADP:
+                return "SADP 设备";
+            case DeviceInfo.ICON_SSDP:
+                return "UPnP";
+            case DeviceInfo.ICON_HTTP:
+                return "网页管理";
+            default:
+                // ARP / Ping 这类只是「发现途径」，不是设备类型，不显示标签
+                return null;
+        }
+    }
+
     private float dp(View view, float value) {
         return value * view.getResources().getDisplayMetrics().density;
     }
@@ -184,6 +247,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         final TextView ipText;
         final TextView macText;
         final TextView ipVersionText;
+        final TextView categoryText;
         final TextView protocolText;
         final TextView portsText;
 
@@ -196,6 +260,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             ipText = itemView.findViewById(R.id.ipText);
             macText = itemView.findViewById(R.id.macText);
             ipVersionText = itemView.findViewById(R.id.ipVersionText);
+            categoryText = itemView.findViewById(R.id.categoryText);
             protocolText = itemView.findViewById(R.id.protocolText);
             portsText = itemView.findViewById(R.id.portsText);
         }

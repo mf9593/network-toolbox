@@ -104,6 +104,15 @@
         android:visibility="gone"
         app:icon="@drawable/ic_onvif" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/sadpDebugButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="打开 SADP 调试"
+        android:visibility="gone"
+        app:icon="@drawable/ic_sadp" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -44,6 +44,7 @@ import com.networktool.app.R;
 import com.networktool.app.activity.settings.RuntimeLogActivity;
 import com.networktool.app.activity.tool.MacActivity;
 import com.networktool.app.activity.tool.OnvifActivity;
+import com.networktool.app.activity.tool.SadpActivity;
 import com.networktool.app.activity.tool.PingActivity;
 import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.adapter.DeviceAdapter;
@@ -575,10 +576,19 @@ public class DeviceFragment extends Fragment {
                 @Override
                 public void onDeviceFound(DeviceInfo device) {
                     if (!isAdded() || device == null || generation != scanGeneration) return;
-                    for (DeviceInfo existing : deviceList) {
-                        if (existing.getIp() != null && existing.getIp().equals(device.getIp())) {
-                            return;
+                    for (int i = 0; i < deviceList.size(); i++) {
+                        DeviceInfo existing = deviceList.get(i);
+                        if (existing.getIp() == null || !existing.getIp().equals(device.getIp())) {
+                            continue;
                         }
+                        // IP 已存在（多半是 addGatewayDevice / addLocalDevice 提前塞的占位行）。
+                        // 占位行没有 titleSource，说明它的名字只是开场凑数，
+                        // 这里必须用扫描器的真实结果替换掉，否则真实标题永远进不来。
+                        if (existing.getTitleSource() == null) {
+                            deviceList.set(i, device);
+                            applyFilter();
+                        }
+                        return;
                     }
                     deviceList.add(device);
                     applyFilter();
@@ -669,6 +679,14 @@ public class DeviceFragment extends Fragment {
         return "192.168.1.1";
     }
 
+    /**
+     * 先放一个网关占位设备，保证列表一打开就有网关这一行。
+     *
+     * <p>注意这里刻意<b>不</b>设置 titleSource：占位名只是开场凑数，
+     * 一旦设成「路由器」（优先级表里最高）就会永远盖住扫描器拿到的真实标题，
+     * 导致 192.168.2.1 一直显示「路由器网关」而不是「中国电信智能网关」。
+     * 保持 titleSource 为 null，扫描器发现同一 IP 时才能真正覆盖它。</p>
+     */
     private void addGatewayDevice(String gateway) {
         DeviceInfo device = new DeviceInfo();
         device.setIp(gateway);
@@ -738,7 +756,7 @@ public class DeviceFragment extends Fragment {
                                         ? Integer.MAX_VALUE
                                         : TitlePriorityConfig.rank(requireContext(), device.getTitleSource());
                                 if (routerRank <= currentRank) {
-                                    device.setTitle("【路由器】" + brand);
+                                    device.setTitle(brand);
                                     device.setTitleSource("路由器");
                                     device.setIconType(DeviceInfo.ICON_ROUTER);
                                 }
@@ -748,7 +766,7 @@ public class DeviceFragment extends Fragment {
                         }
                         DeviceInfo device = new DeviceInfo();
                         device.setIp(finalIp);
-                        device.setTitle("【路由器】" + brand);
+                        device.setTitle(brand);
                         device.setTitleSource("路由器");
                         device.setDescription("http://" + routerLink);
                         device.setIconType(DeviceInfo.ICON_ROUTER);
@@ -904,6 +922,7 @@ public class DeviceFragment extends Fragment {
                 view.findViewById(R.id.detailProtocolChips);
         MaterialButton openHttp = view.findViewById(R.id.openHttpButton);
         MaterialButton onvifDebug = view.findViewById(R.id.onvifDebugButton);
+        MaterialButton sadpDebug = view.findViewById(R.id.sadpDebugButton);
         MaterialButton ping = view.findViewById(R.id.pingButton);
         MaterialButton portScan = view.findViewById(R.id.portScanButton);
         MaterialButton copyIp = view.findViewById(R.id.copyIpButton);
@@ -945,8 +964,11 @@ public class DeviceFragment extends Fragment {
         share.setTextColor(accentColor);
         share.setIconTint(ColorStateList.valueOf(accentColor));
 
-        // ONVIF 调试入口：仅当设备含 ONVIF 协议时显示，点击直接带设备跳转（无需重扫）
-        if (isOnvifDevice(device)) {
+        // 协议调试入口：按设备实际被哪个协议发现来决定弹哪个入口。
+        // ONVIF 和 SADP 是两个独立协议，互斥显示——海康 SADP 设备不该出现「ONVIF 调试」
+        boolean onvifFound = isOnvifDevice(device);
+        boolean sadpFound = isSadpDevice(device);
+        if (onvifFound) {
             onvifDebug.setVisibility(View.VISIBLE);
             // 背景跟随主题色，与「打开 HTTP 页面」按钮一致
             onvifDebug.setBackgroundTintList(ColorStateList.valueOf(themeColor));
@@ -958,6 +980,18 @@ public class DeviceFragment extends Fragment {
             });
         } else {
             onvifDebug.setVisibility(View.GONE);
+        }
+        if (sadpFound && !onvifFound) {
+            sadpDebug.setVisibility(View.VISIBLE);
+            sadpDebug.setBackgroundTintList(ColorStateList.valueOf(themeColor));
+            sadpDebug.setTextColor(contrastColor);
+            sadpDebug.setIconTint(ColorStateList.valueOf(contrastColor));
+            sadpDebug.setOnClickListener(v -> {
+                openSadpDebug(device);
+                dialog.dismiss();
+            });
+        } else {
+            sadpDebug.setVisibility(View.GONE);
         }
 
         openHttp.setOnClickListener(v -> {
@@ -1028,14 +1062,50 @@ public class DeviceFragment extends Fragment {
         return builder.toString();
     }
 
-    /** 判断设备是否被 ONVIF 协议发现（图标或协议名任一匹配） */
+    /**
+     * 判断设备是否真的被 ONVIF 协议发现。
+     *
+     * <p>只看协议名，不再看 iconType：以前 SADP 设备借用了 ONVIF 图标，
+     * 结果海康 SADP 设备会错误地冒出「ONVIF 调试」入口。图标只负责显示，
+     * 协议名才代表这个设备真的支持哪个协议。</p>
+     */
     private boolean isOnvifDevice(DeviceInfo device) {
         if (device == null) return false;
-        if (device.getIconType() == DeviceInfo.ICON_ONVIF) return true;
-        for (String p : device.getProtocolNames().keySet()) {
-            if (p != null && p.toUpperCase().contains("ONVIF")) return true;
+        return hasProtocol(device, "ONVIF");
+    }
+
+    /** 判断设备是否被 SADP（海康私有发现协议）发现 */
+    private boolean isSadpDevice(DeviceInfo device) {
+        if (device == null) return false;
+        return hasProtocol(device, "SADP");
+    }
+
+    /**
+     * 设备协议名里是否含指定协议（忽略大小写，容忍 "ONVIF 调试" 这类带后缀的标签）
+     */
+    private boolean hasProtocol(DeviceInfo device, String protocol) {
+        String target = protocol.toUpperCase(java.util.Locale.ROOT);
+        for (String name : device.getProtocolNames().keySet()) {
+            if (name != null && name.toUpperCase(java.util.Locale.ROOT).contains(target)) {
+                return true;
+            }
         }
         return false;
+    }
+
+    /**
+     * 跳转 SADP 调试页（海康私有发现协议）。
+     *
+     * <p>SADP 页面暂无预填参数，直接进入让其自己扫描；这里只负责把用户
+     * 引导到正确的工具页，不再错误地跳去 ONVIF。</p>
+     */
+    private void openSadpDebug(DeviceInfo device) {
+        try {
+            Intent intent = new Intent(requireContext(), SadpActivity.class);
+            startActivity(intent);
+        } catch (Exception e) {
+            showToast("无法打开 SADP 调试");
+        }
     }
 
     /**

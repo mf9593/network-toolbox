@@ -629,6 +629,8 @@ public class InfoFragment extends Fragment {
                 return R.drawable.ic_onvif;
             case com.networktool.app.model.DeviceInfo.ICON_ARP:
                 return R.drawable.ic_arp;
+            case com.networktool.app.model.DeviceInfo.ICON_SADP:
+                return R.drawable.ic_sadp;
             default:
                 return R.drawable.ic_computer;
         }
