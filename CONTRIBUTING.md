@@ -31,6 +31,7 @@
   `SharedPreferences.getString()`、`getCapabilities()` 等）
 - Fragment 网络回调里要在 `runOnUiThread` 中加 `isAdded()` 检查
 - 不要提交编译产物、签名文件与真实网络数据
+- 这次改动如果形成了可复用的经验，追加到 [`开发习惯.md`](开发习惯.md)（只写共性，细节写提交信息）
 
 ## 二、在自己的仓库发布（首次搭建）
 
