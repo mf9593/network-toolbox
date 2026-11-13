@@ -752,10 +752,11 @@ public class LanScanManager {
                 String[] result = httpFetchTitle(ip, port);
                 if (result != null) {
                     String title = result[0];
-                    String label = (title != null && !title.isEmpty())
-                            ? title + " on port " + port
-                            : "HTTP服务 (端口 " + port + ")";
-                    // 记录发现该标题所用的 HTTP 端口，供列表展示
+                    // 标题里不拼「on port 80」：端口已经单独记录在 DeviceInfo 里，
+                    // 详情页和列表都能看到，混进标题只会让名称又长又难认
+                    String label = (title != null && !title.trim().isEmpty())
+                            ? title.trim()
+                            : "网页管理界面";
                     addDeviceWithPriority(ip, label, null,
                             DeviceInfo.ICON_HTTP, PRIORITY_HTTP, null, port);
                     break;
@@ -1318,15 +1319,32 @@ public class LanScanManager {
                     DebugLogger.logDiscovery("ONVIF", "收到响应", senderIp + " | " + responseStr.substring(0, Math.min(300, responseStr.length())));
                     DebugLogger.logBroadcast("ONVIF", senderIp, responseStr);
 
-                    // 检查响应中是否包含 ONVIF 设备标识
-                    if (responseStr.contains("NetworkVideo") || responseStr.contains("XAddrs")) {
-                        String title = extractOnvifTitle(responseStr);
-                        if (title == null) title = "【ONVIF】摄像头";
-                        // 从 XAddrs 提取 ONVIF 服务端口
-                        Integer onvifPort = extractOnvifPort(responseStr);
-                        addDeviceWithPriority(senderIp, title, null,
-                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF, null, onvifPort);
+                    // 只有真正像 ONVIF 设备的应答才登记；Windows 电脑的 WS-Discovery
+                    // 应答（pub:Computer）走下面的电脑分支，避免被误标成摄像头
+                    WsdDeviceKind kind = classifyWsdResponse(responseStr);
+                    if (kind == null) continue;
+                    if (kind.kind == WsdDeviceKind.COMPUTER) {
+                        // 电脑：不抢 mDNS/SMB 给出的名称，仅在没别的名字时用 IP 兜底
+                        // 标题给「电脑」即可：ONVIF 在名称优先级里是最低档，
+                        // mDNS/NetBIOS 拿到准确主机名时会自动覆盖掉这个占位
+                        addDeviceWithPriority(senderIp, "电脑",
+                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_ONVIF, null,
+                                extractOnvifPort(responseStr));
+                        continue;
                     }
+                    if (kind.kind == WsdDeviceKind.PRINTER) {
+                        addDeviceWithPriority(senderIp, kind.label, null,
+                                DeviceInfo.ICON_PRINTER, PRIORITY_ONVIF, null,
+                                extractOnvifPort(responseStr));
+                        continue;
+                    }
+                    String title = extractOnvifTitle(responseStr);
+                    if (title == null) {
+                        title = kind.label == null ? "【ONVIF】设备" : "【ONVIF】" + kind.label;
+                    }
+                    Integer onvifPort = extractOnvifPort(responseStr);
+                    addDeviceWithPriority(senderIp, title, kind.label,
+                        DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF, null, onvifPort);
                 } catch (SocketTimeoutException e) {
                     break;
                 }
@@ -1409,13 +1427,28 @@ public class LanScanManager {
                     DebugLogger.logDiscovery("ONVIF_IPv6", "收到响应", senderIp + " | " + responseStr.substring(0, Math.min(300, responseStr.length())));
                     DebugLogger.logBroadcast("ONVIF_IPv6", senderIp, responseStr);
 
-                    if (responseStr.contains("NetworkVideo") || responseStr.contains("XAddrs")) {
-                        String title = extractOnvifTitle(responseStr);
-                        if (title == null) title = "【ONVIF】摄像头(IPv6)";
-                        Integer onvifPort = extractOnvifPort(responseStr);
-                        addDeviceWithPriority(senderIp, title, null,
-                            DeviceInfo.ICON_ONVIF, PRIORITY_ONVIF, null, onvifPort);
+                    WsdDeviceKind kindV6 = classifyWsdResponse(responseStr);
+                    if (kindV6 == null) continue;
+                    if (kindV6.kind == WsdDeviceKind.COMPUTER) {
+                        addDeviceWithPriority(senderIp, "电脑",
+                                null, DeviceInfo.ICON_COMPUTER, PRIORITY_IPV6, null,
+                                extractOnvifPort(responseStr));
+                        continue;
                     }
+                    if (kindV6.kind == WsdDeviceKind.PRINTER) {
+                        addDeviceWithPriority(senderIp, kindV6.label, null,
+                                DeviceInfo.ICON_PRINTER, PRIORITY_IPV6, null,
+                                extractOnvifPort(responseStr));
+                        continue;
+                    }
+                    String titleV6 = extractOnvifTitle(responseStr);
+                    if (titleV6 == null) {
+                        titleV6 = kindV6.label == null
+                                ? "【ONVIF】设备(IPv6)" : "【ONVIF】" + kindV6.label + "(IPv6)";
+                    }
+                    Integer onvifPortV6 = extractOnvifPort(responseStr);
+                    addDeviceWithPriority(senderIp, titleV6, kindV6.label,
+                        DeviceInfo.ICON_ONVIF, PRIORITY_IPV6, null, onvifPortV6);
                 } catch (SocketTimeoutException e) {
                     break;
                 }
@@ -1581,6 +1614,32 @@ public class LanScanManager {
             }
         }
 
+        // <title> 为空时，很多设备会把名字写在 meta description 或标题类标签里
+        if (doc != null) {
+            String[] textSelectors = {"h2", "h3", "legend", ".title", ".page-title", ".panel-title"};
+            try {
+                Element metaDesc = doc.selectFirst("meta[name=description]");
+                if (metaDesc != null) {
+                    String value = metaDesc.attr("content");
+                    if (value != null) {
+                        String cleaned = cleanPageText(value);
+                        if (cleaned != null) return cleaned;
+                    }
+                }
+                for (String selector : textSelectors) {
+                    Element element = doc.selectFirst(selector);
+                    if (element == null) continue;
+                    String cleaned = cleanPageText(element.text());
+                    if (cleaned != null) return cleaned;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 前端框架常把设备名写在脚本变量里（var productName = "XXX"）
+        String scriptTitle = extractTitleFromScript(content);
+        if (scriptTitle != null) return scriptTitle;
+
         String brand = detectWebUiBrand(content);
         if (brand != null) return brand;
 
@@ -1590,6 +1649,50 @@ public class LanScanManager {
             if (!product.isEmpty()) return "网页管理界面 (" + product + ")";
         }
         return "网页管理界面";
+    }
+
+    /**
+     * 清洗从页面里抓到的候选标题：去掉多余空白，过滤掉纯装饰性文本。
+     *
+     * @return 可用的标题；太短、太长或明显不是名称时返回 null
+     */
+    private String cleanPageText(String text) {
+        if (text == null) return null;
+        String value = text.replace('\u00A0', ' ').trim()
+                .replaceAll("\\s+", " ");
+        if (value.length() < 2 || value.length() > 40) return null;
+        // 纯符号或纯数字（版本号、时间之类）不是设备名
+        if (value.matches("^[\\p{Punct}\\d\\s]+$")) return null;
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        // 登录框里的通用文案不是设备名
+        String[] noise = {"login", "登录", "user name", "username", "password",
+                "密码", "用户名", "sign in", "copyright", "版权所有"};
+        for (String word : noise) {
+            if (lower.equals(word)) return null;
+        }
+        return value;
+    }
+
+    /**
+     * 从内联脚本里找设备名。
+     *
+     * <p>很多国产设备的登录页 {@code <title>} 是空的，名字写在脚本里，形如
+     * {@code var productName = "XXX";} 或 {@code document.title = 'XXX';}。</p>
+     *
+     * @return 提取到的名称；找不到返回 null
+     */
+    private String extractTitleFromScript(String content) {
+        if (content == null || content.isEmpty()) return null;
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "(?:productName|productTitle|deviceName|devName|sysName|systemName|"
+                        + "document\\.title|pageTitle)\\s*=\\s*['\"]([^'\"]{2,40})['\"]",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher matcher = pattern.matcher(content);
+        while (matcher.find()) {
+            String cleaned = cleanPageText(matcher.group(1));
+            if (cleaned != null) return cleaned;
+        }
+        return null;
     }
 
     /** 用页面特征串判断 Web 管理界面属于哪家设备（命中就返回可读名称） */
@@ -2995,6 +3098,119 @@ public class LanScanManager {
         int endIndex = content.indexOf(endTag, startIndex);
         if (endIndex == -1) return null;
         return content.substring(startIndex, endIndex).trim();
+    }
+
+    /**
+     * WS-Discovery 应答的设备类型判别结果。
+     *
+     * <p>WS-Discovery（端口 3702 组播 239.255.255.250）不是 ONVIF 专用协议：Windows 的
+     * 「网络发现」、打印机、扫描仪都会应答。以前这里只看 {@code XAddrs} 就当成 ONVIF 摄像头，
+     * 结果同一台 Windows 电脑既被 mDNS/SMB 识别成电脑，又被这里覆盖成「【ONVIF】摄像头」。</p>
+     */
+    private static final class WsdDeviceKind {
+        static final int ONVIF_CAMERA = 1;   // 摄像头 / 编码器 / NVR
+        static final int COMPUTER = 2;       // Windows 电脑（pub:Computer）
+        static final int PRINTER = 3;        // 打印机
+
+        int kind;
+        /** 明确的类型标签，如「摄像头」「硬盘录像机」；识别不出时为 null */
+        String label;
+    }
+
+    /**
+     * 从 WS-Discovery ProbeMatch 报文里判断设备到底是什么。
+     *
+     * <p>判据优先级：Types 里的设备类型 &gt; Scopes 里的 ONVIF 特征 &gt; XAddrs 路径特征。</p>
+     *
+     * @return 判别结果；完全不是局域网设备时返回 null
+     */
+    private WsdDeviceKind classifyWsdResponse(String responseStr) {
+        if (responseStr == null || responseStr.isEmpty()) return null;
+
+        WsdDeviceKind result = new WsdDeviceKind();
+
+        // ① Types：最可靠的判据
+        //    摄像头/编码器：dn:NetworkVideoTransmitter、tds:Device
+        //    电脑：wsdp:Device pub:Computer
+        String types = extractXmlText(responseStr, "Types");
+        String typesLower = types == null ? "" : types.toLowerCase(java.util.Locale.ROOT);
+
+        if (typesLower.contains("pub:computer") || typesLower.endsWith(":computer")) {
+            result.kind = WsdDeviceKind.COMPUTER;
+            result.label = "电脑";
+            return result;
+        }
+        if (typesLower.contains("networkvideostorage")
+                || typesLower.contains("networkvideorecording")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = "硬盘录像机";
+            return result;
+        }
+        if (typesLower.contains("networkvideodisplay")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = "视频监视器";
+            return result;
+        }
+        if (typesLower.contains("networkvideoencoder")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = "视频编码器";
+            return result;
+        }
+        if (typesLower.contains("networkvideotransmitter")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = "摄像头";
+            return result;
+        }
+        if (typesLower.contains("printer")) {
+            result.kind = WsdDeviceKind.PRINTER;
+            result.label = "打印机";
+            return result;
+        }
+
+        // ② Scopes 里带 onvif:// 的，基本可以确定是 ONVIF 设备
+        String scopes = extractXmlText(responseStr, "Scopes");
+        if (scopes != null && scopes.toLowerCase(java.util.Locale.ROOT).contains("onvif.org")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = scopes.toLowerCase(java.util.Locale.ROOT).contains("networkvideostorage")
+                    ? "硬盘录像机" : "摄像头";
+            return result;
+        }
+
+        // ③ XAddrs 路径：Windows 电脑固定是 /<uuid>/，ONVIF 设备是 /onvif/device_service
+        String xaddrs = extractXmlText(responseStr, "XAddrs");
+        String xaddrsLower = xaddrs == null ? "" : xaddrs.toLowerCase(java.util.Locale.ROOT);
+        if (xaddrsLower.contains("/onvif/")) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = "摄像头";
+            return result;
+        }
+        if (typesLower.contains("device") && xaddrsLower.contains(":5357")) {
+            // 5357 = Windows 的 Function Discovery Resource Publication 服务
+            result.kind = WsdDeviceKind.COMPUTER;
+            result.label = "电脑";
+            return result;
+        }
+
+        // ④ 有 XAddrs 但判不出类型：当作普通 WS-Discovery 设备，不冒充摄像头
+        if (xaddrs != null && !xaddrs.isEmpty()) {
+            result.kind = WsdDeviceKind.ONVIF_CAMERA;
+            result.label = null;
+            return result;
+        }
+        return null;
+    }
+
+    /** 取第一个同名标签的文本内容（不区分命名空间前缀） */
+    private String extractXmlText(String xml, String localName) {
+        if (xml == null || localName == null) return null;
+        // 匹配 <任意前缀:localName ...>内容</任意前缀:localName> 或自闭合
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "<(?:[\\w.-]+:)?" + localName + "\\b[^>]*>([^<]*)<",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher matcher = pattern.matcher(xml);
+        if (!matcher.find()) return null;
+        String text = matcher.group(1);
+        return text == null || text.trim().isEmpty() ? null : text.trim();
     }
 
     /**
