@@ -29,7 +29,6 @@ import com.networktool.app.adapter.SettingAdapter;
 import com.networktool.app.BuildConfig;
 import com.networktool.app.model.SettingItem;
 import com.networktool.app.model.SettingSection;
-import com.networktool.app.util.QqGroupHelper;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.UpdateChecker;
 import com.networktool.app.util.UrlOpenHelper;
@@ -110,7 +109,7 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
                 R.drawable.ic_update_log, R.drawable.ic_arrow_forward, this::onUpdateLog));
         aboutItems.add(new SettingItem("使用帮助", "工具说明与常见问题",
                 R.drawable.ic_help, R.drawable.ic_arrow_forward, this::onHelp));
-        aboutItems.add(new SettingItem("反馈问题", "加入反馈群",
+        aboutItems.add(new SettingItem("提交 Issue", "在 GitHub 反馈问题（可贴日志）",
                 R.drawable.ic_feedback, R.drawable.ic_arrow_forward, this::onFeedback));
         aboutItems.add(new SettingItem("关于软件", "版本、协议与开源信息",
                 R.drawable.ic_about, R.drawable.ic_arrow_forward, this::onAbout));
@@ -258,8 +257,25 @@ public class SettingsFragment extends Fragment implements SettingAdapter.OnSetti
         startActivity(new Intent(requireContext(), HelpActivity.class));
     }
 
+    /**
+     * 反馈问题：跳到 GitHub Issues 提交。
+     *
+     * <p>以前这里和「关于软件」页的 QQ 群卡片调的是同一个 {@code QqGroupHelper.open()}，
+     * 两个入口做同一件事。现在分工：设置页进 Issues（适合贴日志和截图的长问题），
+     * 关于页留着 QQ 群（适合快速问一句），互不重复。</p>
+     */
     private void onFeedback(SettingItem setting) {
-        QqGroupHelper.open(requireContext());
+        String repoUrl = com.networktool.app.util.UpdateChecker.getRepoUrl();
+        if (repoUrl == null || repoUrl.isEmpty()) {
+            showToast("GitHub 仓库地址尚未配置");
+            return;
+        }
+        try {
+            com.networktool.app.util.UrlOpenHelper.open(requireContext(),
+                    repoUrl + "/issues/new", "反馈问题");
+        } catch (Exception e) {
+            showToast("无法打开反馈页面");
+        }
     }
 
     private void onAbout(SettingItem setting) {

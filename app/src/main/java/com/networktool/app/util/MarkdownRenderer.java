@@ -72,7 +72,10 @@ public class MarkdownRenderer {
     }
 
     /**
-     * 将 Markdown 转换为 HTML
+     * 将 Markdown 转换为 HTML。
+     *
+     * <p>二级标题（{@code ##}）会被渲染成一个可折叠章节，并在正文前自动生成目录。
+     * 折叠用的是 HTML5 原生 {@code <details>/<summary>}，不是自己写的展开逻辑。</p>
      */
     private static String convertToHtml(Context context, String markdown, boolean isDarkMode) {
         String[] lines = markdown.split("\n");
@@ -87,24 +90,70 @@ public class MarkdownRenderer {
         context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, tv, true);
         String subTextColor = colorToHex(tv.data);
         context.getTheme().resolveAttribute(android.R.attr.colorAccent, tv, true);
-        String borderColor = colorToHex(tv.data);
+        String accentColor = colorToHex(tv.data);
+        String borderColor = isDarkMode ? "#33FFFFFF" : "#1F000000";
+        String cardColor = isDarkMode ? "#1FFFFFFF" : "#08000000";
+
+        // 先收集二级标题，用于生成目录
+        java.util.List<String> sections = new java.util.ArrayList<>();
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.startsWith("## ")) {
+                sections.add(line.substring(3).trim());
+            }
+        }
 
         html.append("<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>")
             .append("<style>")
             .append("body { background-color: ").append(bgColor).append("; color: ").append(textColor)
             .append("; padding: 16px; font-family: sans-serif; line-height: 1.6; }")
-            .append("h1 { color: ").append(textColor).append("; font-size: 24px; margin-top: 24px; border-bottom: 2px solid ")
-            .append(borderColor).append("; padding-bottom: 8px; }")
-            .append("h2 { color: ").append(textColor).append("; font-size: 20px; margin-top: 20px; }")
-            .append("h3 { color: ").append(subTextColor).append("; font-size: 17px; margin-top: 16px; }")
+            .append("h1 { color: ").append(textColor).append("; font-size: 24px; margin: 0 0 16px 0; }")
+            .append("h2 { color: ").append(textColor).append("; font-size: 18px; margin: 0; }")
+            .append("h3 { color: ").append(accentColor).append("; font-size: 16px; margin: 18px 0 6px 0; }")
             .append("p { color: ").append(textColor).append("; margin: 8px 0; }")
-            .append("ul { padding-left: 20px; }")
+            .append("ul { padding-left: 20px; margin: 6px 0; }")
             .append("li { color: ").append(textColor).append("; margin: 4px 0; }")
             .append("strong { font-weight: bold; }")
             .append("hr { border: none; border-top: 1px solid ").append(borderColor).append("; margin: 16px 0; }")
-            .append("</style></head><body>");
+            // 目录
+            .append(".toc { background-color: ").append(cardColor).append("; border: 1px solid ")
+            .append(borderColor).append("; border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; }")
+            .append(".toc-title { color: ").append(subTextColor)
+            .append("; font-size: 12px; letter-spacing: 1px; margin-bottom: 8px; }")
+            .append(".toc-item { display: block; color: ").append(accentColor)
+            .append("; text-decoration: none; font-size: 15px; padding: 7px 0; border-bottom: 1px solid ")
+            .append(borderColor).append("; }")
+            .append(".toc-item:last-child { border-bottom: none; }")
+            // 可折叠章节
+            .append("details.sec { border: 1px solid ").append(borderColor)
+            .append("; border-radius: 12px; margin-bottom: 10px; background-color: ")
+            .append(cardColor).append("; }")
+            .append("details.sec > summary { cursor: pointer; padding: 14px; font-size: 17px; font-weight: bold; color: ")
+            .append(textColor).append("; list-style: none; }")
+            .append("details.sec > summary::-webkit-details-marker { display: none; }")
+            .append("details.sec > summary::after { content: '\u2304'; float: right; color: ")
+            .append(subTextColor).append("; }")
+            .append("details.sec[open] > summary::after { content: '\u2303'; }")
+            .append(".sec-body { padding: 0 14px 14px 14px; }")
+            .append("</style>")
+            // 目录点击时把对应章节展开（<details> 默认只滚动不展开）
+            .append("<script>function ntOpen(id){var d=document.getElementById(id);if(d){d.open=true;}return true;}</script>")
+            .append("</head><body>");
+
+        // 目录：章节数够多才生成，两三节反而占地方
+        if (sections.size() >= 2) {
+            html.append("<div class='toc'><div class='toc-title'>目录 · 点击展开</div>");
+            for (int i = 0; i < sections.size(); i++) {
+                html.append("<a class='toc-item' href='#nt-sec-").append(i)
+                    .append("' onclick=\"return ntOpen('nt-sec-").append(i).append("')\">")
+                    .append(processInline(sections.get(i))).append("</a>");
+            }
+            html.append("</div>");
+        }
 
         boolean inList = false;
+        boolean sectionOpen = false;
+        int sectionIndex = -1;
 
         for (String line : lines) {
             line = line.trim();
@@ -128,7 +177,7 @@ public class MarkdownRenderer {
                 continue;
             }
 
-            // 标题 h1-h6
+            // 标题
             if (line.startsWith("#")) {
                 if (inList) {
                     html.append("</ul>");
@@ -141,7 +190,23 @@ public class MarkdownRenderer {
                 }
                 if (level > 6) level = 6;
                 String content = line.substring(level).trim();
-                html.append("<h").append(level).append(">").append(processInline(content)).append("</h").append(level).append(">");
+
+                if (level == 2) {
+                    // 二级标题开一个新章节，上一节先收尾
+                    if (sectionOpen) {
+                        html.append("</div></details>");
+                    }
+                    sectionIndex++;
+                    html.append("<details class='sec' id='nt-sec-").append(sectionIndex).append("'")
+                        .append(sectionIndex == 0 ? " open" : "").append(">")
+                        .append("<summary>").append(processInline(content)).append("</summary>")
+                        .append("<div class='sec-body'>");
+                    sectionOpen = true;
+                } else {
+                    html.append("<h").append(level).append(">")
+                        .append(processInline(content))
+                        .append("</h").append(level).append(">");
+                }
                 continue;
             }
 
@@ -166,6 +231,9 @@ public class MarkdownRenderer {
 
         if (inList) {
             html.append("</ul>");
+        }
+        if (sectionOpen) {
+            html.append("</div></details>");
         }
 
         html.append("</body></html>");

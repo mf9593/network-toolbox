@@ -40,7 +40,15 @@ public class HelpActivity extends AppCompatActivity {
 
         webView = findViewById(R.id.webView);
         webView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        
+
+        // 章节折叠用的是 HTML5 原生 <details>，不需要脚本；
+        // 但「点目录跳到对应章节并自动展开」需要一小段脚本把 details.open 置 true，
+        // 所以这里开 JS。内容是 assets 里的本地 help.md，不加载任何外部页面，
+        // 同时关掉文件协议访问，避免脚本能读到本地文件。
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setAllowFileAccess(false);
+        webView.getSettings().setAllowContentAccess(false);
+
         // 从 assets 读取 MD 文件并渲染
         String htmlContent = MarkdownRenderer.renderMarkdown(this, "help.md");
         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
