@@ -182,6 +182,12 @@ public class LanChatManager {
             // 加载或生成持久化 UID
             this.myUid = loadOrCreateUid();
 
+            // 清理好友表里「同一 uid 多条」的历史脏数据（旧版本换 IP 会多留一行）
+            try {
+                LanChatDatabase.getInstance(this.appContext).dedupeFriendsByUid();
+            } catch (Exception ignored) {
+            }
+
             // 获取WiFi多播锁
             acquireMulticastLock();
 
@@ -2692,10 +2698,8 @@ public class LanChatManager {
                             continue;
                         }
 
-                        for (OnPeerChangeListener listener : peerChangeListeners) {
-                            listener.onMessageReceived(peer, message);
-                        }
-                        // 保存消息到数据库，确保从通知进入聊天窗口时消息已持久化
+                        // 先落库再回调：Activity 回调里有 `if (!isSavedToDb()) 再存一次`
+                        // 的兜底，顺序反了就会存两遍（曾导致同一条消息在库里出现两行）。
                         if (appContext != null) {
                             try {
                                 LanChatDatabase db = LanChatDatabase.getInstance(appContext);
@@ -2704,6 +2708,9 @@ public class LanChatManager {
                             } catch (Exception e) {
                                 Log.e(TAG, "Error saving message to database: " + e.getMessage());
                             }
+                        }
+                        for (OnPeerChangeListener listener : peerChangeListeners) {
+                            listener.onMessageReceived(peer, message);
                         }
                         // 显示通知，确保不在聊天窗口时也能收到
                         if (appContext != null) {
@@ -2811,11 +2818,7 @@ public class LanChatManager {
                         final ChatMessage finalMsg = chatMsg;
                         final LanPeer finalPeer = peer;
                         if (finalPeer != null) {
-                            for (OnPeerChangeListener listener : peerChangeListeners) {
-                                mainHandler.post(() ->
-                                        listener.onMessageReceived(finalPeer, finalMsg));
-                            }
-                            // 保存消息到数据库，确保从通知进入聊天窗口时消息已持久化
+                            // 先落库再回调（回调里有 isSavedToDb 兜底，顺序反了会重复保存）
                             if (appContext != null && ("text".equals(finalMsg.getType()) || "wifi_backup".equals(finalMsg.getType()))) {
                                 try {
                                     LanChatDatabase db = LanChatDatabase.getInstance(appContext);
@@ -2824,6 +2827,10 @@ public class LanChatManager {
                                 } catch (Exception e) {
                                     Log.e(TAG, "Error saving message to database: " + e.getMessage());
                                 }
+                            }
+                            for (OnPeerChangeListener listener : peerChangeListeners) {
+                                mainHandler.post(() ->
+                                        listener.onMessageReceived(finalPeer, finalMsg));
                             }
                             // 在LanChatManager层面直接显示通知，确保无论用户在哪个界面都能收到
                             if (appContext != null && "text".equals(finalMsg.getType())) {
@@ -3109,10 +3116,8 @@ public class LanChatManager {
                         message.setTimestamp(System.currentTimeMillis());
 
                         // 通知监听器
-                        for (OnPeerChangeListener listener : peerChangeListeners) {
-                            listener.onMessageReceived(peer, message);
-                        }
-                        // 保存消息到数据库，确保从通知进入聊天窗口时消息已持久化
+                        // 先落库再回调：Activity 回调里有 `if (!isSavedToDb()) 再存一次`
+                        // 的兜底，顺序反了就会存两遍（曾导致同一条消息在库里出现两行）。
                         if (appContext != null) {
                             try {
                                 LanChatDatabase db = LanChatDatabase.getInstance(appContext);
@@ -3121,6 +3126,9 @@ public class LanChatManager {
                             } catch (Exception e) {
                                 Log.e(TAG, "Error saving message to database: " + e.getMessage());
                             }
+                        }
+                        for (OnPeerChangeListener listener : peerChangeListeners) {
+                            listener.onMessageReceived(peer, message);
                         }
                         // 显示通知，确保不在聊天窗口时也能收到
                         if (appContext != null) {

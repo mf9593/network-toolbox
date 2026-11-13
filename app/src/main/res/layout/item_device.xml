@@ -96,17 +96,6 @@
                 android:textAppearance="@style/TextAppearance.NetworkTool.Caption"
                 android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/protocolText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="ONVIF · HTTP"
-                android:textSize="11sp"
-                android:visibility="gone" />
-
             <!-- 分类标签与端口同一行：标签靠左，端口跟在后面。
                  标签放在标题行右侧会把标题行撑高，列表看着不齐；
                  放在这里和 11sp 的端口文字同一行，不额外占高度 -->
@@ -118,10 +107,28 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <!-- 来源标签（ARP表 / Ping / SSDP / mDNS）：和右边的分类标签一样做成小卡片，
+                     之前是裸文字，看着像漏了边框 -->
+                <TextView
+                    android:id="@+id/protocolText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxWidth="150dp"
+                    android:maxLines="1"
+                    android:paddingStart="6dp"
+                    android:paddingTop="1dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="1dp"
+                    android:text="ONVIF · HTTP"
+                    android:textSize="10sp"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/categoryText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
                     android:paddingStart="6dp"
                     android:paddingTop="1dp"
                     android:paddingEnd="6dp"

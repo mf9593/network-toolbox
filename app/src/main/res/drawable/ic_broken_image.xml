@@ -1,9 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 图片不可用占位图标：线性描边，运行时用 setImageTintList 上主题色。
+     之前是实心黑色块，铺到 200dp 的图片框里会显示成一个巨大黑方块。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
+    <!-- 相框外轮廓 -->
     <path
-        android:fillColor="#000000"
-        android:pathData="M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z"/>
+        android:fillColor="#00000000"
+        android:pathData="M4,3 L20,3 A2,2 0 0 1 22,5 L22,19 A2,2 0 0 1 20,21 L4,21 A2,2 0 0 1 2,19 L2,5 A2,2 0 0 1 4,3 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.6" />
+
+    <!-- 山形 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M5,18 L9.5,12.5 L12.5,16 L15,13.5 L19,18 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.6"
+        android:strokeLineJoin="round" />
+
+    <!-- 斜杠，表示「图片丢失」 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M3.5,3.5 L20.5,20.5"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+
 </vector>

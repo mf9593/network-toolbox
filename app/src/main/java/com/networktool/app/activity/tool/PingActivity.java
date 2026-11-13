@@ -26,6 +26,7 @@ import com.networktool.app.NetworkToolApplication;
 import com.networktool.app.R;
 import com.networktool.app.util.AppErrorLogger;
 import com.networktool.app.util.NetworkUtils;
+import com.networktool.app.util.PingStatsParser;
 import com.networktool.app.util.ThemeManager;
 
 import java.io.BufferedReader;
@@ -73,6 +74,20 @@ public class PingActivity extends AppCompatActivity {
     private TextView runningMetaText;
     private MaterialButton paramsButton;
     private MaterialButton runningActionButton;
+
+    /* 统计卡：Ping 结束或中断后展示发送 / 接收 / 丢包 / 延迟 */
+    private View statsCard;
+    private TextView statsSummaryText;
+    private TextView statsSourceText;
+    private TextView statSentValue;
+    private TextView statReceivedValue;
+    private TextView statLossValue;
+    private TextView statMinValue;
+    private TextView statAvgValue;
+    private TextView statMaxValue;
+
+    /** Ping 原始输出的每一行，用于中断时自己算统计（中断不会打印统计块） */
+    private final List<String> rawLines = new ArrayList<>();
 
     private ExecutorService executorService;
     private Handler mainHandler;
@@ -153,9 +168,22 @@ public class PingActivity extends AppCompatActivity {
         paramsButton = findViewById(R.id.paramsButton);
         runningActionButton = findViewById(R.id.runningActionButton);
 
+        statsCard = findViewById(R.id.statsCard);
+        statsSummaryText = findViewById(R.id.statsSummaryText);
+        statsSourceText = findViewById(R.id.statsSourceText);
+        LinearLayout statsRow1 = findViewById(R.id.statsRow1);
+        LinearLayout statsRow2 = findViewById(R.id.statsRow2);
+        statSentValue = addStatTile(statsRow1, "发送");
+        statReceivedValue = addStatTile(statsRow1, "接收");
+        statLossValue = addStatTile(statsRow1, "丢包率");
+        statMinValue = addStatTile(statsRow2, "最小延迟");
+        statAvgValue = addStatTile(statsRow2, "平均延迟");
+        statMaxValue = addStatTile(statsRow2, "最大延迟");
+
         ThemeManager.setupResultCard(findViewById(R.id.pingInputCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.quickSelectCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.runningBar), this);
+        ThemeManager.setupResultCard(findViewById(R.id.statsCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.resultCard), this);
     }
 
@@ -316,6 +344,8 @@ public class PingActivity extends AppCompatActivity {
         updatePingStateUi(false);
         pingResult.append("\n[用户手动停止Ping]\n");
         resultTextView.setText(pingResult.toString());
+        // 中断时 ping 来不及打印统计块，这里按已收到的回包自己算
+        showStats(true);
     }
 
     /**
@@ -357,6 +387,75 @@ public class PingActivity extends AppCompatActivity {
         runningActionButton.setText(pinging ? "停止" : "再次 Ping");
     }
 
+    /**
+     * 往统计卡里加一个指标块（item_ping_stat.xml），返回用于填数值的 TextView。
+     *
+     * <p>指标块是固定 6 个，但用 inflate 而不是手写 6 份 XML，避免样式改一次要改 6 处。</p>
+     */
+    private TextView addStatTile(LinearLayout row, String label) {
+        View tile = getLayoutInflater().inflate(R.layout.item_ping_stat, row, false);
+        TextView labelView = tile.findViewById(R.id.statLabel);
+        labelView.setText(label);
+        TextView valueView = tile.findViewById(R.id.statValue);
+        row.addView(tile);
+        return valueView;
+    }
+
+    /**
+     * 展示统计卡。
+     *
+     * @param interrupted 是否是用户手动停止 / 异常中断（此时没有 ping 自带的统计块）
+     */
+    private void showStats(boolean interrupted) {
+        PingStatsParser.Stats stats = PingStatsParser.parse(rawLines);
+        if (!stats.hasData()) {
+            statsCard.setVisibility(View.GONE);
+            return;
+        }
+
+        statSentValue.setText(String.valueOf(stats.sent));
+        statReceivedValue.setText(String.valueOf(stats.received));
+        statLossValue.setText(stats.lossPercent + "%");
+
+        if (stats.hasLatency) {
+            statMinValue.setText(formatMs(stats.minMs));
+            statAvgValue.setText(formatMs(stats.avgMs));
+            statMaxValue.setText(formatMs(stats.maxMs));
+        } else {
+            // 一个包都没回来：延迟没有意义，明确写「--」而不是留 0
+            statMinValue.setText("--");
+            statAvgValue.setText("--");
+            statMaxValue.setText("--");
+        }
+
+        // 一句话总结，让不想看数字的人也能一眼知道结果
+        StringBuilder summary = new StringBuilder();
+        summary.append("发送 ").append(stats.sent)
+                .append(" 个，收到 ").append(stats.received)
+                .append(" 个，丢包 ").append(stats.lost)
+                .append(" 个（").append(stats.lossPercent).append("%）");
+        if (stats.hasLatency) {
+            summary.append("，平均延迟 ").append(formatMs(stats.avgMs));
+        }
+        statsSummaryText.setText(summary.toString());
+
+        // 标出数据来源：正常跑完有 ping 自己的统计块，中断时是按回包推算的
+        boolean guess = interrupted || !stats.fromSummary;
+        statsSourceText.setVisibility(guess ? View.VISIBLE : View.GONE);
+        statsSourceText.setText("中断统计");
+
+        statsCard.setVisibility(View.VISIBLE);
+    }
+
+    private void hideStats() {
+        statsCard.setVisibility(View.GONE);
+    }
+
+    /** 毫秒保留一位小数，如 1.2 ms */
+    private String formatMs(double ms) {
+        return String.format(java.util.Locale.US, "%.1f ms", ms);
+    }
+
     private void applyThemeColors() {
         ThemeManager.applyPrimaryButton(connectButton);
         ThemeManager.applyPrimaryButton(runningActionButton);
@@ -365,6 +464,15 @@ public class PingActivity extends AppCompatActivity {
         resultTextView.setTextColor(ThemeManager.getOnSurfaceColor(this));
         runningTargetText.setTextColor(ThemeManager.getOnSurfaceColor(this));
         runningMetaText.setTextColor(ThemeManager.getOnSurfaceVariantColor(this));
+
+        int accent = ThemeManager.getAccessibleThemeColor(this);
+        int variant = ThemeManager.getOnSurfaceVariantColor(this);
+        for (TextView value : new TextView[]{statSentValue, statReceivedValue, statLossValue,
+                statMinValue, statAvgValue, statMaxValue}) {
+            if (value != null) value.setTextColor(accent);
+        }
+        statsSummaryText.setTextColor(variant);
+        statsSourceText.setTextColor(variant);
     }
 
     private void performPing() {
@@ -402,6 +510,8 @@ public class PingActivity extends AppCompatActivity {
         final int finalPacketSize = packetSize;
 
         pingResult.setLength(0);
+        rawLines.clear();
+        hideStats();
         resultTextView.setText("正在Ping " + host + "...\n");
         isPinging = true;
         updatePingStateUi(true);
@@ -423,6 +533,9 @@ public class PingActivity extends AppCompatActivity {
                     final String output = line;
                     mainHandler.post(() -> {
                         pingResult.append(output).append("\n");
+                        // 同时留一份纯行数据：用户点「停止」时进程被杀，ping 会来不及
+                        // 打印统计块，只能靠这些回包行自己算丢包和延迟
+                        rawLines.add(output);
                         resultTextView.setText(pingResult.toString());
                     });
                 }
@@ -447,6 +560,9 @@ public class PingActivity extends AppCompatActivity {
                     resultTextView.setText(pingResult.toString());
                     isPinging = false;
                     updatePingStateUi(false);
+                    // 正常跑完，ping 自己会打印统计块，直接用它
+                    showStats(false);
+                    scrollToTop();
                 });
 
             } catch (java.io.InterruptedIOException e) {
@@ -464,6 +580,7 @@ public class PingActivity extends AppCompatActivity {
                     isPinging = false;
                     currentProcess = null;
                     updatePingStateUi(false);
+                    showStats(true);
                 });
             }
         });

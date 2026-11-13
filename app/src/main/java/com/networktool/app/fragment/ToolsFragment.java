@@ -101,8 +101,30 @@ public class ToolsFragment extends Fragment
         initViews(view);
         buildCatalog();
         seedDefaultFavorites();
+        migrateFavorites();
         setupSearch();
         rebuildList();
+    }
+
+    /**
+     * 老版本预置的「我的常用」里有「路由追踪」，实际使用频率很低。
+     * 升级后把它换成「局域网聊天」：同位置替换，不打乱用户自己排的顺序。
+     * 只执行一次，用户之后手动改回去不会再被覆盖。
+     */
+    private void migrateFavorites() {
+        if (prefs == null) return;
+        final String key = "migrated_traceroute_to_lanchat";
+        if (prefs.getBoolean(key, false)) return;
+        boolean changed = false;
+        int index = favorites.indexOf("路由追踪");
+        if (index >= 0 && findTool("局域网聊天") != null
+                && !favorites.contains("局域网聊天")) {
+            favorites.set(index, "局域网聊天");
+            saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
+            changed = true;
+        }
+        prefs.edit().putBoolean(key, true).apply();
+        if (changed) renderFavoriteStrip(true);
     }
 
     private void initViews(View view) {

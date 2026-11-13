@@ -48,58 +48,59 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:padding="@dimen/card_padding">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
                         <TextView
                             android:id="@+id/runningTargetText"
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
+                            android:layout_weight="1"
                             android:ellipsize="end"
                             android:singleLine="true"
                             android:text="192.168.2.1"
                             android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
 
-                        <TextView
-                            android:id="@+id/runningMetaText"
-                            android:layout_width="match_parent"
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/paramsButton"
+                            style="@style/Widget.NetworkTool.Button.TextButton"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:ellipsize="end"
-                            android:singleLine="true"
-                            android:text="10 次 · 间隔 1 秒"
-                            android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+                            android:layout_marginStart="@dimen/space_3"
+                            android:minWidth="0dp"
+                            android:text="参数"
+                            android:textSize="13sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/runningActionButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="@dimen/space_3"
+                            android:minWidth="0dp"
+                            android:paddingStart="@dimen/space_3"
+                            android:paddingEnd="@dimen/space_3"
+                            android:text="停止"
+                            android:textSize="13sp"
+                            app:cornerRadius="12dp" />
 
                     </LinearLayout>
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/paramsButton"
-                        style="@style/Widget.NetworkTool.Button.TextButton"
-                        android:layout_width="wrap_content"
+                    <!-- 参数说明单独一行，不跟 IP 和按钮抢宽度 -->
+                    <TextView
+                        android:id="@+id/runningMetaText"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/space_3"
-                        android:minWidth="0dp"
-                        android:text="参数"
-                        android:textSize="13sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/runningActionButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="@dimen/space_3"
-                        android:minWidth="0dp"
-                        android:paddingStart="@dimen/space_3"
-                        android:paddingEnd="@dimen/space_3"
-                        android:text="停止"
-                        android:textSize="13sp"
-                        app:cornerRadius="12dp" />
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:text="10 次 · 间隔 1 秒 · 包大小 56"
+                        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
 
                 </LinearLayout>
 
@@ -304,6 +305,81 @@
             </LinearLayout>
             <!-- /输入区 -->
 
+            <!-- 统计卡：Ping 结束或中断后显示发送 / 接收 / 丢包 / 延迟。
+                 中断时 ping 不会打印自己的统计块，所以数值由 PingStatsParser 按回包推算 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statsCard"
+                style="@style/Widget.NetworkTool.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_3"
+                android:visibility="gone"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/card_padding">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ping 统计"
+                            android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+                        <TextView
+                            android:id="@+id/statsSourceText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_2"
+                            android:text="中断统计"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/statsSummaryText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="--"
+                        android:textAppearance="@style/TextAppearance.NetworkTool.BodySmall" />
+
+                    <!-- 第一行：发送 / 接收 / 丢包率 -->
+                    <LinearLayout
+                        android:id="@+id/statsRow1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_3"
+                        android:orientation="horizontal" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="@dimen/space_3"
+                        android:background="?attr/colorOutlineVariant" />
+
+                    <!-- 第二行：最小 / 平均 / 最大延迟 -->
+                    <LinearLayout
+                        android:id="@+id/statsRow2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_3"
+                        android:orientation="horizontal" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 结果 -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/resultCard"
@@ -323,7 +399,7 @@
                         android:paddingStart="@dimen/card_padding"
                         android:paddingTop="@dimen/card_padding"
                         android:paddingEnd="@dimen/card_padding"
-                        android:text="Ping 结果"
+                        android:text="原始输出"
                         android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
 
                     <TextView

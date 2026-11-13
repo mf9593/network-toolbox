@@ -70,19 +70,37 @@
         android:text="Android 10+ 会弹出系统连接确认窗口"
         android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
 
+    <!-- 已连着别的 WiFi 时的额外提示：系统不会主动断开当前连接去连新网络 -->
+    <TextView
+        android:id="@+id/switchHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Caption"
+        android:visibility="gone" />
+
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/connectButton"
+        android:id="@+id/systemAddButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_4"
-        android:text="连接" />
+        android:text="保存到系统（可改静态 IP）"
+        app:icon="@drawable/ic_wifi" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/connectButton"
+        style="@style/Widget.NetworkTool.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:text="仅应用内连接（会被标记来源）" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/cancelButton"
         style="@style/Widget.NetworkTool.Button.TextButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_1"
+        android:layout_marginTop="@dimen/space_2"
         android:text="取消" />
 
 </LinearLayout>

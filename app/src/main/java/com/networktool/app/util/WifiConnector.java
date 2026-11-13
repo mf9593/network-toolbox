@@ -147,6 +147,69 @@ public class WifiConnector {
         return type == SECURITY_WEP || type == SECURITY_WPA2 || type == SECURITY_WPA3;
     }
 
+    /**
+     * 清掉本应用添加过的全部 WiFi 建议。
+     *
+     * <p>应用内连接（WifiNetworkSuggestion）会在系统 WLAN 列表里留下一条
+     * 「可通过 网络工具箱 使用」的独立条目，和用户自己保存的网络并列显示。
+     * 不再用应用内连接时要把这些残留清掉，否则系统里永远挂着这个提示。</p>
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    public static void clearAllSuggestions(Context context) {
+        try {
+            WifiManager wm = (WifiManager) context.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return;
+            List<WifiNetworkSuggestion> existing = wm.getNetworkSuggestions();
+            if (existing != null && !existing.isEmpty()) {
+                wm.removeNetworkSuggestions(existing);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 用系统「添加网络」界面添加这条 WiFi。
+     *
+     * <p>为什么需要它：WifiNetworkSuggestion 建出来的是<b>应用托管网络</b>，
+     * 系统里会显示「通过 网络工具箱 连接」，用户不能改静态 IP，部分机型还会
+     * 把它当成受限网络。交给系统设置界面添加，得到的是用户自己的普通网络：
+     * 可以改静态 IP / 代理 / MAC，能正常上网，也不带应用归属标记。</p>
+     *
+     * <p>代价是要用户在那个界面点一下「保存」，没有静默路径可选（Android 10+ 限制）。</p>
+     *
+     * @return 是否成功拉起系统界面
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    public static boolean openSystemAddNetwork(android.app.Activity activity,
+                                               String ssid,
+                                               String capabilities,
+                                               String password) {
+        if (activity == null || ssid == null || ssid.isEmpty()) return false;
+        int type = detectSecurityType(capabilities);
+        if (!isSupported(type) || type == SECURITY_WEP) return false;
+        try {
+            WifiNetworkSuggestion.Builder builder = new WifiNetworkSuggestion.Builder()
+                    .setSsid(ssid);
+            if (type == SECURITY_WPA3) {
+                builder.setWpa3Passphrase(password);
+            } else if (type == SECURITY_WPA2) {
+                builder.setWpa2Passphrase(password);
+            }
+            java.util.ArrayList<WifiNetworkSuggestion> list = new java.util.ArrayList<>();
+            list.add(builder.build());
+
+            Intent intent = new Intent(android.provider.Settings.ACTION_WIFI_ADD_NETWORKS);
+            intent.putParcelableArrayListExtra(
+                    android.provider.Settings.EXTRA_WIFI_NETWORK_LIST, list);
+            if (intent.resolveActivity(activity.getPackageManager()) == null) return false;
+            activity.startActivity(intent);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public static boolean isSupported(int type) {
         if (type == SECURITY_OPEN || type == SECURITY_WPA2) {
             return true;
@@ -410,14 +473,31 @@ public class WifiConnector {
             }
             WifiNetworkSuggestion suggestion = builder.build();
 
-            // 先移除该 App 的全部旧建议，避免叠加/过期配置
-            List<WifiNetworkSuggestion> existing = wifiManager.getNetworkSuggestions();
-            if (existing != null && !existing.isEmpty()) {
-                wifiManager.removeNetworkSuggestions(existing);
-            }
-
+            // 复用系统里已有的同 SSID 建议：只有「密码变了」才替换。
+            // 每次「先全删再加」会被系统当成新建议，重新弹一次「通过 XX 连接」的授权提示。
+            // 注意 getSsid()/getPassphrase() 是 API 30 才有的，29 上跳过复用逻辑。
             java.util.List<WifiNetworkSuggestion> single =
                     java.util.Collections.singletonList(suggestion);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                List<WifiNetworkSuggestion> existing = wifiManager.getNetworkSuggestions();
+                if (existing != null) {
+                    for (WifiNetworkSuggestion old : existing) {
+                        if (!ssid.equals(old.getSsid())) continue;
+                        String want = (type == SECURITY_WPA2 || type == SECURITY_WPA3)
+                                ? password : null;
+                        String had = readSuggestionPassphrase(old);
+                        boolean samePass = (want == null) ? (had == null) : want.equals(had);
+                        if (samePass) {
+                            return WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS;
+                        }
+                        // 只删这一条，保留其它已保存的网络
+                        wifiManager.removeNetworkSuggestions(
+                                java.util.Collections.singletonList(old));
+                        break;
+                    }
+                }
+            }
+
             int status = wifiManager.addNetworkSuggestions(single);
             if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE) {
                 wifiManager.removeNetworkSuggestions(single);
@@ -430,6 +510,29 @@ public class WifiConnector {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    /**
+     * 读出已有建议的密码，用于判断是否需要替换。
+     *
+     * <p>SDK 只提供 getPassphrase()，无法区分 WPA2/WPA3，所以只比对密码；
+     * 密码一致就认定是同一条建议，不再重加。</p>
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private static String readSuggestionPassphrase(WifiNetworkSuggestion s) {
+        try {
+            return unquote(s.getPassphrase());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String unquote(String s) {
+        if (s == null) return null;
+        if (s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"")) {
+            return s.substring(1, s.length() - 1);
+        }
+        return s;
     }
 
     /**

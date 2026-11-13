@@ -58,6 +58,25 @@
     <!-- 通知权限（Android 13+ 必需） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Android 11+ 包可见性：不加 <queries> 时 resolveActivity() 只能看到
+         本应用和少数系统包，连系统「添加网络」和浏览器都会解析为 null -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.WIFI_ADD_NETWORKS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.WIFI_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
+
     <application
         android:name="com.networktool.app.NetworkToolApplication"
         android:resizeableActivity="true"

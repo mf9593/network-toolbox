@@ -1,5 +1,6 @@
 package com.networktool.app.adapter;
 
+import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -74,8 +75,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
 
         String protocols = joinProtocols(device);
         holder.protocolText.setText(protocols);
-        holder.protocolText.setTextColor(ThemeManager.getOnSurfaceVariantColor(holder.itemView.getContext()));
-        holder.protocolText.setVisibility(protocols.isEmpty() ? View.GONE : View.VISIBLE);
+        if (protocols.isEmpty()) {
+            holder.protocolText.setVisibility(View.GONE);
+        } else {
+            // 来源标签（ARP表 / Ping / SSDP / mDNS ……）和分类标签保持同一套「卡片」外观，
+            // 之前这里是裸文字，跟下面的分类标签风格不一致，看着像漏了边框。
+            applyChipStyle(holder, holder.protocolText);
+            holder.protocolText.setVisibility(View.VISIBLE);
+        }
 
         // 展示发现的服务端口（如 HTTP 80、RTSP 554）；无端口则隐藏
         java.util.List<Integer> ports = device.getPorts();
@@ -99,24 +106,15 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.categoryText.setVisibility(View.GONE);
         } else {
             holder.categoryText.setText(category);
-            holder.categoryText.setTextColor(
-                    ThemeManager.getBadgeTextColor(holder.itemView.getContext()));
-            GradientDrawable categoryBadge = new GradientDrawable();
-            categoryBadge.setColor(
-                    ThemeManager.getBadgeSurfaceColor(holder.itemView.getContext()));
-            // 1dp 描边：浅色底 + 同色系边框，深色/浅色主题下都能看出这是一个标签，
-            // 不会像之前那样和卡片底色糊成一片
-            categoryBadge.setStroke(
-                    Math.max(1, (int) dp(holder.itemView, 1)),
-                    ThemeManager.getBadgeStrokeColor(holder.itemView.getContext()));
-            categoryBadge.setCornerRadius(dp(holder.itemView, 6));
-            holder.categoryText.setBackground(categoryBadge);
+            applyChipStyle(holder, holder.categoryText);
             holder.categoryText.setVisibility(View.VISIBLE);
         }
 
         // 分类标签和端口共用一行；两个都没有时整行隐藏，避免白占 3dp 间距
         holder.tagRow.setVisibility(
-                (category == null && holder.portsText.getVisibility() == View.GONE)
+                (category == null
+                        && holder.protocolText.getVisibility() == View.GONE
+                        && holder.portsText.getVisibility() == View.GONE)
                         ? View.GONE : View.VISIBLE);
 
         boolean ipv6 = device.getIpVersion() == DeviceInfo.IPV6;
@@ -187,6 +185,25 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             }
             return true;
         });
+    }
+
+    /**
+     * 小标签样式：浅色底 + 同色系 1dp 描边 + 主题文字色。
+     *
+     * <p>分类标签（摄像头/电脑/路由器）和来源标签（ARP表/Ping/SSDP）共用这一套，
+     * 保证同一张卡片里所有小标签外观一致 —— 之前来源标签是裸文字，
+     * 看起来像漏了边框。</p>
+     */
+    private void applyChipStyle(ViewHolder holder, TextView chip) {
+        Context context = holder.itemView.getContext();
+        chip.setTextColor(ThemeManager.getBadgeTextColor(context));
+        GradientDrawable badge = new GradientDrawable();
+        badge.setColor(ThemeManager.getBadgeSurfaceColor(context));
+        badge.setStroke(
+                Math.max(1, Math.round(dp(holder.itemView, 1))),
+                ThemeManager.getBadgeStrokeColor(context));
+        badge.setCornerRadius(dp(holder.itemView, 6));
+        chip.setBackground(badge);
     }
 
     private String joinProtocols(DeviceInfo device) {

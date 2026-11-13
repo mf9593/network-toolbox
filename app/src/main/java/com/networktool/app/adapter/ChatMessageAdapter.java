@@ -159,38 +159,36 @@ public class ChatMessageAdapter extends RecyclerView.Adapter<ChatMessageAdapter.
                 try {
                     byte[] decoded = Base64.decode(imageData, Base64.DEFAULT);
                     Bitmap bitmap = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
-                    holder.imagePreview.setImageBitmap(bitmap);
-
-                    // 点击图片查看大图
+                    if (bitmap == null) throw new IllegalStateException("decode failed");
+                    showRealImage(holder, bitmap);
                     holder.imagePreview.setOnClickListener(v -> {
                         if (messageClickListener != null) {
                             messageClickListener.onImageClick(msg, imageData);
                         }
                     });
                 } catch (Exception e) {
-                    holder.imagePreview.setImageResource(R.drawable.ic_broken_image);
+                    showImageMissing(holder);
                 }
             } else {
                 // fileData为空时，尝试从本地文件路径加载
                 String filePath = msg.getFilePath();
+                Bitmap bitmap = null;
                 if (!TextUtils.isEmpty(filePath)) {
                     try {
-                        Bitmap bitmap = BitmapFactory.decodeFile(filePath);
-                        if (bitmap != null) {
-                            holder.imagePreview.setImageBitmap(bitmap);
-                            holder.imagePreview.setOnClickListener(v -> {
-                                if (messageClickListener != null) {
-                                    messageClickListener.onImageClick(msg, filePath);
-                                }
-                            });
-                        } else {
-                            holder.imagePreview.setImageResource(R.drawable.ic_broken_image);
-                        }
-                    } catch (Exception e) {
-                        holder.imagePreview.setImageResource(R.drawable.ic_broken_image);
+                        bitmap = BitmapFactory.decodeFile(filePath);
+                    } catch (Exception ignored) {
                     }
+                }
+                if (bitmap != null) {
+                    showRealImage(holder, bitmap);
+                    final String path = filePath;
+                    holder.imagePreview.setOnClickListener(v -> {
+                        if (messageClickListener != null) {
+                            messageClickListener.onImageClick(msg, path);
+                        }
+                    });
                 } else {
-                    holder.imagePreview.setImageResource(R.drawable.ic_broken_image);
+                    showImageMissing(holder);
                 }
             }
             setupBubbleStyle(holder, msg, viewType);
@@ -307,6 +305,47 @@ public class ChatMessageAdapter extends RecyclerView.Adapter<ChatMessageAdapter.
     /**
      * 设置气泡样式
      */
+    /**
+     * 正常图片：铺满 200dp 方框（centerCrop），清掉占位样式。
+     */
+    private void showRealImage(MessageViewHolder holder, Bitmap bitmap) {
+        holder.imagePreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        holder.imagePreview.setBackground(null);
+        holder.imagePreview.setImageTintList(null);
+        holder.imagePreview.setPadding(0, 0, 0, 0);
+        holder.imagePreview.setImageBitmap(bitmap);
+    }
+
+    /**
+     * 图片不可用（文件被删 / 解码失败）时的占位。
+     *
+     * <p>之前这里直接 setImageResource(ic_broken_image)，那个矢量图是<b>实心黑块</b>，
+     * ImageView 又是 200dp + centerCrop，结果整条消息显示成一个巨大的黑方框，
+     * 看起来像渲染坏了。现在改成：浅色圆角底 + 居中的图标 + 留白。</p>
+     */
+    private void showImageMissing(MessageViewHolder holder) {
+        Context context = holder.imagePreview.getContext();
+        holder.imagePreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        holder.imagePreview.setImageTintList(
+                android.content.res.ColorStateList.valueOf(
+                        ThemeManager.getOnSurfaceVariantColor(context)));
+        holder.imagePreview.setImageResource(R.drawable.ic_broken_image);
+        int pad = dp(context, 56);
+        holder.imagePreview.setPadding(pad, pad, pad, pad);
+
+        android.graphics.drawable.GradientDrawable bg =
+                new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(dp(context, 12));
+        bg.setColor(ThemeManager.getSurfaceColor(context));
+        holder.imagePreview.setBackground(bg);
+        holder.imagePreview.setOnClickListener(null);
+    }
+
+    private static int dp(Context context, int value) {
+        return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
     private void setupBubbleStyle(MessageViewHolder holder, LanChatManager.ChatMessage msg, int viewType) {
         float radius = android.util.TypedValue.applyDimension(
                 android.util.TypedValue.COMPLEX_UNIT_DIP, 16,

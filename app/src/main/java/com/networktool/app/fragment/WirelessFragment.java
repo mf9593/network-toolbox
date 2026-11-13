@@ -931,6 +931,22 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     }
 
     /**
+     * 当前已连接的 SSID（已去掉引号）；未连接或读不到时返回 null。
+     */
+    private String currentConnectedSsid() {
+        if (wifiManager == null) return null;
+        try {
+            WifiInfo info = wifiManager.getConnectionInfo();
+            if (info == null) return null;
+            String ssid = sanitizeSsid(info.getSSID());
+            if (ssid == null || ssid.isEmpty() || "未知网络".equals(ssid)) return null;
+            return ssid;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /**
      * 点击网络：输入密码并调用系统 API 连接
      */
     private void showConnectDialog(WifiInfoModel wifi) {
@@ -965,7 +981,9 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         TextInputEditText passwordEdit = view.findViewById(R.id.passwordEdit);
         TextView savedPasswordHint = view.findViewById(R.id.savedPasswordHint);
         TextView connectHint = view.findViewById(R.id.connectHint);
+        TextView switchHint = view.findViewById(R.id.switchHint);
         MaterialButton connectButton = view.findViewById(R.id.connectButton);
+        MaterialButton systemAddButton = view.findViewById(R.id.systemAddButton);
         MaterialButton cancelButton = view.findViewById(R.id.cancelButton);
 
         ssidView.setText(ssid);
@@ -983,18 +1001,68 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
                         : "已填入 1 个已保存密码，可修改或使用其他密码");
             }
             connectHint.setText(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                    ? "连接时 Android 会弹出系统确认窗口"
+                    ? "建议用「保存到系统」：这是你自己的普通网络，能改静态 IP、能上网。"
+                    + "「仅应用内连接」由系统托管，会显示「可通过网络工具箱使用」，不支持静态 IP"
                     : "将调用系统 WiFi API 发起连接");
         } else {
             connectHint.setText("开放网络，无需密码");
         }
 
+        // 已经连着另一个 WiFi 时，说明系统不会为了建议网络主动断开现有连接——
+        // 这是 Android 的设计（现有连接优先），不是连接失败。这里提前说清楚。
+        String connectedSsid = currentConnectedSsid();
+        if (connectedSsid != null && !connectedSsid.equals(ssid)) {
+            switchHint.setVisibility(View.VISIBLE);
+            switchHint.setText("当前已连接「" + connectedSsid
+                    + "」。系统不会自动断开它去连这个网络，提交后若一直没切换，"
+                    + "请先到系统 WiFi 设置里断开「" + connectedSsid + "」再回来连接。");
+            switchHint.setTextColor(ThemeManager.getAccessibleThemeColor(requireContext()));
+        } else {
+            switchHint.setVisibility(View.GONE);
+        }
+
         int themeColor = ThemeManager.getThemeColor();
         int accentColor = ThemeManager.getAccessibleThemeColor(requireContext());
         int contrastColor = ThemeManager.getContrastColor(themeColor);
-        connectButton.setBackgroundTintList(ColorStateList.valueOf(themeColor));
-        connectButton.setTextColor(contrastColor);
+        // connectButton 现在是次要入口（文字按钮）：透明底 + 主题色文字
+        connectButton.setBackgroundTintList(ColorStateList.valueOf(android.graphics.Color.TRANSPARENT));
+        connectButton.setTextColor(accentColor);
+        connectButton.setIconTint(ColorStateList.valueOf(accentColor));
         cancelButton.setTextColor(accentColor);
+
+        // 「保存到系统」是主操作：添加出来的是用户自己的普通网络，
+        // 能改静态 IP、能上网、不带应用来源标记。
+        // 「仅应用内连接」是备选：走 WifiNetworkSuggestion，系统会标「可通过网络工具箱使用」，
+        // 且不支持静态 IP，只适合临时连着调试设备。
+        systemAddButton.setBackgroundTintList(ColorStateList.valueOf(themeColor));
+        systemAddButton.setTextColor(contrastColor);
+        boolean canSystemAdd = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+        systemAddButton.setVisibility(canSystemAdd ? View.VISIBLE : View.GONE);
+        systemAddButton.setOnClickListener(v -> {
+            String password = passwordEdit.getText() == null
+                    ? "" : passwordEdit.getText().toString();
+            if (needsPassword) {
+                String error = WifiConnector.validatePassword(securityType, password);
+                if (error != null) {
+                    passwordLayout.setError(error);
+                    return;
+                }
+            }
+            passwordLayout.setError(null);
+            hideKeyboard(view);
+            dialog.dismiss();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiConnector.clearAllSuggestions(requireContext());
+            }
+            boolean launched = WifiConnector.openSystemAddNetwork(
+                    requireActivity(), ssid, wifi.getCapabilities(), password);
+            if (launched) {
+                showToast("请在系统界面点「保存」，之后可在该网络里改静态 IP");
+            } else {
+                showToast("当前系统不支持预填添加，已跳到 WiFi 设置手动添加");
+                openWifiSettings();
+            }
+        });
 
         connectButton.setOnClickListener(v -> {
             String password = passwordEdit.getText() == null
@@ -1104,6 +1172,15 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
 
             reasonText.setText(reason);
             diagnostics.setText("当前权限状态：\n" + permissionDiagnostics());
+
+            // 弹窗内按钮必须手动套主题色：XML 里的 style 只吃到静态 colorPrimary /
+            // colorSecondaryContainer，换主题色和深色模式都不会跟着变。
+            ThemeManager.applyPrimaryButton(openPermission);
+            ThemeManager.applyTonalButton(openWifiSettings);
+            int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+            closeButton.setBackgroundTintList(ColorStateList.valueOf(android.graphics.Color.TRANSPARENT));
+            closeButton.setTextColor(accent);
+            closeButton.setIconTint(ColorStateList.valueOf(accent));
 
             openPermission.setOnClickListener(v -> {
                 dialog.dismiss();
@@ -1385,8 +1462,29 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         super.onResume();
         applyThemeColors();
         updateCurrentConnection();
+        clearLegacySuggestionsOnce();
         checkPermissionsAndScan();
     }
+
+    /**
+     * 一次性清理历史遗留的 WiFi 建议。
+     *
+     * <p>旧版本的应用内连接会在系统 WLAN 列表里留下「可通过 网络工具箱 使用」的条目，
+     * 升级后即使改用「保存到系统」添加，这条残留仍然挂着。这里在每个进程首次进入
+     * 无线页时清一次；之后用户主动用「仅应用内连接」时仍会重新添加，不受影响。</p>
+     */
+    private void clearLegacySuggestionsOnce() {
+        if (legacySuggestionsCleared) return;
+        legacySuggestionsCleared = true;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            WifiConnector.clearAllSuggestions(requireContext());
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 历史遗留建议是否已清理过（每个进程只清一次） */
+    private static boolean legacySuggestionsCleared = false;
 
     @Override
     public void onDestroyView() {

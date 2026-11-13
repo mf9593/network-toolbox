@@ -21,7 +21,7 @@ public class LanChatDatabase extends SQLiteOpenHelper {
     
     private static final String TAG = "LanChatDatabase";
     private static final String DATABASE_NAME = "lan_chat.db";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
     
     // 消息表
     private static final String TABLE_MESSAGES = "messages";
@@ -88,6 +88,9 @@ public class LanChatDatabase extends SQLiteOpenHelper {
         // 创建索引加速查询
         db.execSQL("CREATE INDEX idx_peer_ip ON " + TABLE_MESSAGES + "(" + COL_PEER_IP + ")");
         db.execSQL("CREATE INDEX idx_timestamp ON " + TABLE_MESSAGES + "(" + COL_TIMESTAMP + ")");
+        // 唯一索引：同一条消息只允许存一行（时间戳+发送者+来源IP+内容）
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_unique ON " + TABLE_MESSAGES
+                + "(" + COL_TIMESTAMP + ", " + COL_SENDER + ", " + COL_SENDER_IP + ", " + COL_CONTENT + ")");
         
         // 创建好友表（复合主键：peer_ip + uid）
         String createFriendsTable = "CREATE TABLE " + TABLE_FRIENDS + " (" +
@@ -154,6 +157,16 @@ public class LanChatDatabase extends SQLiteOpenHelper {
             // v4 → v5: 添加 chat_type 列
             db.execSQL("ALTER TABLE " + TABLE_MESSAGES + " ADD COLUMN " + COL_CHAT_TYPE + " TEXT DEFAULT 'friend'");
         }
+        if (oldVersion < 6) {
+            // v5 → v6: 给消息表加唯一索引，根治「同一条消息被保存两次」。
+            // 先清掉历史重复行（按 timestamp+sender+sender_ip+content 分组，保留最小 _id），
+            // 否则唯一索引建不起来。
+            db.execSQL("DELETE FROM " + TABLE_MESSAGES + " WHERE " + COL_ID + " NOT IN ("
+                    + "SELECT MIN(" + COL_ID + ") FROM " + TABLE_MESSAGES + " GROUP BY "
+                    + COL_TIMESTAMP + ", " + COL_SENDER + ", " + COL_SENDER_IP + ", " + COL_CONTENT + ")");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_unique ON " + TABLE_MESSAGES
+                    + "(" + COL_TIMESTAMP + ", " + COL_SENDER + ", " + COL_SENDER_IP + ", " + COL_CONTENT + ")");
+        }
     }
     
     /**
@@ -199,7 +212,24 @@ public class LanChatDatabase extends SQLiteOpenHelper {
         values.put(COL_FILE_SIZE, message.getFileSize());
         values.put(COL_FILE_PATH, message.getFilePath());
         values.put(COL_IS_READ, 1);  // 默认已读
-        values.put(COL_UID, message.getUid());
+        // 自己发的消息原本 uid 是 0，导致好友换 IP 后这些历史消息无法归属（只能凭 IP 猜）。
+        // 这里按 peer_ip 从好友表补齐对方 uid，后续迁移历史消息就能按 uid 认领。
+        long msgUid = message.getUid();
+        if (msgUid == 0 && peerIp != null && !peerIp.isEmpty()) {
+            Cursor uidCursor = null;
+            try {
+                uidCursor = db.rawQuery("SELECT " + COL_FRIEND_UID + " FROM " + TABLE_FRIENDS
+                        + " WHERE " + COL_FRIEND_IP + " = ? AND " + COL_FRIEND_UID + " <> 0",
+                        new String[]{peerIp});
+                if (uidCursor.moveToFirst()) {
+                    msgUid = uidCursor.getLong(0);
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (uidCursor != null) uidCursor.close();
+            }
+        }
+        values.put(COL_UID, msgUid);
         
         // 根据peerIp判断聊天类型：null表示房间消息，否则为好友消息
         if (peerIp == null || peerIp.isEmpty()) {
@@ -208,7 +238,10 @@ public class LanChatDatabase extends SQLiteOpenHelper {
             values.put(COL_CHAT_TYPE, "friend");
         }
         
-        return db.insert(TABLE_MESSAGES, null, values);
+        // CONFLICT_IGNORE：唯一索引命中（同一条消息重复到达）时返回 -1 而不是抛异常。
+        // 之前用 db.insert() 会因为时间戳相同但分两次到达而插成两行。
+        return db.insertWithOnConflict(TABLE_MESSAGES, null, values,
+                SQLiteDatabase.CONFLICT_IGNORE);
     }
     
     /**
@@ -440,22 +473,153 @@ public class LanChatDatabase extends SQLiteOpenHelper {
     // ==================== 好友相关操作 ====================
     
     /**
-     * 添加好友
+     * 添加/更新好友。
+     *
+     * <p>好友的身份是 <b>uid</b>，不是 IP —— 同一台设备 DHCP 换 IP 后如果按 IP 存，
+     * 好友列表里会出现「同一个人好几条、一条在线其余离线」，聊天记录也会因为
+     * 按 peer_ip 分组而查不出来。这里统一按 uid 收敛：</p>
+     *
+     * <ul>
+     *   <li>uid 为 0（发现阶段还不知道 uid 的占位行）时，若表里已有同名且带真实 uid 的好友，
+     *       认为就是这个人换了 IP，复用那个 uid；</li>
+     *   <li>把该 uid 其它 IP 下的旧行删掉，并把旧 IP 下的聊天记录迁到新 IP；</li>
+     *   <li>顺手清掉同 IP 下的 uid=0 占位行，避免列表里同一个人出现两次。</li>
+     * </ul>
      */
     public long addFriend(String peerIp, long uid, String peerName, String roomCode, int tcpPort) {
         SQLiteDatabase db = getWritableDatabase();
+
+        // 1) uid 未知（0）时，尝试按「同名 + 已有真实 uid」认领成同一个人。
+        long effectiveUid = uid;
+        if (effectiveUid == 0 && peerName != null && !peerName.isEmpty()) {
+            Cursor cursor = null;
+            try {
+                cursor = db.rawQuery("SELECT " + COL_FRIEND_UID + " FROM " + TABLE_FRIENDS
+                                + " WHERE " + COL_FRIEND_NAME + " = ? AND " + COL_FRIEND_UID + " <> 0",
+                        new String[]{peerName});
+                long found = 0;
+                int count = 0;
+                while (cursor.moveToNext()) {
+                    count++;
+                    found = cursor.getLong(0);
+                }
+                // 只有唯一命中才敢认领，同名多人才不猜。
+                if (count == 1) {
+                    effectiveUid = found;
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (cursor != null) cursor.close();
+            }
+        }
+
+        // 2) 按 uid 收敛旧行，并把旧 IP 下的聊天记录迁到新 IP。
+        if (effectiveUid != 0 && peerIp != null && !peerIp.isEmpty()) {
+            try {
+                List<String> oldIps = new ArrayList<>();
+                // 旧 IP 有两个来源：
+                //  1) 好友表里该 uid 的其它历史行；
+                //  2) 消息表里该 uid 出现过的 IP（覆盖「自己发的」那些 uid=0 的行）。
+                Cursor cursor = db.rawQuery(
+                        "SELECT " + COL_FRIEND_IP + " FROM " + TABLE_FRIENDS
+                                + " WHERE " + COL_FRIEND_UID + " = ? AND " + COL_FRIEND_IP + " <> ?"
+                                + " UNION "
+                                + "SELECT " + COL_PEER_IP + " FROM " + TABLE_MESSAGES
+                                + " WHERE " + COL_UID + " = ? AND " + COL_PEER_IP + " IS NOT NULL"
+                                + " AND " + COL_PEER_IP + " <> '' AND " + COL_PEER_IP + " <> ?"
+                                + " AND COALESCE(" + COL_CHAT_TYPE + ", 'friend') <> 'room'",
+                        new String[]{String.valueOf(effectiveUid), peerIp,
+                                String.valueOf(effectiveUid), peerIp});
+                try {
+                    while (cursor.moveToNext()) {
+                        String oldIp = cursor.getString(0);
+                        if (oldIp != null && !oldIp.isEmpty()) {
+                            oldIps.add(oldIp);
+                        }
+                    }
+                } finally {
+                    cursor.close();
+                }
+                if (!oldIps.isEmpty()) {
+                    // 单独 try：迁移万一撞上唯一索引失败，也不能影响后面的好友去重。
+                    try {
+                        ContentValues migrate = new ContentValues();
+                        migrate.put(COL_PEER_IP, peerIp);
+                        if (peerName != null && !peerName.isEmpty()) {
+                            migrate.put(COL_PEER_NAME, peerName);
+                        }
+                        // 条件：来自该 uid 的消息，或存在旧 IP 下（含自己发的、uid 为 0 的那些）。
+                        StringBuilder where = new StringBuilder("(").append(COL_UID).append(" = ?");
+                        String[] args = new String[oldIps.size() + 2];
+                        args[0] = String.valueOf(effectiveUid);
+                        for (int i = 0; i < oldIps.size(); i++) {
+                            where.append(" OR ").append(COL_PEER_IP).append(" = ?");
+                            args[i + 1] = oldIps.get(i);
+                        }
+                        where.append(") AND ").append(COL_PEER_IP).append(" <> ?");
+                        args[oldIps.size() + 1] = peerIp;
+                        // 群聊消息（chat_type=room）不能挪到好友私聊里，必须排除。
+                        where.append(" AND COALESCE(").append(COL_CHAT_TYPE).append(", 'friend') <> 'room'");
+                        db.update(TABLE_MESSAGES, migrate, where.toString(), args);
+                    } catch (Exception e) {
+                        AppErrorLogger.catchError(TAG, "迁移好友历史消息失败", e);
+                    }
+                }
+                db.delete(TABLE_FRIENDS,
+                        COL_FRIEND_UID + " = ? AND " + COL_FRIEND_IP + " <> ?",
+                        new String[]{String.valueOf(effectiveUid), peerIp});
+            } catch (Exception ignored) {
+            }
+        }
+
         ContentValues values = new ContentValues();
         values.put(COL_FRIEND_IP, peerIp);
-        values.put(COL_FRIEND_UID, uid);
+        values.put(COL_FRIEND_UID, effectiveUid);
         values.put(COL_FRIEND_NAME, peerName);
         values.put(COL_FRIEND_ROOM_CODE, roomCode);
         values.put(COL_FRIEND_TCP_PORT, tcpPort);
         values.put(COL_FRIEND_ADDED_TIME, System.currentTimeMillis());
         values.put(COL_FRIEND_IS_ONLINE, 0);
-        
-        return db.insertWithOnConflict(TABLE_FRIENDS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+
+        long rowId = db.insertWithOnConflict(TABLE_FRIENDS, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+
+        // 3) 认领成功说明这个 IP 上的 uid=0 占位行是多余的，删掉。
+        if (effectiveUid != 0 && peerIp != null && !peerIp.isEmpty()) {
+            try {
+                db.delete(TABLE_FRIENDS,
+                        COL_FRIEND_IP + " = ? AND " + COL_FRIEND_UID + " = 0",
+                        new String[]{peerIp});
+            } catch (Exception ignored) {
+            }
+        }
+        return rowId;
     }
     
+    /**
+     * 清理好友表里「同一 uid 多条记录」的历史脏数据。
+     *
+     * <p>旧版本按 (peer_ip, uid) 存，设备换 IP 就会多出一行；好友列表里
+     * 同一个人出现好几次、其中一条在线其余离线。这里对每个 uid 只保留
+     * 最近添加的一条。</p>
+     */
+    public void dedupeFriendsByUid() {
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            db.execSQL("DELETE FROM " + TABLE_FRIENDS + " WHERE " + COL_FRIEND_UID + " <> 0 AND "
+                    + COL_FRIEND_UID + " || '|' || " + COL_FRIEND_IP + " NOT IN ("
+                    + "SELECT " + COL_FRIEND_UID + " || '|' || " + COL_FRIEND_IP
+                    + " FROM " + TABLE_FRIENDS + " WHERE " + COL_FRIEND_UID + " <> 0"
+                    + " GROUP BY " + COL_FRIEND_UID
+                    + " HAVING MAX(" + COL_FRIEND_ADDED_TIME + "))");
+            // 发现阶段留下的 uid=0 占位行：同名的真实好友已经存在就删掉，
+            // 否则好友列表里同一个人会出现两条（一条在线、一条离线）。
+            db.execSQL("DELETE FROM " + TABLE_FRIENDS + " WHERE " + COL_FRIEND_UID + " = 0 AND "
+                    + COL_FRIEND_NAME + " IN (SELECT " + COL_FRIEND_NAME + " FROM " + TABLE_FRIENDS
+                    + " WHERE " + COL_FRIEND_UID + " <> 0)");
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * 删除某个 IP 下 uid 为 0 的「手动添加」占位行。
      *
