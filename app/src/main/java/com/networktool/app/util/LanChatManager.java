@@ -106,7 +106,7 @@ public class LanChatManager {
     
     // Socket相关
     private WifiManager.MulticastLock multicastLock;  // WiFi多播锁，确保能接收广播/组播包
-    private volatile String lastLanInterfaceName;    // 上次记录过的组播出口网卡名（避免重复记日志）
+    private volatile String lastLanInterfaceName;    // 上次记录过的组播网卡清单（避免重复记日志）
     private MulticastSocket negotiationSocket;  // 用于端口协商的组播socket（公共通道）
     private ServerSocket tcpServerSocket;
     private boolean isRunning = false;
@@ -642,16 +642,22 @@ public class LanChatManager {
     }
     
     /**
-     * 选出当前承载局域网的网卡（Wi-Fi / 以太网）。
+     * 列出当前承载局域网的网卡（Wi-Fi 与有线以太网，可能同时存在）。
      *
-     * <p>手机同时开着移动数据时，默认路由往往落在 rmnet 上。组播 socket 如果不指定网卡，
-     * 内核就会按路由表选出口，"在线宣告"直接发到 4G 去了——表现就是"两台设备明明连着
-     * 同一个 Wi-Fi，却互相刷不出来"。这里优先按 ConnectivityManager 的传输类型精确挑网卡，
-     * 拿不到再按接口名（wlan/eth/ap）兜底，并排除移动数据接口。</p>
+     * <p>手机/盒子同时插网线和开 Wi-Fi 时，两张网卡都可能是对端所在网络。组播必须
+     * 在每张局域网网卡上都加入组播组，否则只在其中一张网卡上收包，另一半场景会"刷不出好友"。</p>
      *
-     * @return 局域网网卡；没有可用网卡时返回 null
+     * <p>候选来源优先用 ConnectivityManager 的传输类型（精确），拿不到再按接口名兜底。
+     * 无论哪条路径都排除移动数据接口（rmnet / pdp / ccmni / rmnet_data），
+     * 避免组播被发到 4G 上。</p>
+     *
+     * @return 局域网网卡列表；没有可用网卡时返回空列表
      */
-    private NetworkInterface lanNetworkInterface() {
+    private java.util.List<NetworkInterface> lanNetworkInterfaces() {
+        java.util.List<NetworkInterface> result = new java.util.ArrayList<>(2);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+
+        // ① 按传输类型精确挑：Wi-Fi + 以太网
         try {
             ConnectivityManager cm = (ConnectivityManager)
                     appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -668,75 +674,154 @@ public class LanChatManager {
                     String name = properties.getInterfaceName();
                     if (name == null || name.isEmpty()) continue;
                     NetworkInterface ni = NetworkInterface.getByName(name);
-                    if (ni != null && ni.isUp()) return ni;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        // 兜底：按接口名挑，排除 rmnet/pdp/ccmni 等移动数据接口
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces != null && interfaces.hasMoreElements()) {
-                NetworkInterface ni = interfaces.nextElement();
-                if (!ni.isUp() || ni.isLoopback()) continue;
-                String name = ni.getName().toLowerCase(java.util.Locale.ROOT);
-                if (!name.startsWith("wlan") && !name.startsWith("eth") && !name.startsWith("ap")) {
-                    continue;
-                }
-                for (InetAddress address : Collections.list(ni.getInetAddresses())) {
-                    if (address instanceof java.net.Inet4Address && !address.isLoopbackAddress()) {
-                        return ni;
+                    if (ni != null && ni.isUp() && hasIpv4(ni) && seen.add(ni.getName())) {
+                        result.add(ni);
                     }
                 }
             }
         } catch (Exception ignored) {
         }
-        return null;
+
+        // ② 兜底：按接口名挑（排除 rmnet/pdp/ccmni 等移动数据接口）
+        if (result.isEmpty()) {
+            try {
+                Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                while (interfaces != null && interfaces.hasMoreElements()) {
+                    NetworkInterface ni = interfaces.nextElement();
+                    if (!ni.isUp() || ni.isLoopback()) continue;
+                    String name = ni.getName().toLowerCase(java.util.Locale.ROOT);
+                    if (isMobileDataInterface(name)) continue;
+                    if (!name.startsWith("wlan") && !name.startsWith("eth")
+                            && !name.startsWith("ap") && !name.startsWith("usb")) {
+                        continue;
+                    }
+                    if (hasIpv4(ni) && seen.add(ni.getName())) {
+                        result.add(ni);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
+    }
+
+    /** 是否为移动数据接口（组播一律不走这些接口） */
+    private static boolean isMobileDataInterface(String lowerName) {
+        return lowerName.startsWith("rmnet") || lowerName.startsWith("pdp")
+                || lowerName.startsWith("ccmni") || lowerName.startsWith("ppp")
+                || lowerName.startsWith("wwan") || lowerName.startsWith("clat");
+    }
+
+    private static boolean hasIpv4(NetworkInterface ni) {
+        try {
+            for (InetAddress address : Collections.list(ni.getInetAddresses())) {
+                if (address instanceof java.net.Inet4Address && !address.isLoopbackAddress()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /**
+     * 选出用于「发送」组播的那张网卡。
+     *
+     * <p>IP_MULTICAST_IF 只能指定一张网卡，所以发送走单张：优先当前活动网络，
+     * 其次有线（更稳定），最后才用 Wi-Fi。接收不受此限制——{@link #joinGroupOnLan}
+     * 会在每张局域网网卡上都加入组播组。</p>
+     */
+    private NetworkInterface preferredLanNetworkInterface() {
+        java.util.List<NetworkInterface> interfaces = lanNetworkInterfaces();
+        if (interfaces.isEmpty()) return null;
+        if (interfaces.size() == 1) return interfaces.get(0);
+
+        // ① 当前活动网络所在网卡
+        try {
+            ConnectivityManager cm = (ConnectivityManager)
+                    appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                Network active = cm.getActiveNetwork();
+                if (active != null) {
+                    LinkProperties properties = cm.getLinkProperties(active);
+                    String name = properties == null ? null : properties.getInterfaceName();
+                    if (name != null) {
+                        for (NetworkInterface ni : interfaces) {
+                            if (ni.getName().equals(name)) return ni;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // ② 有线优先（插网线通常比 Wi-Fi 稳）
+        for (NetworkInterface ni : interfaces) {
+            String name = ni.getName().toLowerCase(java.util.Locale.ROOT);
+            if (name.startsWith("eth") || name.startsWith("usb")) return ni;
+        }
+        return interfaces.get(0);
     }
 
     /**
      * 把组播 socket 的出口网卡固定到局域网网卡。
      *
-     * <p>对应 setsockopt 的 IP_MULTICAST_IF，只影响组播包的发送；拿不到网卡时保持系统默认。</p>
+     * <p>对应 setsockopt 的 IP_MULTICAST_IF，只影响组播包的发送；无法确定网卡时保持系统默认，
+     * 由后续的 joinGroupOnLan 兜底。</p>
      */
     private void applyLanInterface(MulticastSocket socket) {
         if (socket == null || socket.isClosed()) return;
-        NetworkInterface ni = lanNetworkInterface();
+        NetworkInterface ni = preferredLanNetworkInterface();
         if (ni == null) return;
         try {
             socket.setNetworkInterface(ni);
-            String name = ni.getName();
-            if (!name.equals(lastLanInterfaceName)) {
-                lastLanInterfaceName = name;
-                Log.d(TAG, "组播出口网卡: " + name);
-                DebugLogger.logDiscovery("LanChat", "组播出口网卡", name);
-            }
+            logLanInterfaces();
         } catch (Exception e) {
             Log.w(TAG, "绑定组播出口网卡失败: " + e.getMessage());
         }
     }
 
     /**
-     * 在局域网网卡上加入组播组。
+     * 在全部局域网网卡上加入组播组。
      *
-     * <p>不要用单参数的 {@code joinGroup(InetAddress)}：它同样按路由表选网卡，
-     * 移动数据在默认路由时会加入错误的组，收到的组播包自然也是空的。</p>
+     * <p>不要用单参数的 {@code joinGroup(InetAddress)}：它按路由表选网卡，移动数据在默认路由时
+     * 会加入错误的组。这里逐张局域网网卡加入，Wi-Fi 与有线同时在线的设备也能双向收包。</p>
      */
     private void joinGroupOnLan(MulticastSocket socket, InetAddress group, int port) {
         if (socket == null || socket.isClosed() || group == null) return;
-        NetworkInterface ni = lanNetworkInterface();
-        try {
-            if (ni != null) {
-                socket.joinGroup(new InetSocketAddress(group, port), ni);
-            } else {
-                socket.joinGroup(group);
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "加入组播组失败: " + e.getMessage());
+        java.util.List<NetworkInterface> interfaces = lanNetworkInterfaces();
+        boolean joinedAny = false;
+        for (NetworkInterface ni : interfaces) {
             try {
-                socket.joinGroup(group);
-            } catch (Exception ignored) {
+                socket.joinGroup(new InetSocketAddress(group, port), ni);
+                joinedAny = true;
+            } catch (Exception e) {
+                Log.w(TAG, "在 " + ni.getName() + " 加入组播组失败: " + e.getMessage());
             }
+        }
+        if (!joinedAny) {
+            // 没有局域网网卡时不退回到「按路由表选网卡」：那样组播会跑到移动数据上，
+            // 既收不到局域网设备，又白白耗流量
+            Log.w(TAG, "没有可用的局域网网卡，跳过组播组加入");
+        }
+        logLanInterfaces();
+    }
+
+    /** 记录一次当前用于组播的网卡清单（变化时才写，避免刷屏） */
+    private void logLanInterfaces() {
+        java.util.List<NetworkInterface> interfaces = lanNetworkInterfaces();
+        StringBuilder names = new StringBuilder();
+        for (NetworkInterface ni : interfaces) {
+            if (names.length() > 0) names.append(", ");
+            names.append(ni.getName());
+        }
+        NetworkInterface send = preferredLanNetworkInterface();
+        String summary = names.length() == 0 ? "无"
+                : names + (send == null ? "" : "（发送走 " + send.getName() + "）");
+        if (!summary.equals(lastLanInterfaceName)) {
+            lastLanInterfaceName = summary;
+            Log.d(TAG, "组播网卡: " + summary);
+            DebugLogger.logDiscovery("LanChat", "组播网卡", summary);
         }
     }
 
