@@ -1287,9 +1287,15 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
     }
 
     /**
-     * 先尝试直接请求系统打开 WiFi（Android 9 及以下有效）。
-     * Android 10+ 起普通应用不再允许直接开关 WiFi，setWifiEnabled 会返回 false，
-     * 这时再跳到系统 WiFi 设置让用户手动打开。
+     * 尝试用最少的用户操作打开 WiFi。
+     *
+     * <ul>
+     *   <li>Android 10+：普通应用调用 {@code setWifiEnabled} 会被静默拒绝（返回 false），
+     *       改用 {@link Settings.Panel#ACTION_INTERNET_CONNECTIVITY} 弹出半屏网络面板，
+     *       用户点一下 WiFi 图标即开，面板收起后自动回到本页</li>
+     *   <li>Android 9 及以下：{@code setWifiEnabled} 依然有效，直接代码打开</li>
+     *   <li>兜底：面板不存在（部分 OEM 未实现）或直接打开失败时，跳系统 WiFi 设置页</li>
+     * </ul>
      */
     private void enableWifiOrOpenSettings() {
         if (!isAdded()) return;
@@ -1297,6 +1303,12 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             scanWifi(true);
             return;
         }
+
+        // Android 10 起三方应用无权直接开关 WiFi，优先用系统网络面板
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && openInternetPanel()) {
+            return;
+        }
+
         boolean requested = false;
         try {
             if (wifiManager != null) {
@@ -1320,6 +1332,24 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
         } else {
             showToast("系统限制无法直接打开，请手动开启");
             openWifiSettings();
+        }
+    }
+
+    /**
+     * 弹出系统的网络连接面板（半屏浮层，含 WiFi / 移动数据开关）。
+     *
+     * @return 面板已拉起返回 true；系统或定制 ROM 不支持时返回 false，由调用方兜底
+     */
+    private boolean openInternetPanel() {
+        try {
+            Intent intent = new Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            // 面板是浮层，用户点完会回到本页，onResume 里会重新刷新扫描结果
+            return true;
+        } catch (Exception e) {
+            AppErrorLogger.catchThrowable(TAG, "打开网络面板失败", e);
+            return false;
         }
     }
 
