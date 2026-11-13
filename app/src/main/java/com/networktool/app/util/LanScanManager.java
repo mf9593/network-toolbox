@@ -1716,8 +1716,6 @@ public class LanScanManager {
                 {"ruijie", "锐捷设备"},
                 {"hik", "海康威视设备"},
                 {"uniview", "宇视设备"},
-                {"nvr", "网络录像机(NVR)"},
-                {"ipc", "网络摄像机(IPC)"},
                 {"synology", "群晖 NAS"},
                 {"qnap", "QNAP NAS"},
                 {"openwrt", "OpenWrt 路由"},
@@ -1726,6 +1724,14 @@ public class LanScanManager {
                 {"netgear", "网件设备"},
                 {"vstarcam", "威视达康设备"},
                 {"v380", "V380 摄像头"},
+                // 这几个品牌的登录页 <title> 是空的，靠页面里的插件名 / 官网域名辨认：
+                // 天地伟业页面引用 conf/conf.js（内容 theme:"tiandy"）和 Swallow.exe 插件
+                {"swallow.exe", "天地伟业设备"},
+                {"tiandy", "天地伟业设备"},
+                // 安佳威视的插件下载地址指向 www.icamra.com
+                {"icamra", "安佳威视设备"},
+                // 中维世纪用 <title data-i18n-l="jovision">，标题文本由前端 i18n 填充
+                {"jovision", "中维世纪设备"},
                 // 电信/联通光猫、智能网关常见首页：标题为空，靠这些特征串辨认
                 {"version_switch.gch", "天翼网关（光猫）"},
                 {"registercountrycode", "天翼网关（光猫）"},
@@ -1738,6 +1744,10 @@ public class LanScanManager {
                 {"mercury", "水星设备"},
                 {"fastcom", "迅捷设备"},
                 {"zte", "中兴设备"},
+                // 泛称放最后：品牌名更具体，先让上面那些命中。
+                // 很多摄像头页面都写着 IPCamera/IPC，放前面会把品牌名盖掉
+                {"nvr", "网络录像机(NVR)"},
+                {"ipc", "网络摄像机(IPC)"},
         };
         for (String[] signature : signatures) {
             if (lower.contains(signature[0])) return signature[1];
