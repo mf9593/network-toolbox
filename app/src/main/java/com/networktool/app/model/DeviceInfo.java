@@ -75,6 +75,8 @@ public class DeviceInfo {
     private int discoveryPriority = Integer.MAX_VALUE;
     /** 当前标题来自哪个协议（用于按用户配置的优先级判断能否被覆盖） */
     private String titleSource;
+    /** 是否为本机设备（本机固定排最前、标题用设备名、标签显示「本机」） */
+    private boolean localDevice;
 
     /**
      * 获取设备显示标题
@@ -236,6 +238,23 @@ public class DeviceInfo {
      */
     public void setTitleSource(String titleSource) {
         this.titleSource = titleSource;
+    }
+
+    /**
+     * 是否是「本机设备」（扫描发起方自己这一台）。
+     *
+     * <p>本机在列表里固定排第一位、标题用设备自身的名称（用户改过的设备名或机型），
+     * 分类标签显示「本机」而不是「电脑」——本机是手机或平板，不是电脑。</p>
+     */
+    public boolean isLocalDevice() {
+        return localDevice;
+    }
+
+    /**
+     * 标记是否为本机设备
+     */
+    public void setLocalDevice(boolean localDevice) {
+        this.localDevice = localDevice;
     }
 
     /**

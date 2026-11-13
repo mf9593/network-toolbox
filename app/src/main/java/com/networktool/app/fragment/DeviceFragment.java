@@ -103,6 +103,8 @@ public class DeviceFragment extends Fragment {
     private static final String SORT_IP = "ip";
     private static final String SORT_NAME = "name";
     private String sortBy = SORT_IP;
+    /** 「本机设备」行的标题来源标签，优先级最高（见 TitlePriorityConfig） */
+    private static final String LOCAL_DEVICE_SOURCE = TitlePriorityConfig.LOCAL_LABEL;
     private boolean isScanning = false;
     private String scanStatus = "";
     private String scanLocalIp;
@@ -598,11 +600,26 @@ public class DeviceFragment extends Fragment {
                 public void onDeviceUpdated(DeviceInfo device) {
                     if (!isAdded() || device == null || generation != scanGeneration) return;
                     for (int i = 0; i < deviceList.size(); i++) {
-                        if (deviceList.get(i).getIp() != null
-                                && deviceList.get(i).getIp().equals(device.getIp())) {
-                            deviceList.set(i, device);
-                            break;
+                        DeviceInfo existing = deviceList.get(i);
+                        if (existing.getIp() == null
+                                || !existing.getIp().equals(device.getIp())) {
+                            continue;
                         }
+                        // 本机这一行是页面自己放的：标题用设备名、标记 localDevice。
+                        // 扫描器送来的对象没有这些信息，直接替换会把标题和标记冲掉，
+                        // 所以这里保留本机的标题/标记，只把扫描补到的信息（MAC、端口、协议）并进来。
+                        if (existing.isLocalDevice()) {
+                            device.setLocalDevice(true);
+                            if (existing.getTitle() != null && !existing.getTitle().isEmpty()) {
+                                device.setTitle(existing.getTitle());
+                            }
+                            device.setTitleSource(LOCAL_DEVICE_SOURCE);
+                            for (Integer port : existing.getPorts()) {
+                                device.addPort(port);
+                            }
+                        }
+                        deviceList.set(i, device);
+                        break;
                     }
                     applyFilter();
                 }
@@ -697,6 +714,12 @@ public class DeviceFragment extends Fragment {
         applyFilter();
     }
 
+    /**
+     * 往列表里放「本机设备」这一行。
+     *
+     * <p>本机固定排在列表最前面（用户最先关心的就是自己这台），
+     * 标题直接用设备自身的名称（系统「设备名称」或机型），不再拼 "(localhost)"。</p>
+     */
     private void addLocalDevice() {
         String localIp = scanLocalIp;
         if (localIp == null || localIp.isEmpty()) {
@@ -708,19 +731,19 @@ public class DeviceFragment extends Fragment {
         }
         DeviceInfo device = new DeviceInfo();
         device.setIp(localIp);
-        device.setTitle("本机设备 (" + getLocalHostname() + ")");
-        device.setIconType(DeviceInfo.ICON_COMPUTER);
-        device.addProtocolName("ARP表", device.getTitle());
+        device.setTitle(NetworkUtils.getLocalDeviceName(requireContext()));
+        // 图标跟着真实设备类型走：手机用手机图标，别再一律套「电脑」
+        int localType = DeviceInfo.ICON_COMPUTER;
+        if ("手机".equals(NetworkUtils.getLocalDeviceTypeLabel(requireContext()))) {
+            localType = DeviceInfo.ICON_PHONE;
+        }
+        device.setIconType(localType);
+        device.setLocalDevice(true);
+        // 标题来源设成「本机」，优先级表里最高，扫描器拿到别的名字也盖不掉
+        device.setTitleSource(LOCAL_DEVICE_SOURCE);
+        device.addProtocolName(LOCAL_DEVICE_SOURCE, device.getTitle());
         deviceList.add(device);
         applyFilter();
-    }
-
-    private String getLocalHostname() {
-        try {
-            return java.net.InetAddress.getLocalHost().getHostName();
-        } catch (Exception e) {
-            return "localhost";
-        }
     }
 
     private void searchRouterBackend() {
@@ -1139,15 +1162,24 @@ public class DeviceFragment extends Fragment {
         group.removeAllViews();
         java.util.Set<String> protocols = device.getProtocolNames().keySet();
         if (protocols.isEmpty()) return;
-        int accentColor = ThemeManager.getAccessibleThemeColor(requireContext());
+        android.content.Context context = requireContext();
+        // 和列表里的分类/来源标签用同一套配色（浅色底 + 同色系描边 + 主题文字色），
+        // 换主题色或切深色模式时一起跟随。
+        int chipSurface = ThemeManager.getBadgeSurfaceColor(context);
+        int chipStroke = ThemeManager.getBadgeStrokeColor(context);
+        int chipText = ThemeManager.getBadgeTextColor(context);
         for (String protocol : protocols) {
             com.google.android.material.chip.Chip chip =
-                    new com.google.android.material.chip.Chip(requireContext());
+                    new com.google.android.material.chip.Chip(context);
             chip.setText(protocol);
             chip.setClickable(true);
             chip.setFocusable(true);
-            chip.setTextColor(accentColor);
-            chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(accentColor));
+            chip.setTextColor(chipText);
+            // 背景必须显式设置：Chip 默认背景取自 colorSecondaryContainer，
+            // 而 Theme.NetworkTool 没定义这个属性，会落到 Material 默认的淡紫色，
+            // 和当前主题色对不上（表现为「弹窗里协议卡片背景没跟随主题」）。
+            chip.setChipBackgroundColor(android.content.res.ColorStateList.valueOf(chipSurface));
+            chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(chipStroke));
             chip.setChipStrokeWidth(dpToPx(1));
             chip.setCloseIconVisible(false);
             chip.setOnClickListener(v -> openProtocolLogs(protocol));
@@ -1478,6 +1510,11 @@ public class DeviceFragment extends Fragment {
      * 同名/同 IP 时再用发现优先级和 IP 版本兜底，保证顺序稳定。
      */
     private int compareDevices(DeviceInfo a, DeviceInfo b) {
+        // 「本机设备」永远排第一位：不管用户选按 IP 还是按名称，
+        // 自己这台都是第一个要看的。
+        if (a.isLocalDevice() != b.isLocalDevice()) {
+            return a.isLocalDevice() ? -1 : 1;
+        }
         if (SORT_NAME.equals(sortBy)) {
             String na = a.getTitle() == null ? "" : a.getTitle().trim();
             String nb = b.getTitle() == null ? "" : b.getTitle().trim();

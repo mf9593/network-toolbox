@@ -21,10 +21,13 @@ public final class TitlePriorityConfig {
     public static final String PREFS_NAME = "app_settings";
     public static final String KEY_ORDER = "title_priority_order";
 
-    /** 默认顺序：路由器品牌优先，避免被 NetBIOS 的共享服务名覆盖 */
+    /** 「本机」这一行的标题来源标签，优先级永远最高 */
+    public static final String LOCAL_LABEL = "本机";
+
+    /** 默认顺序：本机永远第一；路由器品牌其次，避免被 NetBIOS 的共享服务名覆盖 */
     private static final List<String> DEFAULT_ORDER = Arrays.asList(
-            "路由器", "mDNS", "NetBIOS", "SADP", "SSDP", "ARP表", "UDP广播",
-            "HTTP", "Ping探测", "IPv6", "端口探测", "ONVIF", "WS-Discovery");
+            "本机", "路由器", "mDNS", "NetBIOS", "SADP", "SSDP", "ARP表", "UDP广播",
+            "HTTP", "Ping探测", "IPv6", "端口探测", "ONVIF", "WSD");
 
     private TitlePriorityConfig() {
     }
@@ -50,7 +53,7 @@ public final class TitlePriorityConfig {
         }
         if (saved != null && !saved.isEmpty()) {
             for (String line : saved.split("\n")) {
-                String label = line.trim();
+                String label = normalize(line.trim());
                 if (!label.isEmpty() && !result.contains(label)) {
                     result.add(label);
                 }
@@ -62,6 +65,16 @@ public final class TitlePriorityConfig {
             }
         }
         return result;
+    }
+
+    /**
+     * 协议名兼容映射：旧版本用过的长名字统一收敛到现在的简写，
+     * 否则用户老配置里的 "WS-Discovery" 会和新加的 "WSD" 变成两项。
+     */
+    private static String normalize(String label) {
+        if (label == null) return "";
+        if ("WS-Discovery".equalsIgnoreCase(label)) return "WSD";
+        return label;
     }
 
     /** 保存顺序（每行一个协议名） */
@@ -82,6 +95,12 @@ public final class TitlePriorityConfig {
 
     /** 协议排序权重：数字越小越优先，未知协议排在最后 */
     public static int rank(Context context, String label) {
+        // 「本机」永远最高优先级：本机在列表里必须是第一个、名字不能被别的协议盖掉。
+        // 不走用户配置表，是因为旧版本保存的顺序里没有这一项，
+        // 合并时会把它补在末尾（=最低优先级），逻辑正好反了。
+        if (LOCAL_LABEL.equals(label)) {
+            return Integer.MIN_VALUE;
+        }
         List<String> order = getOrder(context);
         int index = order.indexOf(label);
         return index >= 0 ? index : order.size();

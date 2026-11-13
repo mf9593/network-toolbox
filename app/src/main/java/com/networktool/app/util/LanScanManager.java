@@ -87,7 +87,7 @@ public class LanScanManager {
     private static final java.util.Map<Integer, String> PROTOCOL_LABELS = new java.util.HashMap<>();
     static {
         PROTOCOL_LABELS.put(PRIORITY_ONVIF, "ONVIF");
-        PROTOCOL_LABELS.put(PRIORITY_WSD, "WS-Discovery");
+        PROTOCOL_LABELS.put(PRIORITY_WSD, "WSD");
         PROTOCOL_LABELS.put(PRIORITY_SADP, "SADP");
         PROTOCOL_LABELS.put(PRIORITY_ROUTER, "路由器");
         PROTOCOL_LABELS.put(PRIORITY_SSDP, "SSDP");
@@ -1338,8 +1338,10 @@ public class LanScanManager {
                         continue;
                     }
                     if (kind.kind == WsdDeviceKind.PRINTER) {
+                        // 打印机同样不是 ONVIF 设备，协议标签走 WSD，
+                        // 否则详情页会冒出不相关的「ONVIF 调试」入口
                         addDeviceWithPriority(senderIp, kind.label, null,
-                                DeviceInfo.ICON_PRINTER, PRIORITY_ONVIF, null,
+                                DeviceInfo.ICON_PRINTER, PRIORITY_WSD, null,
                                 extractOnvifPort(responseStr));
                         continue;
                     }
@@ -2842,6 +2844,12 @@ public class LanScanManager {
                             url,
                             DeviceInfo.ICON_ROUTER,
                             PRIORITY_ROUTER);
+                    // 品牌单独作为一个标签挂到设备上，列表里就能直接看出是哪家的路由器。
+                    // 标题仍然保留页面真实名称（「中国电信智能网关」比「电信路由」信息量大），
+                    // 品牌只补一个标签，不再出现「路由器」重复两遍的问题。
+                    if (matchedBrand != null) {
+                        exposeRouterBrand(gateway, matchedBrand);
+                    }
                 } else if (isScanning) {
                     RuntimeLogStore.record(RuntimeLogStore.P_ROUTER, gateway, "网关标题",
                             "80 / 443 均未取到 HTTP 标题");
@@ -2850,6 +2858,30 @@ public class LanScanManager {
         }
     }
     
+    /**
+     * 把识别出的品牌登记成设备上的一个标签。
+     *
+     * <p>只是把 {@link RouterBrandMatcher} 的匹配结果显示出来，不再重复做识别。
+     * 同时写一条运行报文，详情页点这个标签时能直接看到匹配依据。</p>
+     */
+    private void exposeRouterBrand(final String gateway, final String brand) {
+        if (gateway == null || brand == null || brand.isEmpty()) return;
+        RuntimeLogStore.record(brand, gateway, "品牌识别",
+                "路由器登录页特征匹配 → " + brand);
+        mainHandler.post(() -> {
+            for (DeviceInfo device : deviceList) {
+                if (gateway.equals(device.getIp())) {
+                    // key 用品牌名，列表标签行会显示「ARP表 · 电信路由」这种形式
+                    device.addProtocolName(brand, brand);
+                    if (listener != null) listener.onDeviceUpdated(device);
+                    cachedDevices = new ArrayList<>(deviceList);
+                    notifySnapshotChanged(cachedDevices);
+                    return;
+                }
+            }
+        });
+    }
+
     /**
      * 尝试通过主机名连接路由器（路由器本地DNS拦截，无需外网）
      */

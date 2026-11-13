@@ -712,6 +712,81 @@ public class NetworkUtils {
     }
 
     /**
+     * 判断本机是哪一类设备，返回给列表用的分类标签。
+     *
+     * <p>以前本机在列表里一律标「电脑」，因为占位行写死了 {@code ICON_COMPUTER}。
+     * 实际跑这个 App 的绝大多数是手机/平板，标成电脑是错的。这里按系统信息判断：</p>
+     *
+     * <ul>
+     *   <li>{@code uiMode} = TELEVISION / WATCH / CAR → 电视 / 手表 / 车机</li>
+     *   <li>最小宽度 ≥ 600dp → 平板</li>
+     *   <li>有电话功能 → 手机</li>
+     *   <li>都没有 → 电脑（平板形态的桌面系统 / 模拟器）</li>
+     * </ul>
+     */
+    public static String getLocalDeviceTypeLabel(Context context) {
+        try {
+            if (context != null) {
+                android.content.res.Configuration config = context.getResources().getConfiguration();
+                int uiMode = config.uiMode & android.content.res.Configuration.UI_MODE_TYPE_MASK;
+                if (uiMode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) return "电视";
+                if (uiMode == android.content.res.Configuration.UI_MODE_TYPE_WATCH) return "手表";
+                if (uiMode == android.content.res.Configuration.UI_MODE_TYPE_CAR) return "车机";
+                int smallestWidth = config.smallestScreenWidthDp;
+                if (smallestWidth >= 600) return "平板";
+                if (context.getPackageManager()
+                        .hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEPHONY)) {
+                    return "手机";
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "电脑";
+    }
+
+    /**
+     * 获取本机设备的显示名称。
+     *
+     * <p>优先用用户在系统设置里改过的「设备名称」（`Settings.Global.DEVICE_NAME`，
+     * 和蓝牙/热点名同一个值），没有就用机型（`Build.MODEL`），最后兜底 "本机"。</p>
+     *
+     * <p>不能只用 {@code InetAddress.getLocalHost().getHostName()}：Android 上它
+     * 通常返回 "localhost" 或 "android-xxxx"，对用户没有意义。</p>
+     */
+    public static String getLocalDeviceName(Context context) {
+        String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+        String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.trim();
+        // 机型名：厂商 + 型号，避免「M511CD」「2211133C」这种看不出是谁的代号
+        String modelLabel = model;
+        if (!model.isEmpty() && !manufacturer.isEmpty()
+                && !model.toLowerCase(Locale.ROOT).startsWith(manufacturer.toLowerCase(Locale.ROOT))) {
+            modelLabel = manufacturer + " " + model;
+        }
+
+        // 1) 系统「设备名称」：用户在设置里能改，也是热点/蓝牙显示的名字
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && context != null) {
+            try {
+                String deviceName = android.provider.Settings.Global.getString(
+                        context.getContentResolver(),
+                        android.provider.Settings.Global.DEVICE_NAME);
+                if (deviceName != null && !deviceName.trim().isEmpty()) {
+                    String trimmed = deviceName.trim();
+                    // 系统默认值就是机型代号时，补上厂商标识更好认
+                    if (!model.isEmpty() && trimmed.equalsIgnoreCase(model)) {
+                        return modelLabel;
+                    }
+                    return trimmed;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (!modelLabel.isEmpty()) {
+            return modelLabel;
+        }
+        return "本机";
+    }
+
+    /**
      * 获取当前活动网络（WiFi/以太网/移动数据）的 IPv4 地址。
      * 通过 LinkProperties 读取，避免枚举 NetworkInterface 时拿到错误接口。
      */

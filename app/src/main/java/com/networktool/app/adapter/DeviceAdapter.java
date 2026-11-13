@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.card.MaterialCardView;
 import com.networktool.app.R;
 import com.networktool.app.model.DeviceInfo;
+import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 
 import java.util.List;
@@ -73,7 +74,12 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.macText.setVisibility(View.VISIBLE);
         }
 
-        String protocols = joinProtocols(device);
+        // 分类标签：设备类型从标题前缀【】挪到这里，标题只保留设备名。
+        // 标签放在端口那一行靠左，不挤在标题行右侧（会把标题行撑高）
+        String category = categoryLabel(device, holder.itemView.getContext());
+
+        // 来源标签：跳过和分类标签同名的协议，否则路由器会显示「路由器 路由器」两个一样的标签
+        String protocols = joinProtocols(device, category);
         holder.protocolText.setText(protocols);
         if (protocols.isEmpty()) {
             holder.protocolText.setVisibility(View.GONE);
@@ -99,9 +105,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
             holder.portsText.setVisibility(View.VISIBLE);
         }
 
-        // 分类标签：设备类型从标题前缀【】挪到这里，标题只保留设备名。
-        // 标签放在端口那一行靠左，不挤在标题行右侧（会把标题行撑高）
-        String category = categoryLabel(device);
         if (category == null) {
             holder.categoryText.setVisibility(View.GONE);
         } else {
@@ -206,11 +209,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
         chip.setBackground(badge);
     }
 
-    private String joinProtocols(DeviceInfo device) {
+    private String joinProtocols(DeviceInfo device, String category) {
         StringBuilder builder = new StringBuilder();
         for (Map.Entry<String, String> entry : device.getProtocolNames().entrySet()) {
+            String label = entry.getKey();
+            // 和分类标签同名的协议不再重复展示（例如路由器的「路由器」协议 vs 「路由器」分类）
+            if (category != null && category.equals(label)) continue;
             if (builder.length() > 0) builder.append(" · ");
-            builder.append(entry.getKey());
+            builder.append(label);
         }
         return builder.toString();
     }
@@ -224,7 +230,12 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
      *
      * @return 分类文本；无明确分类时返回 null（不显示标签）
      */
-    private String categoryLabel(DeviceInfo device) {
+    private String categoryLabel(DeviceInfo device, Context context) {
+        // 本机单独判断：设备类型按真实情况识别（手机/平板/电视/手表/车机），
+        // 不再因为它用的是 ICON_COMPUTER 就一律显示「电脑」。
+        if (device.isLocalDevice()) {
+            return NetworkUtils.getLocalDeviceTypeLabel(context);
+        }
         switch (device.getIconType()) {
             case DeviceInfo.ICON_ROUTER:
                 return "路由器";
