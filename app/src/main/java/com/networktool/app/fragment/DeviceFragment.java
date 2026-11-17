@@ -232,7 +232,7 @@ public class DeviceFragment extends Fragment {
         dialog.setContentView(view);
 
         TextView title = view.findViewById(R.id.filterSheetTitle);
-        if (title != null) title.setText("IP 版本");
+        if (title != null) title.setText("网络协议");
         TextView subtitle = view.findViewById(R.id.filterSheetSubtitle);
         if (subtitle != null) subtitle.setText("只显示某一类地址，默认两类都显示");
 
@@ -251,7 +251,7 @@ public class DeviceFragment extends Fragment {
 
     private List<ScanOptionAdapter.Option> buildIpVersionOptions() {
         List<ScanOptionAdapter.Option> options = new ArrayList<>();
-        options.add(new ScanOptionAdapter.Option(null, "全部协议", "IPv4 和 IPv6 设备都显示"));
+        options.add(new ScanOptionAdapter.Option(null, "全部", "IPv4 和 IPv6 设备都显示"));
         options.add(new ScanOptionAdapter.Option("ipv4", "IPv4", "只显示使用 IPv4 地址的设备"));
         options.add(new ScanOptionAdapter.Option("ipv6", "IPv6", "只显示使用 IPv6 地址的设备"));
         return options;
@@ -367,10 +367,10 @@ public class DeviceFragment extends Fragment {
         } else if (ipVersionFilter == DeviceInfo.IPV6) {
             label = "IPv6";
         } else {
-            label = "全部协议";
+            label = "网络协议";
         }
         ipVersionButton.setText(label);
-        ipVersionButton.setContentDescription("IP 版本：" + label);
+        ipVersionButton.setContentDescription("网络协议：" + label);
         styleStatePill(ipVersionButton, ipVersionFilter != 0);
     }
 
