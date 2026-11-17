@@ -350,214 +350,25 @@ public class SvgRenderer {
         return svgPathToAndroidPath(d);
     }
 
+    /**
+     * 把 SVG / Android Vector 的 pathData 转成 {@link Path}。
+     *
+     * <p>这里以前是自己写的正则解析器，`z` 之后没有把当前点复位到子路径起点，
+     * 紧跟其后的相对 `m` 就会整体偏移。典型例子：Material 的「文档 + 机器人脸」
+     * 图标（M6 22…T18 22z m1-3h10…），内层整块被平移到画布外，预览里脸完全不见。</p>
+     *
+     * <p>现在直接用 androidx 的 {@link androidx.core.graphics.PathParser}——
+     * 它就是 VectorDrawableCompat 解析 pathData 用的实现，和真机渲染结果一致，
+     * 圆弧、指数、隐式重复参数、`z` 闭合等边界情况都不用再自己维护。</p>
+     */
     private static Path svgPathToAndroidPath(String d) {
-        Path path = new Path();
+        if (d == null || d.trim().isEmpty()) return null;
         try {
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile(
-                    "([MmLlHhVvCcSsQqTtAaZz])\\s*([^MmLlHhVvCcSsQqTtAaZz]*)").matcher(d);
-            java.util.regex.Pattern numPat = java.util.regex.Pattern.compile(
-                    "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?");
-            float cx = 0, cy = 0, lastCp2X = 0, lastCp2Y = 0, lastQpX = 0, lastQpY = 0;
-            boolean first = true, prevCubic = false, prevQuad = false;
-            while (m.find()) {
-                String cmd = m.group(1);
-                java.util.ArrayList<Float> vals = new java.util.ArrayList<>();
-                java.util.regex.Matcher nm = numPat.matcher(m.group(2));
-                while (nm.find()) vals.add(Float.parseFloat(nm.group()));
-                int idx = 0;
-                int len = vals.size();
-                float fx, fy;
-
-                switch (cmd) {
-                    case "M":
-                        path.moveTo(vals.get(idx++), vals.get(idx++));
-                        cx = vals.get(idx - 2); cy = vals.get(idx - 1);
-                        while (idx + 1 < len) {
-                            path.lineTo(vals.get(idx++), vals.get(idx++));
-                            cx = vals.get(idx - 2); cy = vals.get(idx - 1);
-                        }
-                        first = false; prevCubic = false; prevQuad = false;
-                        break;
-                    case "m":
-                        path.moveTo(cx + vals.get(idx++), cy + vals.get(idx++));
-                        cx += vals.get(idx - 2); cy += vals.get(idx - 1); first = false;
-                        while (idx + 1 < len) {
-                            path.lineTo(cx + vals.get(idx++), cy + vals.get(idx++));
-                            cx += vals.get(idx - 2); cy += vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false;
-                        break;
-                    case "L":
-                        while (idx + 1 < len) {
-                            path.lineTo(vals.get(idx++), vals.get(idx++));
-                            cx = vals.get(idx - 2); cy = vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "l":
-                        while (idx + 1 < len) {
-                            path.lineTo(cx + vals.get(idx++), cy + vals.get(idx++));
-                            cx += vals.get(idx - 2); cy += vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "H":
-                        while (idx < len) {
-                            path.lineTo(vals.get(idx++), cy); cx = vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "h":
-                        while (idx < len) {
-                            path.lineTo(cx + vals.get(idx++), cy); cx += vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "V":
-                        while (idx < len) {
-                            path.lineTo(cx, vals.get(idx++)); cy = vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "v":
-                        while (idx < len) {
-                            path.lineTo(cx, cy + vals.get(idx++)); cy += vals.get(idx - 1);
-                        }
-                        prevCubic = false; prevQuad = false; break;
-                    case "C":
-                        while (idx + 5 < len) {
-                            float x1 = vals.get(idx++), y1 = vals.get(idx++);
-                            float x2 = vals.get(idx++), y2 = vals.get(idx++);
-                            fx = vals.get(idx++); fy = vals.get(idx++);
-                            path.cubicTo(x1, y1, x2, y2, fx, fy);
-                            lastCp2X = x2; lastCp2Y = y2; cx = fx; cy = fy;
-                            prevCubic = true; prevQuad = false;
-                        }
-                        break;
-                    case "c":
-                        while (idx + 5 < len) {
-                            float x1 = cx + vals.get(idx++), y1 = cy + vals.get(idx++);
-                            float x2 = cx + vals.get(idx++), y2 = cy + vals.get(idx++);
-                            fx = cx + vals.get(idx++); fy = cy + vals.get(idx++);
-                            path.cubicTo(x1, y1, x2, y2, fx, fy);
-                            lastCp2X = x2; lastCp2Y = y2; cx = fx; cy = fy;
-                            prevCubic = true; prevQuad = false;
-                        }
-                        break;
-                    case "S":
-                        while (idx + 3 < len) {
-                            float x2 = vals.get(idx++), y2 = vals.get(idx++);
-                            fx = vals.get(idx++); fy = vals.get(idx++);
-                            float x1 = prevCubic ? 2 * cx - lastCp2X : cx;
-                            float y1 = prevCubic ? 2 * cy - lastCp2Y : cy;
-                            path.cubicTo(x1, y1, x2, y2, fx, fy);
-                            lastCp2X = x2; lastCp2Y = y2; cx = fx; cy = fy;
-                            prevCubic = true; prevQuad = false;
-                        }
-                        break;
-                    case "s":
-                        while (idx + 3 < len) {
-                            float x2 = cx + vals.get(idx++), y2 = cy + vals.get(idx++);
-                            fx = cx + vals.get(idx++); fy = cy + vals.get(idx++);
-                            float x1 = prevCubic ? 2 * cx - lastCp2X : cx;
-                            float y1 = prevCubic ? 2 * cy - lastCp2Y : cy;
-                            path.cubicTo(x1, y1, x2, y2, fx, fy);
-                            lastCp2X = x2; lastCp2Y = y2; cx = fx; cy = fy;
-                            prevCubic = true; prevQuad = false;
-                        }
-                        break;
-                    case "Q":
-                        while (idx + 3 < len) {
-                            float x1 = vals.get(idx++), y1 = vals.get(idx++);
-                            fx = vals.get(idx++); fy = vals.get(idx++);
-                            path.quadTo(x1, y1, fx, fy);
-                            lastQpX = x1; lastQpY = y1; cx = fx; cy = fy;
-                            prevCubic = false; prevQuad = true;
-                        }
-                        break;
-                    case "q":
-                        while (idx + 3 < len) {
-                            float x1 = cx + vals.get(idx++), y1 = cy + vals.get(idx++);
-                            fx = cx + vals.get(idx++); fy = cy + vals.get(idx++);
-                            path.quadTo(x1, y1, fx, fy);
-                            lastQpX = x1; lastQpY = y1; cx = fx; cy = fy;
-                            prevCubic = false; prevQuad = true;
-                        }
-                        break;
-                    case "T":
-                        while (idx + 1 < len) {
-                            fx = vals.get(idx++); fy = vals.get(idx++);
-                            float x1 = prevQuad ? 2 * cx - lastQpX : cx;
-                            float y1 = prevQuad ? 2 * cy - lastQpY : cy;
-                            path.quadTo(x1, y1, fx, fy);
-                            lastQpX = x1; lastQpY = y1; cx = fx; cy = fy;
-                            prevQuad = true; prevCubic = false;
-                        }
-                        break;
-                    case "t":
-                        while (idx + 1 < len) {
-                            fx = cx + vals.get(idx++); fy = cy + vals.get(idx++);
-                            float x1 = prevQuad ? 2 * cx - lastQpX : cx;
-                            float y1 = prevQuad ? 2 * cy - lastQpY : cy;
-                            path.quadTo(x1, y1, fx, fy);
-                            lastQpX = x1; lastQpY = y1; cx = fx; cy = fy;
-                            prevQuad = true; prevCubic = false;
-                        }
-                        break;
-                    case "A":
-                        while (idx + 6 < len) {
-                            float rx = vals.get(idx++), ry = vals.get(idx++);
-                            vals.get(idx++);
-                            boolean largeArc = vals.get(idx++) != 0;
-                            boolean sweep = vals.get(idx++) != 0;
-                            fx = vals.get(idx++); fy = vals.get(idx++);
-                            svgArc(path, cx, cy, rx, ry, fx, fy, largeArc, sweep);
-                            cx = fx; cy = fy;
-                            prevCubic = false; prevQuad = false;
-                        }
-                        break;
-                    case "a":
-                        while (idx + 6 < len) {
-                            float rx = vals.get(idx++), ry = vals.get(idx++);
-                            vals.get(idx++);
-                            boolean largeArc = vals.get(idx++) != 0;
-                            boolean sweep = vals.get(idx++) != 0;
-                            fx = cx + vals.get(idx++); fy = cy + vals.get(idx++);
-                            svgArc(path, cx, cy, rx, ry, fx, fy, largeArc, sweep);
-                            cx = fx; cy = fy;
-                            prevCubic = false; prevQuad = false;
-                        }
-                        break;
-                    case "Z":
-                    case "z":
-                        path.close();
-                        prevCubic = false; prevQuad = false; break;
-                }
-            }
-            return path;
-        } catch (Exception e) {
+            return androidx.core.graphics.PathParser.createPathFromPathData(d);
+        } catch (Throwable t) {
+            AppErrorLogger.catchThrowable(TAG, "pathData 解析失败: " + d, t);
             return null;
         }
-    }
-
-    private static void svgArc(Path p, float x1, float y1,
-                               float rx, float ry, float x2, float y2,
-                               boolean largeArc, boolean sweep) {
-        if (Math.abs(x2 - x1) < 0.001f && Math.abs(y2 - y1) < 0.001f) return;
-        if (rx < 0) rx = -rx;
-        if (ry < 0) ry = -ry;
-        float dx = (x1 - x2) / 2f, dy = (y1 - y2) / 2f;
-        float len = dx * dx / (rx * rx) + dy * dy / (ry * ry);
-        if (len > 1f) { float s = (float) Math.sqrt(len); rx *= s; ry *= s; }
-        float factor = (largeArc == sweep ? -1f : 1f) * (float) Math.sqrt(
-                Math.max(0f, (rx * rx * ry * ry - rx * rx * dy * dy - ry * ry * dx * dx)
-                        / (rx * rx * dy * dy + ry * ry * dx * dx)));
-        float cxp = factor * rx * dy / ry;
-        float cyp = factor * -ry * dx / rx;
-        float cx = (x1 + x2) / 2f + cxp;
-        float cy = (y1 + y2) / 2f + cyp;
-        float start = (float) Math.atan2((dy - cyp) / ry, (dx - cxp) / rx);
-        float end = (float) Math.atan2((-dy - cyp) / ry, (-dx - cxp) / rx);
-        float sweepAngle = end - start;
-        if (sweep) { while (sweepAngle < 0) sweepAngle += (float) (Math.PI * 2); }
-        else { while (sweepAngle > 0) sweepAngle -= (float) (Math.PI * 2); }
-        p.arcTo(new RectF(cx - rx, cy - ry, cx + rx, cy + ry),
-                (float) Math.toDegrees(start), (float) Math.toDegrees(sweepAngle));
     }
 
     // ============ 工具方法 ============

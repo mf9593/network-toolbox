@@ -405,9 +405,10 @@ public class IconConverterActivity extends AppCompatActivity {
 
     private Drawable renderSvgWithLibrary(String svgContent) throws Exception {
         String sanitized = svgContent;
-        // 将 currentColor 替换为 #000000（AndroidSVG 不支持 currentColor）
+        // AndroidSVG 不支持 currentColor，按「当前文字色」的语义换成具体颜色。
+        // 深色主题下用主题文字色，否则纯黑图标画在深色预览卡片上等于看不见。
         if (sanitized.contains("currentColor"))
-            sanitized = sanitized.replace("currentColor", "#000000");
+            sanitized = sanitized.replace("currentColor", previewInkColor());
         // 只移除根 <svg> 上的 transform，保留子元素/分组 transform
         sanitized = stripRootSvgTransform(sanitized);
         AppErrorLogger.logDebug(TAG, "sanitized=" + sanitized);
@@ -541,7 +542,7 @@ public class IconConverterActivity extends AppCompatActivity {
                 if (color != null) {
                     paint.reset(); paint.setAntiAlias(true);
                     paint.setStyle(android.graphics.Paint.Style.FILL);
-                    paint.setColor(color);
+                    paint.setColor(forPreview(color));
                     canvas.drawPath(path, paint);
                 }
             }
@@ -631,6 +632,24 @@ public class IconConverterActivity extends AppCompatActivity {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 预览用的「当前文字色」。深色主题下纯黑图标画在深色预览卡片上几乎看不见，
+     * 所以 currentColor 在深色下取主题文字色。只影响预览，导出/复制仍是原始颜色。
+     */
+    private String previewInkColor() {
+        if (!ThemeManager.isDarkMode(this)) return "#000000";
+        return String.format(java.util.Locale.US, "#%06X",
+                0xFFFFFF & ThemeManager.getOnSurfaceColor(this));
+    }
+
+    /** 同上：纯黑填充/描边在深色预览里替换成主题文字色，避免「预览一片黑」。 */
+    private int forPreview(int color) {
+        if (color == Color.BLACK && ThemeManager.isDarkMode(this)) {
+            return ThemeManager.getOnSurfaceColor(this);
+        }
+        return color;
     }
 
     private float parseF(String s) {
