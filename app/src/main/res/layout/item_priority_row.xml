@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 标题来源优先级的单行：序号 + 协议名 + 上移/下移。
+     序号与箭头颜色由代码按 ThemeManager 设置，切主题自动跟随。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/priorityRow"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="44dp"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/priorityIndex"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:gravity="center"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/priorityName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_2"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textSize="14sp" />
+
+    <ImageButton
+        android:id="@+id/priorityUp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="上移"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_expand_less" />
+
+    <ImageButton
+        android:id="@+id/priorityDown"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="下移"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_expand_more" />
+
+</LinearLayout>

@@ -47,34 +47,11 @@
                 app:iconPadding="4dp" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/sortButton"
-                style="@style/Widget.NetworkTool.Button.TextButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:contentDescription="排序方式"
-                android:minWidth="44dp"
-                android:padding="10dp"
-                app:icon="@drawable/ic_sort"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/filterButton"
-                style="@style/Widget.NetworkTool.Button.TextButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:contentDescription="筛选协议"
-                android:minWidth="44dp"
-                android:padding="10dp"
-                app:icon="@drawable/ic_filter"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
-
-            <com.google.android.material.button.MaterialButton
                 android:id="@+id/settingsButton"
                 style="@style/Widget.NetworkTool.Button.TextButton"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
+                android:layout_marginStart="@dimen/space_3"
                 android:contentDescription="扫描设置"
                 android:minWidth="44dp"
                 android:padding="10dp"
@@ -96,8 +73,11 @@
     </LinearLayout>
 
     <HorizontalScrollView
+        android:id="@+id/filterBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_2"
+        android:clipToPadding="false"
         android:paddingStart="@dimen/page_margin"
         android:paddingEnd="@dimen/page_margin"
         android:scrollbars="none">
@@ -108,45 +88,44 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
+            <!-- 排序/筛选胶囊：直接显示当前状态，不再只是两个没有语义的图标 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sortButton"
+                style="@style/Widget.NetworkTool.Button.StatePill"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/space_2"
-                android:text="IP 版本"
-                android:textAppearance="@style/TextAppearance.NetworkTool.Caption" />
+                android:layout_height="32dp"
+                android:contentDescription="排序方式：按 IP"
+                android:text="按 IP"
+                app:icon="@drawable/ic_sort" />
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/ipVersionGroup"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/filterButton"
+                style="@style/Widget.NetworkTool.Button.StatePill"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:checkedChip="@id/chipAll"
-                app:chipSpacingHorizontal="@dimen/space_2"
-                app:selectionRequired="true"
-                app:singleSelection="true">
+                android:layout_height="32dp"
+                android:layout_marginStart="@dimen/space_3"
+                android:contentDescription="筛选协议：全部"
+                android:text="全部协议"
+                app:icon="@drawable/ic_filter" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipAll"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="全部" />
+            <View
+                android:layout_width="1dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="@dimen/space_3"
+                android:layout_marginEnd="@dimen/space_3"
+                android:background="?attr/colorOutlineVariant" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipIpv4"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="IPv4" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chipIpv6"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="IPv6" />
-
-            </com.google.android.material.chip.ChipGroup>
+            <!-- IP 版本也做成胶囊：和左边两个同尺寸同外观，
+                 点开弹窗选「全部协议 / IPv4 / IPv6」，不再一排 chip 挤在这一行 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ipVersionButton"
+                style="@style/Widget.NetworkTool.Button.StatePill"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="@dimen/space_3"
+                android:contentDescription="IP 版本：全部协议"
+                android:text="全部协议"
+                app:icon="@drawable/ic_ip" />
 
         </LinearLayout>
 

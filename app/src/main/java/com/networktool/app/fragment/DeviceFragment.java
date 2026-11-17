@@ -20,10 +20,10 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager.BadTokenException;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -36,9 +36,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.chip.Chip;
-import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.networktool.app.R;
 import com.networktool.app.activity.settings.RuntimeLogActivity;
@@ -48,9 +45,11 @@ import com.networktool.app.activity.tool.SadpActivity;
 import com.networktool.app.activity.tool.PingActivity;
 import com.networktool.app.activity.tool.PortScanActivity;
 import com.networktool.app.adapter.DeviceAdapter;
+import com.networktool.app.adapter.ScanOptionAdapter;
 import com.networktool.app.model.DeviceInfo;
 import com.networktool.app.util.LanScanManager;
 import com.networktool.app.util.AppErrorLogger;
+import com.networktool.app.util.BottomSheetHelper;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.RuntimeLogStore;
 import com.networktool.app.util.ScanSpeedConfig;
@@ -84,7 +83,9 @@ public class DeviceFragment extends Fragment {
     private MaterialButton filterButton;
     private MaterialButton sortButton;
     private MaterialButton settingsButton;
-    private ChipGroup ipVersionGroup;
+    private MaterialButton ipVersionButton;
+    /** 排序/筛选/IP 版本那一行横向容器 */
+    private HorizontalScrollView filterBar;
     private LinearProgressIndicator scanProgress;
     private SwipeRefreshLayout refreshLayout;
     private View emptyView;
@@ -147,6 +148,8 @@ public class DeviceFragment extends Fragment {
         setupRecyclerView();
         setupFilterChips();
         setupListeners();
+        updateSortButton();
+        updateFilterButton();
         applyThemeColors();
         registerNetworkCallback();
         startScan();
@@ -182,7 +185,8 @@ public class DeviceFragment extends Fragment {
         filterButton = view.findViewById(R.id.filterButton);
         sortButton = view.findViewById(R.id.sortButton);
         settingsButton = view.findViewById(R.id.settingsButton);
-        ipVersionGroup = view.findViewById(R.id.ipVersionGroup);
+        ipVersionButton = view.findViewById(R.id.ipVersionButton);
+        filterBar = view.findViewById(R.id.filterBar);
         scanProgress = view.findViewById(R.id.scanProgress);
         refreshLayout = view.findViewById(R.id.refreshLayout);
         emptyView = view.findViewById(R.id.emptyView);
@@ -215,19 +219,54 @@ public class DeviceFragment extends Fragment {
         recyclerView.setAdapter(adapter);
     }
 
+    /** IP 版本筛选也走底部弹窗，和「排序 / 协议」用同一套交互 */
     private void setupFilterChips() {
-        ipVersionGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) return;
-            int id = checkedIds.get(0);
-            if (id == R.id.chipIpv4) {
-                ipVersionFilter = DeviceInfo.IPV4;
-            } else if (id == R.id.chipIpv6) {
-                ipVersionFilter = DeviceInfo.IPV6;
-            } else {
-                ipVersionFilter = 0;
-            }
-            applyFilter();
-        });
+        if (ipVersionButton == null) return;
+        ipVersionButton.setOnClickListener(v -> showIpVersionDialog());
+    }
+
+    private void showIpVersionDialog() {
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View view = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_scan_filter, null);
+        dialog.setContentView(view);
+
+        TextView title = view.findViewById(R.id.filterSheetTitle);
+        if (title != null) title.setText("IP 版本");
+        TextView subtitle = view.findViewById(R.id.filterSheetSubtitle);
+        if (subtitle != null) subtitle.setText("只显示某一类地址，默认两类都显示");
+
+        RecyclerView list = view.findViewById(R.id.filterOptionList);
+        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        list.setAdapter(new ScanOptionAdapter(buildIpVersionOptions(),
+                ipVersionKey(ipVersionFilter), option -> {
+                    ipVersionFilter = ipVersionFromKey(option.key);
+                    updateIpVersionButton();
+                    applyFilter();
+                    dialog.dismiss();
+                }));
+        BottomSheetHelper.capHeight(dialog, 0.8f);
+        dialog.show();
+    }
+
+    private List<ScanOptionAdapter.Option> buildIpVersionOptions() {
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(null, "全部协议", "IPv4 和 IPv6 设备都显示"));
+        options.add(new ScanOptionAdapter.Option("ipv4", "IPv4", "只显示使用 IPv4 地址的设备"));
+        options.add(new ScanOptionAdapter.Option("ipv6", "IPv6", "只显示使用 IPv6 地址的设备"));
+        return options;
+    }
+
+    private static String ipVersionKey(int version) {
+        if (version == DeviceInfo.IPV4) return "ipv4";
+        if (version == DeviceInfo.IPV6) return "ipv6";
+        return null;
+    }
+
+    private static int ipVersionFromKey(String key) {
+        if ("ipv4".equals(key)) return DeviceInfo.IPV4;
+        if ("ipv6".equals(key)) return DeviceInfo.IPV6;
+        return 0;
     }
 
     private void setupListeners() {
@@ -251,9 +290,7 @@ public class DeviceFragment extends Fragment {
                 applyFilter();
             } else if (!deviceList.isEmpty()) {
                 ipVersionFilter = 0;
-                if (ipVersionGroup != null) {
-                    ipVersionGroup.check(R.id.chipAll);
-                }
+                updateIpVersionButton();
                 applyFilter();
             } else {
                 restartScan();
@@ -268,13 +305,16 @@ public class DeviceFragment extends Fragment {
 
         scanButton.setTextColor(accentColor);
         scanButton.setIconTint(ColorStateList.valueOf(accentColor));
-        filterButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
-        sortButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
         settingsButton.setIconTint(ColorStateList.valueOf(onSurfaceVariant));
         emptyAction.setTextColor(accentColor);
         emptyIcon.setColorFilter(onSurfaceVariant);
 
-        styleChipGroup(ipVersionGroup, requireContext());
+        // 排序/筛选胶囊：默认「柔和底 + 主题色文字」，筛选生效时变「实底 + 反色文字」。
+        // 颜色全部来自 ThemeManager，切主题/深浅色时按钮自动跟着变。
+        updateSortButton();
+        updateFilterButton();
+
+        updateIpVersionButton();
         refreshLayout.setColorSchemeColors(accentColor);
         refreshLayout.setProgressBackgroundColorSchemeColor(
                 ThemeManager.getSurfaceColor(requireContext()));
@@ -284,26 +324,81 @@ public class DeviceFragment extends Fragment {
         }
     }
 
-    private void styleChipGroup(ChipGroup group, Context context) {
-        // 统一走 ThemeManager 的 chip 样式（未选中透明、选中主题色）
-        ThemeManager.styleFilterChips(context, group);
+    /**
+     * 给「状态胶囊」上色。
+     *
+     * <p>{@code active=false}：柔和主题底 + 描边 + 主题色文字（表示「这是当前值」而不是操作按钮）；
+     * {@code active=true}：主题色实底 + 反色文字（表示这一项筛选正在生效）。
+     * 三种颜色都走 {@link ThemeManager}，不在布局里写死，切换主题变体自动跟随。</p>
+     */
+    private void styleStatePill(MaterialButton button, boolean active) {
+        if (button == null || !isAdded()) return;
+        Context context = requireContext();
+        int accent = ThemeManager.getAccessibleThemeColor(context);
+        int background = active ? accent : ThemeManager.getBadgeSurfaceColor(context);
+        int foreground = active ? ThemeManager.getContrastColor(accent)
+                : ThemeManager.getBadgeTextColor(context);
+
+        button.setBackgroundTintList(ColorStateList.valueOf(background));
+        button.setTextColor(foreground);
+        button.setIconTint(ColorStateList.valueOf(foreground));
+        button.setRippleColor(ColorStateList.valueOf(active
+                ? ThemeManager.getContrastColor(accent) : accent));
+        button.setStrokeWidth(active ? 0 : dpToPx(1));
+        button.setStrokeColor(ColorStateList.valueOf(ThemeManager.getBadgeStrokeColor(context)));
     }
 
-    /** 排序方式弹窗：按 IP / 按名称，选择后持久化保存 */
+    /** 排序胶囊显示当前排序方式，点开是排序底部弹窗 */
+    private void updateSortButton() {
+        if (sortButton == null) return;
+        boolean byName = SORT_NAME.equals(sortBy);
+        String label = byName ? "按名称" : "按 IP";
+        sortButton.setText(label);
+        sortButton.setContentDescription("排序方式：" + label);
+        styleStatePill(sortButton, false);
+    }
+
+    /** IP 版本胶囊：显示当前值，选中具体版本时变实底 */
+    private void updateIpVersionButton() {
+        if (ipVersionButton == null) return;
+        String label;
+        if (ipVersionFilter == DeviceInfo.IPV4) {
+            label = "IPv4";
+        } else if (ipVersionFilter == DeviceInfo.IPV6) {
+            label = "IPv6";
+        } else {
+            label = "全部协议";
+        }
+        ipVersionButton.setText(label);
+        ipVersionButton.setContentDescription("IP 版本：" + label);
+        styleStatePill(ipVersionButton, ipVersionFilter != 0);
+    }
+
+    /** 排序方式底部弹窗：按 IP / 按名称，选择后持久化保存 */
     private void showSortDialog() {
-        String[] options = {"按 IP 排序", "按名称排序"};
-        int checked = SORT_NAME.equals(sortBy) ? 1 : 0;
-        new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("排序方式")
-                .setSingleChoiceItems(options, checked, (dialog, which) -> {
-                    sortBy = which == 1 ? SORT_NAME : SORT_IP;
-                    saveSortPreference();
-                    applyFilter();
-                    dialog.dismiss();
-                    showToast(which == 1 ? "已按名称排序" : "已按 IP 排序");
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View view = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_scan_sort, null);
+        dialog.setContentView(view);
+
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(SORT_IP, "按 IP 排序",
+                "同网段内地址从小到大，网关和常用设备集中在前面"));
+        options.add(new ScanOptionAdapter.Option(SORT_NAME, "按名称排序",
+                "按设备名或型号排序，方便按名字找特定设备"));
+
+        RecyclerView list = view.findViewById(R.id.sortOptionList);
+        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        list.setAdapter(new ScanOptionAdapter(options, sortBy, option -> {
+            sortBy = option.key;
+            saveSortPreference();
+            updateSortButton();
+            applyFilter();
+            dialog.dismiss();
+            showToast(SORT_NAME.equals(sortBy) ? "已按名称排序" : "已按 IP 排序");
+        }));
+        BottomSheetHelper.capHeight(dialog, 0.8f);
+        dialog.show();
     }
 
     private void showProtocolFilterDialog() {
@@ -312,79 +407,51 @@ public class DeviceFragment extends Fragment {
                 .inflate(R.layout.dialog_scan_filter, null);
         dialog.setContentView(view);
 
-        ChipGroup group = view.findViewById(R.id.protocolChipGroup);
-        MaterialButton clearButton = view.findViewById(R.id.clearFilterButton);
-
-        group.check(chipIdForProtocol(protocolFilter));
-        styleChipGroup(group, requireContext());
-
-        group.setOnCheckedStateChangeListener((chipGroup, checkedIds) -> {
-            if (checkedIds.isEmpty()) return;
-            protocolFilter = protocolForChip(checkedIds.get(0));
+        RecyclerView list = view.findViewById(R.id.filterOptionList);
+        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        list.setAdapter(new ScanOptionAdapter(buildProtocolOptions(), protocolFilter, option -> {
+            protocolFilter = option.key;
             updateFilterButton();
             applyFilter();
             dialog.dismiss();
-        });
-        clearButton.setOnClickListener(v -> {
-            protocolFilter = null;
-            updateFilterButton();
-            applyFilter();
-            dialog.dismiss();
-        });
+        }));
+        // 14 个协议在矮屏上放不下：限制最大高度，内容在内部滚动，
+        // 滑到底再往上拖不会把弹窗拖掉
+        BottomSheetHelper.capHeight(dialog, 0.8f);
         dialog.show();
     }
 
-    private int chipIdForProtocol(String protocol) {
-        if (protocol == null) return R.id.protoAll;
-        switch (protocol) {
-            case "ONVIF":
-                return R.id.protoOnvif;
-            case "SADP":
-                return R.id.protoSadp;
-            case "路由器":
-                return R.id.protoRouter;
-            case "SSDP":
-                return R.id.protoSsdp;
-            case "mDNS":
-                return R.id.protoMdns;
-            case "NetBIOS":
-                return R.id.protoNetbios;
-            case "ARP表":
-                return R.id.protoArp;
-            case "UDP广播":
-                return R.id.protoUdp;
-            case "HTTP":
-                return R.id.protoHttp;
-            case "Ping探测":
-                return R.id.protoPing;
-            case "IPv6":
-                return R.id.protoIpv6;
-            case "端口探测":
-                return R.id.protoService;
-            default:
-                return R.id.protoAll;
-        }
-    }
-
-    private String protocolForChip(int chipId) {
-        if (chipId == R.id.protoOnvif) return "ONVIF";
-        if (chipId == R.id.protoSadp) return "SADP";
-        if (chipId == R.id.protoRouter) return "路由器";
-        if (chipId == R.id.protoSsdp) return "SSDP";
-        if (chipId == R.id.protoMdns) return "mDNS";
-        if (chipId == R.id.protoNetbios) return "NetBIOS";
-        if (chipId == R.id.protoArp) return "ARP表";
-        if (chipId == R.id.protoUdp) return "UDP广播";
-        if (chipId == R.id.protoHttp) return "HTTP";
-        if (chipId == R.id.protoPing) return "Ping探测";
-        if (chipId == R.id.protoIpv6) return "IPv6";
-        if (chipId == R.id.protoService) return "端口探测";
-        return null;
+    /**
+     * 协议筛选项。key 必须和 {@code DeviceInfo#getProtocolNames()} 里的名字完全一致，
+     * 否则筛出来会是空列表。
+     */
+    private List<ScanOptionAdapter.Option> buildProtocolOptions() {
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(null, "全部协议", "不做过滤，所有发现结果都显示"));
+        options.add(new ScanOptionAdapter.Option("ARP表", "ARP 表", "同网段内所有在线设备，覆盖最全"));
+        options.add(new ScanOptionAdapter.Option("mDNS", "mDNS", "苹果设备、打印机、投屏等局域网服务"));
+        options.add(new ScanOptionAdapter.Option("NetBIOS", "NetBIOS", "Windows 电脑的共享与名称解析"));
+        options.add(new ScanOptionAdapter.Option("SSDP", "SSDP", "DLNA、智能电视、智能音箱"));
+        options.add(new ScanOptionAdapter.Option("路由器", "路由器", "网关、AP 等网络设备"));
+        options.add(new ScanOptionAdapter.Option("Ping探测", "Ping 探测", "能响应 ICMP 的设备"));
+        options.add(new ScanOptionAdapter.Option("HTTP", "HTTP", "开放了 Web 管理页面的设备"));
+        options.add(new ScanOptionAdapter.Option("UDP广播", "UDP 广播", "通用局域网广播探测"));
+        options.add(new ScanOptionAdapter.Option("IPv6", "IPv6", "通过 IPv6 邻居发现扫到的设备"));
+        options.add(new ScanOptionAdapter.Option("端口探测", "端口探测", "常见服务端口扫描命中的设备"));
+        options.add(new ScanOptionAdapter.Option("SADP", "SADP", "海康威视摄像头与录像机"));
+        options.add(new ScanOptionAdapter.Option("ONVIF", "ONVIF", "支持 ONVIF 的网络摄像头"));
+        options.add(new ScanOptionAdapter.Option("WSD", "WSD", "支持 WS-Discovery 的打印机与扫描仪"));
+        return options;
     }
 
     private void updateFilterButton() {
+        if (filterButton == null) return;
+        String label = protocolFilter == null ? "全部协议" : protocolFilter;
+        filterButton.setText(label);
         filterButton.setContentDescription(protocolFilter == null
-                ? "筛选协议" : "筛选协议：" + protocolFilter);
+                ? "筛选协议：全部" : "筛选协议：" + protocolFilter);
+        // 有筛选时按钮变实底，一眼看出列表被过滤过
+        styleStatePill(filterButton, protocolFilter != null);
     }
 
     private void restartScan() {
@@ -1306,38 +1373,28 @@ public class DeviceFragment extends Fragment {
                 .inflate(R.layout.dialog_scan_settings, null);
         dialog.setContentView(dialogView);
 
-        RadioGroup speedGroup = dialogView.findViewById(R.id.speedGroup);
-        RadioGroup modeGroup = dialogView.findViewById(R.id.modeGroup);
+        SharedPreferences prefs = requireContext().getSharedPreferences(
+                "app_settings", Context.MODE_PRIVATE);
 
-        SharedPreferences prefs = requireContext().getSharedPreferences("app_settings", Context.MODE_PRIVATE);
-        String currentSpeed = prefs.getString("scan_speed", ScanSpeedConfig.SPEED_STANDARD);
-        String currentMode = prefs.getString("scan_mode", LanScanManager.MODE_ACTIVE);
+        // 速度/模式跟排序、筛选弹窗用同一套选项行：点一下立刻有勾，
+        // 但要等点「保存」才真正写进配置，避免误触就改掉扫描参数
+        RecyclerView speedList = dialogView.findViewById(R.id.speedList);
+        speedList.setLayoutManager(new LinearLayoutManager(requireContext()));
+        ScanOptionAdapter speedAdapter = new ScanOptionAdapter(
+                buildSpeedOptions(),
+                prefs.getString("scan_speed", ScanSpeedConfig.SPEED_STANDARD),
+                option -> {
+                });
+        speedList.setAdapter(speedAdapter);
 
-        switch (currentSpeed) {
-            case ScanSpeedConfig.SPEED_FAST:
-                speedGroup.check(R.id.speedFast);
-                break;
-            case ScanSpeedConfig.SPEED_SLOW:
-                speedGroup.check(R.id.speedSlow);
-                break;
-            default:
-                speedGroup.check(R.id.speedStandard);
-                break;
-        }
-        switch (currentMode) {
-            case LanScanManager.MODE_PASSIVE:
-                modeGroup.check(R.id.modePassive);
-                break;
-            case LanScanManager.MODE_QUIET:
-                modeGroup.check(R.id.modeQuiet);
-                break;
-            default:
-                modeGroup.check(R.id.modeActive);
-                break;
-        }
-
-        applyRadioTheme(speedGroup);
-        applyRadioTheme(modeGroup);
+        RecyclerView modeList = dialogView.findViewById(R.id.modeList);
+        modeList.setLayoutManager(new LinearLayoutManager(requireContext()));
+        ScanOptionAdapter modeAdapter = new ScanOptionAdapter(
+                buildModeOptions(),
+                prefs.getString("scan_mode", LanScanManager.MODE_ACTIVE),
+                option -> {
+                });
+        modeList.setAdapter(modeAdapter);
 
         // 标题来源优先级：越靠上越优先
         LinearLayout priorityList = dialogView.findViewById(R.id.priorityList);
@@ -1355,20 +1412,15 @@ public class DeviceFragment extends Fragment {
         }
 
         dialogView.findViewById(R.id.btnSave).setOnClickListener(v -> {
-            int speedId = speedGroup.getCheckedRadioButtonId();
-            String newSpeed = ScanSpeedConfig.SPEED_STANDARD;
-            if (speedId == R.id.speedFast) newSpeed = ScanSpeedConfig.SPEED_FAST;
-            else if (speedId == R.id.speedSlow) newSpeed = ScanSpeedConfig.SPEED_SLOW;
-            prefs.edit().putString("scan_speed", newSpeed).apply();
-
-            int modeId = modeGroup.getCheckedRadioButtonId();
-            String newMode = LanScanManager.MODE_ACTIVE;
-            if (modeId == R.id.modePassive) newMode = LanScanManager.MODE_PASSIVE;
-            else if (modeId == R.id.modeQuiet) newMode = LanScanManager.MODE_QUIET;
-            prefs.edit().putString("scan_mode", newMode).apply();
-
+            String newSpeed = speedAdapter.getSelectedKey();
+            if (newSpeed == null) newSpeed = ScanSpeedConfig.SPEED_STANDARD;
+            String newMode = modeAdapter.getSelectedKey();
+            if (newMode == null) newMode = LanScanManager.MODE_ACTIVE;
+            prefs.edit()
+                    .putString("scan_speed", newSpeed)
+                    .putString("scan_mode", newMode)
+                    .apply();
             TitlePriorityConfig.saveOrder(requireContext(), priorityOrder);
-
             dialog.dismiss();
             showToast("设置已保存，重新扫描后生效");
         });
@@ -1377,7 +1429,34 @@ public class DeviceFragment extends Fragment {
         int themeColor = ThemeManager.getThemeColor();
         btnSave.setBackgroundTintList(ColorStateList.valueOf(themeColor));
         btnSave.setTextColor(ThemeManager.getContrastColor(themeColor));
+        // 标题固定、内容区自己滚，弹窗可拖到接近全屏；
+        // 滚到底再往上拖只会继续滚内容，不会把弹窗关掉
+        BottomSheetHelper.makeExpandable(dialog, 16);
         dialog.show();
+    }
+
+    /** 扫描速度的可选项。key 必须和 {@link ScanSpeedConfig} 里的常量一致。 */
+    private List<ScanOptionAdapter.Option> buildSpeedOptions() {
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(ScanSpeedConfig.SPEED_FAST,
+                "快速", "高并发扫描，几秒扫完常见网段，日常用这个"));
+        options.add(new ScanOptionAdapter.Option(ScanSpeedConfig.SPEED_STANDARD,
+                "标准", "速度与路由器负载平衡，推荐"));
+        options.add(new ScanOptionAdapter.Option(ScanSpeedConfig.SPEED_SLOW,
+                "慢速", "低并发长超时，适合老旧路由器和弱信号环境"));
+        return options;
+    }
+
+    /** 扫描模式的可选项。key 必须和 {@link LanScanManager} 里的 MODE_* 常量一致。 */
+    private List<ScanOptionAdapter.Option> buildModeOptions() {
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(LanScanManager.MODE_ACTIVE,
+                "主动扫描", "Ping + HTTP + 多播 + NetBIOS，发现率最高"));
+        options.add(new ScanOptionAdapter.Option(LanScanManager.MODE_QUIET,
+                "安静扫描", "不做 HTTP / NetBIOS 探测，发现率中等"));
+        options.add(new ScanOptionAdapter.Option(LanScanManager.MODE_PASSIVE,
+                "被动扫描", "只监听多播和邻居表，最省电，发现率最低"));
+        return options;
     }
 
     /**
@@ -1390,85 +1469,54 @@ public class DeviceFragment extends Fragment {
         int onSurface = ThemeManager.getOnSurfaceColor(requireContext());
         int variant = ThemeManager.getOnSurfaceVariantColor(requireContext());
         int accent = ThemeManager.getAccessibleThemeColor(requireContext());
+        LayoutInflater inflater = LayoutInflater.from(requireContext());
 
         for (int i = 0; i < order.size(); i++) {
             final int index = i;
-            LinearLayout row = new LinearLayout(requireContext());
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            int pad = dpToPx(4);
-            row.setPadding(pad, pad, pad, pad);
+            View row = inflater.inflate(R.layout.item_priority_row, container, false);
 
-            TextView indexView = new TextView(requireContext());
+            TextView indexView = row.findViewById(R.id.priorityIndex);
+            TextView nameView = row.findViewById(R.id.priorityName);
+            ImageButton up = row.findViewById(R.id.priorityUp);
+            ImageButton down = row.findViewById(R.id.priorityDown);
+
             indexView.setText(String.valueOf(i + 1));
-            indexView.setTextSize(12);
-            indexView.setTextColor(variant);
-            indexView.setGravity(android.view.Gravity.CENTER);
-            row.addView(indexView, new LinearLayout.LayoutParams(
-                    dpToPx(22), LinearLayout.LayoutParams.WRAP_CONTENT));
-
-            TextView nameView = new TextView(requireContext());
+            indexView.setTextColor(i == 0 ? accent : variant);
             nameView.setText(order.get(i));
-            nameView.setTextSize(14);
             nameView.setTextColor(i == 0 ? accent : onSurface);
-            row.addView(nameView, new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-            TextView up = buildPriorityArrow("↑", i > 0);
+            if (i > 0) {
+                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) row.getLayoutParams();
+                params.topMargin = dpToPx(2);
+                row.setLayoutParams(params);
+            }
+
+            tintArrow(up, i > 0, accent, variant);
             up.setOnClickListener(v -> {
                 if (index > 0) {
                     java.util.Collections.swap(order, index, index - 1);
                     renderPriorityList(container, order);
                 }
             });
-            row.addView(up, new LinearLayout.LayoutParams(dpToPx(40), dpToPx(36)));
 
-            TextView down = buildPriorityArrow("↓", i < order.size() - 1);
+            tintArrow(down, i < order.size() - 1, accent, variant);
             down.setOnClickListener(v -> {
                 if (index < order.size() - 1) {
                     java.util.Collections.swap(order, index, index + 1);
                     renderPriorityList(container, order);
                 }
             });
-            row.addView(down, new LinearLayout.LayoutParams(dpToPx(40), dpToPx(36)));
 
-            container.addView(row, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            container.addView(row);
         }
     }
 
-    /** 优先级列表里的上移/下移箭头 */
-    private TextView buildPriorityArrow(String text, boolean enabled) {
-        TextView view = new TextView(requireContext());
-        view.setText(text);
-        view.setTextSize(18);
-        view.setGravity(android.view.Gravity.CENTER);
-        int accent = ThemeManager.getAccessibleThemeColor(requireContext());
-        view.setTextColor(enabled ? accent : ThemeManager.getOnSurfaceVariantColor(requireContext()));
-        view.setAlpha(enabled ? 1f : 0.3f);
-        view.setEnabled(enabled);
-        android.util.TypedValue tv = new android.util.TypedValue();
-        requireContext().getTheme().resolveAttribute(
-                android.R.attr.selectableItemBackgroundBorderless, tv, true);
-        view.setBackgroundResource(tv.resourceId);
-        return view;
-    }
-
-    private void applyRadioTheme(RadioGroup group) {
-        if (group == null) return;
-        int themeColor = ThemeManager.getThemeColor();
-        int unchecked = ThemeManager.getOnSurfaceVariantColor(requireContext());
-        int[][] states = new int[][]{
-                new int[]{android.R.attr.state_checked},
-                new int[]{-android.R.attr.state_checked}
-        };
-        ColorStateList tint = new ColorStateList(states, new int[]{themeColor, unchecked});
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child instanceof RadioButton) {
-                ((RadioButton) child).setButtonTintList(tint);
-            }
-        }
+    /** 优先级列表里的上移/下移箭头：可用时主题色，不可用时淡出 */
+    private void tintArrow(ImageButton arrow, boolean enabled, int accent, int variant) {
+        if (arrow == null) return;
+        arrow.setEnabled(enabled);
+        arrow.setAlpha(enabled ? 1f : 0.35f);
+        arrow.setImageTintList(ColorStateList.valueOf(enabled ? accent : variant));
     }
 
     private void registerNetworkCallback() {
@@ -1510,11 +1558,6 @@ public class DeviceFragment extends Fragment {
      * 同名/同 IP 时再用发现优先级和 IP 版本兜底，保证顺序稳定。
      */
     private int compareDevices(DeviceInfo a, DeviceInfo b) {
-        // 「本机设备」永远排第一位：不管用户选按 IP 还是按名称，
-        // 自己这台都是第一个要看的。
-        if (a.isLocalDevice() != b.isLocalDevice()) {
-            return a.isLocalDevice() ? -1 : 1;
-        }
         if (SORT_NAME.equals(sortBy)) {
             String na = a.getTitle() == null ? "" : a.getTitle().trim();
             String nb = b.getTitle() == null ? "" : b.getTitle().trim();
