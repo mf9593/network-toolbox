@@ -118,7 +118,7 @@
                 android:layout_marginStart="@dimen/space_3"
                 android:contentDescription="网络协议：全部"
                 android:text="网络协议"
-                app:icon="@drawable/ic_ip" />
+                app:icon="@drawable/ic_net_protocol" />
 
         </LinearLayout>
 
