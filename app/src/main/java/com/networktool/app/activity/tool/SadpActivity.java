@@ -229,8 +229,31 @@ public class SadpActivity extends AppCompatActivity {
         ThemeManager.setupResultCard(findViewById(R.id.rtspTransportCard), this);
         ThemeManager.applyPrimaryButton(scanButton);
         ThemeManager.applyPrimaryButton(rtspPlayButton);
-        ThemeManager.applyPrimaryButton(rtspStopButton);
+        // 停止用 tonal 样式，避免两个同等重量的实心按钮并排
+        ThemeManager.applyTonalButton(rtspStopButton);
         scanStatusText.setTextColor(ThemeManager.getOnSurfaceVariantColor(this));
+
+        // 预览页控件跟随运行时主题色：Material3 默认取主题里写死的 colorPrimary，
+        // 换主题色后输入框描边、单选圆环、Tab 指示器还是旧颜色。
+        ThemeManager.applyInputTheme(findViewById(R.id.rtspUrlLayout), this);
+        ThemeManager.applyInputTheme(findViewById(R.id.deviceNameLayout), this);
+        for (int id : new int[]{R.id.protocolTcp, R.id.protocolUdp,
+                R.id.protocolUdpMulticast, R.id.protocolHttp}) {
+            View option = findViewById(id);
+            if (option instanceof RadioButton) {
+                ThemeManager.applyChoiceTheme((RadioButton) option, this);
+            }
+        }
+        ThemeManager.applyTabTheme(tabLayout, this);
+        int onVideo = ThemeManager.getOnVideoThemeColor(this);
+        if (rtspLoadingProgress != null) {
+            rtspLoadingProgress.setIndeterminateTintList(
+                    android.content.res.ColorStateList.valueOf(onVideo));
+        }
+        if (rtspFullscreenBtn != null) {
+            rtspFullscreenBtn.setImageTintList(
+                    android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        }
 
         scanButton.setOnClickListener(v -> startScan());
         rtspPlayButton.setOnClickListener(v -> startRtspPlayback());

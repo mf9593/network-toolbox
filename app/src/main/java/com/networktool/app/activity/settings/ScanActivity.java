@@ -442,7 +442,18 @@ public class ScanActivity extends AppCompatActivity {
         return "[ESS]";
     }
 
-    /** 直接用二维码里的信息发起连接（Android 10+ 走 WifiNetworkSuggestion，系统会弹确认） */
+    /**
+     * 用二维码里的信息连接 WiFi。
+     *
+     * <p>Android 10+ 走系统「添加网络」界面（{@link WifiConnector#openSystemAddNetwork}）：
+     * 交给系统界面添加，得到的是用户自己的普通网络——不显示「通过 网络工具箱 连接」、
+     * 可改静态 IP，且只有系统那一个界面，不会像应用内直连那样同时冒出
+     * 「应用内 Toast + 系统建议网络确认」两套提示。代价是用户要在系统界面点一下「保存」。
+     * 系统界面拉不起来时降级到系统 WiFi 设置。</p>
+     *
+     * <p>Android 9 及以下走应用内直连（旧 WifiManager API），加出来本来就是普通网络、
+     * 不带应用归属，保持原行为。</p>
+     */
     private void connectFromQr(String ssid, String password, String qrType) {
         String capabilities = capabilitiesFromQrType(qrType);
         int securityType = WifiConnector.detectSecurityType(capabilities);
@@ -457,6 +468,32 @@ public class ScanActivity extends AppCompatActivity {
                 return;
             }
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+：走系统「添加网络」界面，避免应用托管网络的归属标记和双提示。
+            // 关键：系统页面必须等二维码弹窗彻底关闭、本 Activity 稳定后再启动——
+            // 若在弹窗「连接」回调里同步 startActivity，系统页面会在弹窗未关、相机预览
+            // 还在的状态下叠加，导致其保存确认弹窗渲染不出来（实机踩坑）。
+            // 这里延迟 300ms 启动，给弹窗 dismiss 动画留时间。
+            getWindow().getDecorView().postDelayed(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                // 先清掉 App 残留的 WifiNetworkSuggestion（与无线页一致）。
+                // 根因：若存在 App 托管建议网络，系统 AddAppNetworksActivity 处理新传入
+                // 网络时保存确认框渲染不出来；清掉后系统回到干净状态才能正常弹框。
+                WifiConnector.clearAllSuggestions(this);
+                boolean launched = WifiConnector.openSystemAddNetwork(
+                        this, ssid, capabilities, password == null ? "" : password);
+                if (launched) {
+                    showToast("请在系统界面点「保存」完成连接");
+                } else {
+                    showToast("当前系统不支持预填添加，已跳到 WiFi 设置手动添加");
+                    startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
+                }
+            }, 300);
+            return;
+        }
+
+        // Android 9 及以下：应用内直连（旧 API，普通网络，无归属标记）
         showToast("正在连接 " + ssid + "…");
         WifiConnector.getInstance(this).connect(ssid, capabilities,
                 password == null ? "" : password, new WifiConnector.Callback() {

@@ -1,10 +1,14 @@
 package com.networktool.app.adapter;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -68,6 +72,13 @@ public class SavedNetworkAdapter extends RecyclerView.Adapter<SavedNetworkAdapte
         holder.networkIdText.setText("ID: " + network.getNetworkId());
 
         android.content.Context context = holder.itemView.getContext();
+
+        String password = network.getPreSharedKey();
+        holder.passwordText.setText(password == null || password.isEmpty() ? "无" : password);
+        holder.copyPasswordIcon.setColorFilter(
+                ThemeManager.getOnSurfaceVariantColor(context));
+        holder.copyPasswordIcon.setOnClickListener(v -> copyPassword(context, password));
+
         int themeColor = ThemeManager.getAccessibleThemeColor(context);
         ThemeManager.setupResultCard(holder.cardView, context);
         holder.signalIcon.setColorFilter(themeColor);
@@ -118,7 +129,9 @@ public class SavedNetworkAdapter extends RecyclerView.Adapter<SavedNetworkAdapte
         ImageView currentIcon;
         TextView ssidText;
         TextView securityText;
+        TextView passwordText;
         TextView networkIdText;
+        ImageView copyPasswordIcon;
 
         ViewHolder(View itemView) {
             super(itemView);
@@ -128,7 +141,25 @@ public class SavedNetworkAdapter extends RecyclerView.Adapter<SavedNetworkAdapte
             currentIcon = itemView.findViewById(R.id.currentIcon);
             ssidText = itemView.findViewById(R.id.ssidText);
             securityText = itemView.findViewById(R.id.securityText);
+            passwordText = itemView.findViewById(R.id.passwordText);
             networkIdText = itemView.findViewById(R.id.networkIdText);
+            copyPasswordIcon = itemView.findViewById(R.id.copyPasswordIcon);
         }
+    }
+
+    /** 把明文密码放进剪贴板；密码为空时只提示，不往剪贴板里塞空串 */
+    private void copyPassword(Context context, String password) {
+        if (password == null || password.isEmpty()) {
+            Toast.makeText(context, "该网络没有密码", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ClipboardManager clipboard =
+                (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) {
+            Toast.makeText(context, "设备不支持剪贴板", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("wifi_password", password));
+        Toast.makeText(context, "密码已复制", Toast.LENGTH_SHORT).show();
     }
 }

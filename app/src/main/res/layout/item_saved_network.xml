@@ -62,13 +62,65 @@
 
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/securityText"
-                android:layout_width="wrap_content"
+            <!-- 安全类型：label 固定宽 + value 自适应 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="WPA2-PSK"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="12sp" />
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="安全类型"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/securityText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="WPA2"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- 密码：Shizuku 借 shell 权限读到的明文，可一键复制 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="密码"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/passwordText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="读取中"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/copyPasswordIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="复制密码"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_copy" />
+
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/networkIdText"

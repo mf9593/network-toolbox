@@ -1,9 +1,11 @@
 package com.networktool.app.adapter;
 
+import android.content.res.ColorStateList;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -175,6 +177,17 @@ public class OnvifDeviceAdapter extends RecyclerView.Adapter<OnvifDeviceAdapter.
         OnvifDevice device = deviceList.get(position);
 
         holder.cardView.setCardBackgroundColor(ThemeManager.getSurfaceColor(holder.itemView.getContext()));
+
+        // 卡片上所有图标统一跟随 ThemeManager 动态主题色。
+        // 布局里写的是静态 `?attr/colorAccent`，切换主题色/深浅色时不会自动跟着变，
+        // 所以这里在绑定时代码重刷一遍 tint，保证图标颜色始终与当前主题一致。
+        android.content.res.ColorStateList iconTint = android.content.res.ColorStateList.valueOf(
+                ThemeManager.getAccessibleThemeColor(holder.itemView.getContext()));
+        holder.deviceIcon.setImageTintList(iconTint);
+        holder.connectButton.setImageTintList(iconTint);
+        holder.streamButton.setImageTintList(iconTint);
+        holder.menuButton.setImageTintList(iconTint);
+
         holder.nameText.setText(device.getDisplayName());
         holder.addressText.setText((device.getIpAddress() != null ? device.getIpAddress() : "未知") + ":" + device.getPort());
 
@@ -251,6 +264,7 @@ public class OnvifDeviceAdapter extends RecyclerView.Adapter<OnvifDeviceAdapter.
 
     static class ViewHolder extends RecyclerView.ViewHolder {
         MaterialCardView cardView;
+        ImageView deviceIcon;
         TextView nameText;
         TextView addressText;
         TextView infoText;
@@ -262,6 +276,7 @@ public class OnvifDeviceAdapter extends RecyclerView.Adapter<OnvifDeviceAdapter.
         ViewHolder(View itemView) {
             super(itemView);
             cardView = itemView.findViewById(R.id.cardView);
+            deviceIcon = itemView.findViewById(R.id.deviceIcon);
             nameText = itemView.findViewById(R.id.nameText);
             addressText = itemView.findViewById(R.id.addressText);
             infoText = itemView.findViewById(R.id.infoText);

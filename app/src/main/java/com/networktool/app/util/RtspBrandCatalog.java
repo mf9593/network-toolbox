@@ -40,9 +40,64 @@ public final class RtspBrandCatalog {
             this.streams = new ArrayList<>();
             Collections.addAll(this.streams, streams);
         }
+
+        /** 品牌中文名；未收录中文名时返回 null */
+        public String cnName() {
+            return CN_NAMES.get(name);
+        }
+
+        /** 列表 / 详情里显示的名称：英文名 + 中文名（有收录时） */
+        public String displayName() {
+            String cn = CN_NAMES.get(name);
+            return cn == null ? name : name + "（" + cn + "）";
+        }
     }
 
     private static final List<Brand> BRANDS = new ArrayList<>();
+
+    /**
+     * 常见品牌的官方中文名。列表里只有英文名，用户按中文搜不到，也不认识是哪一家。
+     *
+     * <p>只收有公开官方中文名的品牌（例如 Seetong 官方是「天视通」，别照字面猜成「视洞」）；
+     * 没有可靠中文名的品牌不硬翻，列表里仍然只显示英文。</p>
+     */
+    private static final java.util.Map<String, String> CN_NAMES = new java.util.HashMap<>();
+
+    static {
+        CN_NAMES.put("360Eye", "360");
+        CN_NAMES.put("Axis", "安讯士");
+        CN_NAMES.put("Bosch", "博世");
+        CN_NAMES.put("Canon", "佳能");
+        CN_NAMES.put("Cisco", "思科");
+        CN_NAMES.put("D-Link", "友讯");
+        CN_NAMES.put("Dahua", "大华");
+        CN_NAMES.put("eufy", "悠飞");
+        CN_NAMES.put("EZVIZ", "萤石");
+        CN_NAMES.put("Foscam", "福斯康姆");
+        CN_NAMES.put("Hanwha Vision (Samsung Wisenet)", "韩华（原三星）");
+        CN_NAMES.put("Hikvision", "海康威视");
+        CN_NAMES.put("Honeywell", "霍尼韦尔");
+        CN_NAMES.put("Imou", "乐橙");
+        CN_NAMES.put("Jovision", "中维世纪");
+        CN_NAMES.put("Linksys", "领势");
+        CN_NAMES.put("Panasonic i-PRO", "松下 i-PRO");
+        CN_NAMES.put("Pelco", "派尔高");
+        CN_NAMES.put("Reolink", "睿联");
+        CN_NAMES.put("Sony", "索尼");
+        CN_NAMES.put("Tenda", "腾达");
+        CN_NAMES.put("Tiandy", "天地伟业");
+        CN_NAMES.put("TP-Link Tapo", "普联 Tapo");
+        CN_NAMES.put("TP-Link VIGI", "普联 VIGI");
+        CN_NAMES.put("Ubiquiti (airCam / UniFi Video)", "优比快");
+        CN_NAMES.put("Ubiquiti UniFi Protect", "优比快 UniFi Protect");
+        CN_NAMES.put("Uniarch", "阿宇");
+        CN_NAMES.put("Uniview (UNV)", "宇视");
+        CN_NAMES.put("Vstarcam", "威视达康");
+        CN_NAMES.put("Xiaomi", "小米");
+        CN_NAMES.put("XMEye / Xiongmai", "雄迈");
+        CN_NAMES.put("YI", "小蚁");
+        CN_NAMES.put("Yoosee / generic ONVIF", "有看头");
+    }
 
     static {
         add(new Brand("360Eye", 554, null,
@@ -606,7 +661,7 @@ public final class RtspBrandCatalog {
         return null;
     }
 
-    /** 名称模糊匹配，供搜索用 */
+    /** 名称模糊匹配（英文名或中文名都能命中），供搜索用 */
     public static List<Brand> search(String keyword) {
         List<Brand> result = new ArrayList<>();
         if (keyword == null || keyword.trim().isEmpty()) {
@@ -615,7 +670,9 @@ public final class RtspBrandCatalog {
         }
         String key = keyword.trim().toLowerCase(java.util.Locale.ROOT);
         for (Brand b : BRANDS) {
-            if (b.name.toLowerCase(java.util.Locale.ROOT).contains(key)) {
+            String cn = CN_NAMES.get(b.name);
+            if (b.name.toLowerCase(java.util.Locale.ROOT).contains(key)
+                    || (cn != null && cn.toLowerCase(java.util.Locale.ROOT).contains(key))) {
                 result.add(b);
             }
         }

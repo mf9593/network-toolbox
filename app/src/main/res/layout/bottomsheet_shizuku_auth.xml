@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shizuku 授权底部弹窗：已保存网络的列表和密码都靠它借 shell 权限读取 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/page_margin"
+    android:paddingTop="@dimen/space_3"
+    android:paddingEnd="@dimen/page_margin"
+    android:paddingBottom="@dimen/space_3">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Shizuku 授权"
+        android:textAppearance="@style/TextAppearance.NetworkTool.Title" />
+
+    <TextView
+        android:id="@+id/sheetDescText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="以 shell 身份读取系统保存的网络与明文密码，只在本机显示，不上传"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="12sp" />
+
+    <!-- 状态卡：随当前 Shizuku 状态切换图标 / 文案 -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/sheetStatusCard"
+        style="@style/Widget.NetworkTool.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_3"
+        app:cardElevation="0dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="@dimen/card_padding">
+
+            <ImageView
+                android:id="@+id/sheetStatusIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="Shizuku 状态"
+                android:src="@drawable/ic_key" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/sheetStatusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="正在检测 Shizuku"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/sheetHintText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="正在检测 Shizuku 是否可用"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 主操作：启动 Shizuku / 申请授权 / 重新读取，随状态切换 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/sheetActionButton"
+        style="@style/Widget.NetworkTool.Button"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="@dimen/space_3"
+        android:text="检测中"
+        android:textSize="14sp" />
+
+    <!-- 次操作：没有 Shizuku 时引导安装 / 已授权时重新读取的补充入口 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/sheetSecondaryButton"
+        style="@style/Widget.NetworkTool.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="打开 Shizuku 应用"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+</LinearLayout>

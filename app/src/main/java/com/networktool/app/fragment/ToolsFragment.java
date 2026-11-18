@@ -102,6 +102,7 @@ public class ToolsFragment extends Fragment
         buildCatalog();
         seedDefaultFavorites();
         migrateFavorites();
+        migrateFavoritesToTen();
         setupSearch();
         rebuildList();
     }
@@ -300,6 +301,12 @@ public class ToolsFragment extends Fragment
         List<ToolItem> nativeSettings = new ArrayList<>();
         nativeSettings.add(new ToolItem("电池优化", R.drawable.ic_battery_optimization,
                 "打开系统的电池优化（忽略）设置", this::onBatteryOptimization));
+        // Android 11+ 才有「所有文件访问」这个系统开关，低版本不显示这一项
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            nativeSettings.add(new ToolItem("所有文件访问", R.drawable.ic_folder,
+                    "打开系统的所有文件访问（MANAGE_EXTERNAL_STORAGE）开关",
+                    this::onAllFilesAccess));
+        }
         categories.add(new Category("系统原生设置", nativeSettings));
     }
 
@@ -341,16 +348,46 @@ public class ToolsFragment extends Fragment
         }
     }
 
-    /** 首次安装时给「我的常用」预置几个高频工具，避免一片空白 */
+    /** 首次安装时预置的「我的常用」默认工具，顺序即展示顺序 */
+    private static final String[] DEFAULT_FAVORITES = {
+            "Ping", "IP 扫描", "端口扫描", "DNS 优选", "网络测速",
+            "局域网聊天", "已保存网络", "IP 计算器", "HTTP 调试", "内置浏览器"
+    };
+
+    /** 首次安装时给「我的常用」预置高频工具，避免一片空白；预置到上限 10 个 */
     private void seedDefaultFavorites() {
         if (prefs == null || prefs.contains(KEY_FAVORITES)) return;
-        String[] defaults = {"Ping", "端口扫描", "IP 扫描", "DNS 优选", "局域网聊天"};
-        for (String title : defaults) {
+        for (String title : DEFAULT_FAVORITES) {
+            if (favorites.size() >= MAX_FAVORITES) break;
             if (findTool(title) != null && !favorites.contains(title)) {
                 favorites.add(title);
             }
         }
         saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
+    }
+
+    /**
+     * 老版本只预置 5 个常用工具，升级后补到 10 个。
+     * 只往后追加、不打乱用户已有顺序，也不会覆盖用户手动调过的排序；
+     * 已经有 10 个时什么也不做。只执行一次，之后用户删掉哪个都不会被重新塞回来。
+     */
+    private void migrateFavoritesToTen() {
+        if (prefs == null) return;
+        final String key = "migrated_favorites_to_ten";
+        if (prefs.getBoolean(key, false)) return;
+        boolean changed = false;
+        for (String title : DEFAULT_FAVORITES) {
+            if (favorites.size() >= MAX_FAVORITES) break;
+            if (findTool(title) != null && !favorites.contains(title)) {
+                favorites.add(title);
+                changed = true;
+            }
+        }
+        if (changed) {
+            saveSet(KEY_FAVORITES, new LinkedHashSet<>(favorites));
+        }
+        prefs.edit().putBoolean(key, true).apply();
+        if (changed) renderFavoriteStrip(true);
     }
 
     /** 渲染顶部「我的常用」横向小卡片；搜索时隐藏，避免占用结果区域 */
@@ -680,6 +717,37 @@ public class ToolsFragment extends Fragment
             }
         }
         Toast.makeText(context, "无法打开电池优化页面", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * 打开系统原生的「所有文件访问」开关页（MANAGE_EXTERNAL_STORAGE）。
+     *
+     * <p>Android 11 起才有这个开关。该权限只能跳系统页手动开，App 无法直接弹窗申请。
+     * 标准页面被裁掉的 ROM 退回应用详情页、系统设置首页，保证点了一定有反应。</p>
+     */
+    private void onAllFilesAccess(ToolItem tool) {
+        Context context = getContext();
+        if (context == null) return;
+        String packageName = context.getPackageName();
+        android.content.Intent[] candidates = new android.content.Intent[]{
+                // 标准「所有文件访问」管理页
+                new android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                // 退回应用详情页（部分 ROM 在这里也能开存储权限）
+                new android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:" + packageName)),
+                new android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+        };
+        for (android.content.Intent intent : candidates) {
+            try {
+                context.startActivity(intent);
+                return;
+            } catch (Throwable ignored) {
+                // 该 ROM 没有这个页面，继续尝试下一个
+            }
+        }
+        Toast.makeText(context, "无法打开所有文件访问页面", Toast.LENGTH_SHORT).show();
     }
 
     private void onAppManager(ToolItem tool) {

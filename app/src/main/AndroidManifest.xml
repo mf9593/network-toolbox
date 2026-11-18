@@ -9,9 +9,16 @@
 
     <!-- 应用最低支持 API 21。
          ExoPlayer 原生支持 API 21+，无需 overrideLibrary。 -->
+    <!--
+         Shizuku 的 provider 声明 minSdk 23、api 声明 minSdk 24，本项目兼容到 21。
+         读取已保存网络的接口本身要求 Android 9+，且 Shizuku 在 Android 7 以下无法运行，
+         所以 21~23 的设备上这个功能只会显示"未检测到 Shizuku"，不会走到 Shizuku 代码，
+         这里声明覆盖以保留应用原有的安装范围。
+         -->
     <uses-sdk
         android:minSdkVersion="21"
-        android:targetSdkVersion="34" />
+        android:targetSdkVersion="34"
+        tools:overrideLibrary="rikka.shizuku.provider, rikka.shizuku.api, rikka.shizuku.shared, rikka.shizuku.aidl" />
 
     <!-- 查看 WLAN 状态 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -360,6 +367,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Shizuku：以 shell(uid 2000) 身份调用系统特权接口 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 

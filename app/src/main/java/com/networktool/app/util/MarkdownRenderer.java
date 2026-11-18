@@ -74,8 +74,9 @@ public class MarkdownRenderer {
     /**
      * 将 Markdown 转换为 HTML。
      *
-     * <p>二级标题（{@code ##}）会被渲染成一个可折叠章节，并在正文前自动生成目录。
-     * 折叠用的是 HTML5 原生 {@code <details>/<summary>}，不是自己写的展开逻辑。</p>
+     * <p>二级标题（{@code ##}）会被渲染成一个可折叠章节，不生成目录——
+     * 章节默认就是折叠的，目录点开还得再展开一次，反而多一步。</p>
+     * <p>折叠用的是 HTML5 原生 {@code <details>/<summary>}，不是自己写的展开逻辑。</p>
      */
     private static String convertToHtml(Context context, String markdown, boolean isDarkMode) {
         String[] lines = markdown.split("\n");
@@ -94,15 +95,6 @@ public class MarkdownRenderer {
         String borderColor = isDarkMode ? "#33FFFFFF" : "#1F000000";
         String cardColor = isDarkMode ? "#1FFFFFFF" : "#08000000";
 
-        // 先收集二级标题，用于生成目录
-        java.util.List<String> sections = new java.util.ArrayList<>();
-        for (String raw : lines) {
-            String line = raw.trim();
-            if (line.startsWith("## ")) {
-                sections.add(line.substring(3).trim());
-            }
-        }
-
         html.append("<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>")
             .append("<style>")
             .append("body { background-color: ").append(bgColor).append("; color: ").append(textColor)
@@ -115,41 +107,21 @@ public class MarkdownRenderer {
             .append("li { color: ").append(textColor).append("; margin: 4px 0; }")
             .append("strong { font-weight: bold; }")
             .append("hr { border: none; border-top: 1px solid ").append(borderColor).append("; margin: 16px 0; }")
-            // 目录
-            .append(".toc { background-color: ").append(cardColor).append("; border: 1px solid ")
-            .append(borderColor).append("; border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; }")
-            .append(".toc-title { color: ").append(subTextColor)
-            .append("; font-size: 12px; letter-spacing: 1px; margin-bottom: 8px; }")
-            .append(".toc-item { display: block; color: ").append(accentColor)
-            .append("; text-decoration: none; font-size: 15px; padding: 7px 0; border-bottom: 1px solid ")
-            .append(borderColor).append("; }")
-            .append(".toc-item:last-child { border-bottom: none; }")
-            // 可折叠章节
+            // 可折叠章节：右侧尖角用 CSS 边框画，不用 ⌄/⌃ 字符——
+            // 这两个字符在不同字体下形状、基线都不一样，实际显示很怪
             .append("details.sec { border: 1px solid ").append(borderColor)
             .append("; border-radius: 12px; margin-bottom: 10px; background-color: ")
-            .append(cardColor).append("; }")
-            .append("details.sec > summary { cursor: pointer; padding: 14px; font-size: 17px; font-weight: bold; color: ")
+            .append(cardColor).append("; scroll-margin-top: 8px; }")
+            .append("details.sec > summary { position: relative; cursor: pointer; padding: 14px 40px 14px 14px; font-size: 17px; font-weight: bold; color: ")
             .append(textColor).append("; list-style: none; }")
             .append("details.sec > summary::-webkit-details-marker { display: none; }")
-            .append("details.sec > summary::after { content: '\u2304'; float: right; color: ")
-            .append(subTextColor).append("; }")
-            .append("details.sec[open] > summary::after { content: '\u2303'; }")
+            .append("details.sec > summary::after { content: ''; position: absolute; right: 18px; top: 50%; width: 9px; height: 9px; margin-top: -6px; border-right: 2px solid ")
+            .append(subTextColor).append("; border-bottom: 2px solid ").append(subTextColor)
+            .append("; transform: rotate(45deg); transition: transform 0.18s ease; }")
+            .append("details.sec[open] > summary::after { transform: rotate(225deg); }")
             .append(".sec-body { padding: 0 14px 14px 14px; }")
             .append("</style>")
-            // 目录点击时把对应章节展开（<details> 默认只滚动不展开）
-            .append("<script>function ntOpen(id){var d=document.getElementById(id);if(d){d.open=true;}return true;}</script>")
             .append("</head><body>");
-
-        // 目录：章节数够多才生成，两三节反而占地方
-        if (sections.size() >= 2) {
-            html.append("<div class='toc'><div class='toc-title'>目录 · 点击展开</div>");
-            for (int i = 0; i < sections.size(); i++) {
-                html.append("<a class='toc-item' href='#nt-sec-").append(i)
-                    .append("' onclick=\"return ntOpen('nt-sec-").append(i).append("')\">")
-                    .append(processInline(sections.get(i))).append("</a>");
-            }
-            html.append("</div>");
-        }
 
         boolean inList = false;
         boolean sectionOpen = false;

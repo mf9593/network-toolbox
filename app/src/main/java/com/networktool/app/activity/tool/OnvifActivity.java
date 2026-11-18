@@ -89,9 +89,8 @@ public class OnvifActivity extends AppCompatActivity {
     // RTSP播放器相关
     private TextInputEditText rtspUrlInput;
     private TextInputEditText deviceNameInput;
-    private Button rtspPlayButton;
-    private Button rtspStopButton;
-    private FrameLayout rtspPlayerContainer;
+    private com.google.android.material.button.MaterialButton rtspPlayButton;
+    private com.google.android.material.button.MaterialButton rtspStopButton;    private FrameLayout rtspPlayerContainer;
     private FrameLayout videoViewContainer;
     private View rtspTopBar;
     private View rtspBottomBar;
@@ -275,17 +274,25 @@ public class OnvifActivity extends AppCompatActivity {
         // 概览卡 / 操作卡沿用主页卡片底色，避免和其余页面有色差
         ThemeManager.setupResultCard(findViewById(R.id.infoCard), this);
         ThemeManager.setupResultCard(findViewById(R.id.scanCard), this);
-        // 主操作按钮跟随主题色（扫描 / 播放）
-        for (int id : new int[]{R.id.scanButton, R.id.rtspPlayButton}) {
+        // 次要操作按钮（扫描 / 手动添加 / 停止）统一 tonal 样式：淡主题底 + 主题色文字，
+        // 背景色跟 ThemeManager 动态主题色；播放是主操作用 primary 实心。
+        // TonalButton 的 XML 默认背景取静态 colorSecondaryContainer，不跟动态主题色，需在此重刷。
+        for (int id : new int[]{R.id.scanButton, R.id.addManualButton, R.id.rtspStopButton}) {
             View button = findViewById(id);
-            if (button instanceof com.google.android.material.button.MaterialButton) {
-                ThemeManager.applyPrimaryButton(
-                        (com.google.android.material.button.MaterialButton) button);
-            }
+            if (!(button instanceof com.google.android.material.button.MaterialButton)) continue;
+            ThemeManager.applyTonalButton((com.google.android.material.button.MaterialButton) button);
+        }
+        View playButton = findViewById(R.id.rtspPlayButton);
+        if (playButton instanceof com.google.android.material.button.MaterialButton) {
+            ThemeManager.applyPrimaryButton((com.google.android.material.button.MaterialButton) playButton);
         }
         scanButton = findViewById(R.id.scanButton);
         addManualButton = findViewById(R.id.addManualButton);
         clearButton = findViewById(R.id.clearButton);
+        // 清空是次要破坏性操作，用 TextButton（透明底 + 主题色文字）。
+        // Material3 TextButton 的文字色取 XML 静态 colorPrimary，不跟 ThemeManager 动态主题色，
+        // 所以这里在代码里显式按当前主题色重刷，换主题色才会跟着变。
+        clearButton.setTextColor(ThemeManager.getAccessibleThemeColor(this));
         scanProgressBar = findViewById(R.id.scanProgressBar);
         scanStatusText = findViewById(R.id.scanStatusText);
         deviceCountText = findViewById(R.id.deviceCountText);
@@ -312,6 +319,20 @@ public class OnvifActivity extends AppCompatActivity {
         rtspLoadingProgress = findViewById(R.id.rtspLoadingProgress);
         rtspStatusOverlay = findViewById(R.id.rtspStatusOverlay);
         transportProtocolGroup = findViewById(R.id.transportProtocolGroup);
+
+        // 预览页控件统一跟随运行时主题色：Material3 默认取主题里写死的 colorPrimary，
+        // 换主题色后输入框描边、单选圆环、Tab 指示器还是旧颜色。
+        ThemeManager.applyInputTheme(findViewById(R.id.rtspUrlLayout), this);
+        ThemeManager.applyInputTheme(findViewById(R.id.deviceNameLayout), this);
+        for (int id : new int[]{R.id.protocolTcp, R.id.protocolUdp,
+                R.id.protocolUdpMulticast, R.id.protocolHttp}) {
+            View option = findViewById(id);
+            if (option instanceof RadioButton) {
+                ThemeManager.applyChoiceTheme((RadioButton) option, this);
+            }
+        }
+        ThemeManager.applyTabTheme(tabLayout, this);
+        applyRtspPlayerTheme();
 
         // RTSP 预览页的两张卡片跟随主题色（90% 底色 + 10% 主题色），避免出现默认灰紫底
         ThemeManager.setupResultCard(findViewById(R.id.rtspAddressCard), this);
@@ -345,6 +366,32 @@ public class OnvifActivity extends AppCompatActivity {
             }
             appendLog("传输协议切换为: " + currentTransportProtocol, "INFO");
         });
+    }
+
+    /**
+     * 黑色播放层上的控件：图标统一白色（ic_play 本身是黑色实心，黑底上等于隐形），
+     * 进度条 / 滑块取提亮后的主题色，保证在黑底上也看得清。
+     */
+    private void applyRtspPlayerTheme() {
+        int onVideo = ThemeManager.getOnVideoThemeColor(this);
+        if (rtspSeekBar != null) {
+            rtspSeekBar.setProgressTintList(android.content.res.ColorStateList.valueOf(onVideo));
+            rtspSeekBar.setThumbTintList(android.content.res.ColorStateList.valueOf(onVideo));
+        }
+        if (rtspLoadingProgress != null) {
+            rtspLoadingProgress.setIndeterminateTintList(
+                    android.content.res.ColorStateList.valueOf(onVideo));
+        }
+        int white = android.graphics.Color.WHITE;
+        for (ImageView icon : new ImageView[]{rtspPlayPauseBtn, rtspBackButton, rtspFullscreenBtn}) {
+            if (icon != null) {
+                icon.setImageTintList(android.content.res.ColorStateList.valueOf(white));
+            }
+        }
+        if (rtspResolutionText != null) {
+            // 播放层固定黑底，这里不能用 ?attr 的文字色：浅色主题下会变成深灰、糊在黑底上
+            rtspResolutionText.setTextColor(0xB3FFFFFF);
+        }
     }
 
     private void setupRecyclerView() {

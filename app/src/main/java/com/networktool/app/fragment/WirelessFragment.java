@@ -18,14 +18,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -47,9 +44,11 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.networktool.app.R;
 import com.networktool.app.activity.settings.ScanActivity;
 import com.networktool.app.activity.tool.MacActivity;
+import com.networktool.app.adapter.ScanOptionAdapter;
 import com.networktool.app.adapter.WifiAdapter;
 import com.networktool.app.model.WifiInfoModel;
 import com.networktool.app.util.AppErrorLogger;
+import com.networktool.app.util.BottomSheetHelper;
 import com.networktool.app.util.NetworkUtils;
 import com.networktool.app.util.ThemeManager;
 import com.networktool.app.util.WifiConnector;
@@ -214,47 +213,53 @@ public class WirelessFragment extends Fragment implements WifiConnector.Callback
             });
         }
         if (standardFilterButton != null) {
-            standardFilterButton.setOnClickListener(v -> showFilterPopup(false));
+            standardFilterButton.setOnClickListener(v -> showStandardFilterSheet());
         }
         updateFilterButtons();
     }
 
-    private void showFilterPopup(boolean frequency) {
-        MaterialButton anchor = frequency ? frequencyFilterButton : standardFilterButton;
-        if (anchor == null) return;
+    /**
+     * 标准筛选：和设备页的协议筛选、排序共用同一套底部弹窗
+     * （{@code dialog_scan_filter} + {@code ScanOptionAdapter}：标题、每项一句说明、选中描边勾）。
+     * 原来用的是系统 {@link android.widget.PopupMenu}，样式和设备页对不上，选项也没有任何解释。
+     */
+    private void showStandardFilterSheet() {
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View view = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_scan_filter, null);
+        dialog.setContentView(view);
 
-        PopupMenu popup = new PopupMenu(requireContext(), anchor);
-        Menu menu = popup.getMenu();
-        menu.setGroupCheckable(0, true, true);
+        TextView title = view.findViewById(R.id.filterSheetTitle);
+        TextView subtitle = view.findViewById(R.id.filterSheetSubtitle);
+        if (title != null) title.setText("筛选 Wi-Fi 标准");
+        if (subtitle != null) subtitle.setText("按网络代际过滤；「全部标准」显示所有网络");
 
-        String[] labels;
-        String[] values;
-        if (frequency) {
-            labels = new String[]{"全部频段", "2.4 GHz", "5 GHz", "6 GHz"};
-            values = new String[]{"全部", "2.4GHz", "5GHz", "6GHz"};
-        } else {
-            labels = new String[]{"全部标准", "Wi-Fi 7", "Wi-Fi 6", "Wi-Fi 5", "Wi-Fi 4"};
-            values = new String[]{"全部", "Wi-Fi 7", "Wi-Fi 6", "Wi-Fi 5", "Wi-Fi 4"};
-        }
-        String current = frequency ? frequencyFilter : standardFilter;
-        for (int i = 0; i < labels.length; i++) {
-            MenuItem item = menu.add(0, i, i, labels[i]);
-            item.setCheckable(true);
-            item.setChecked(values[i].equals(current));
-        }
-
-        popup.setOnMenuItemClickListener(item -> {
-            String selected = values[item.getItemId()];
-            if (frequency) {
-                frequencyFilter = selected;
-            } else {
-                standardFilter = selected;
-            }
+        RecyclerView list = view.findViewById(R.id.filterOptionList);
+        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        // 适配器约定 key == null 表示「全部」，这里把 "全部" 这个内部哨兵值映射成 null
+        String selectedKey = "全部".equals(standardFilter) ? null : standardFilter;
+        list.setAdapter(new ScanOptionAdapter(buildStandardOptions(), selectedKey, option -> {
+            standardFilter = option.key == null ? "全部" : option.key;
             updateFilterButtons();
             applyFilter();
-            return true;
-        });
-        popup.show();
+            dialog.dismiss();
+        }));
+        BottomSheetHelper.capHeight(dialog, 0.8f);
+        dialog.show();
+    }
+
+    /**
+     * 标准筛选项。key 必须和 {@link WifiInfoModel#getStandard()} 返回的文案完全一致，
+     * 否则筛出来会是空列表；null 表示「全部」。
+     */
+    private List<ScanOptionAdapter.Option> buildStandardOptions() {
+        List<ScanOptionAdapter.Option> options = new ArrayList<>();
+        options.add(new ScanOptionAdapter.Option(null, "全部标准", "显示所有代际的网络"));
+        options.add(new ScanOptionAdapter.Option("Wi-Fi 7", "Wi-Fi 7", "802.11be，6 GHz 超宽信道"));
+        options.add(new ScanOptionAdapter.Option("Wi-Fi 6", "Wi-Fi 6", "802.11ax，新一代主流路由"));
+        options.add(new ScanOptionAdapter.Option("Wi-Fi 5", "Wi-Fi 5", "802.11ac，5 GHz 主力"));
+        options.add(new ScanOptionAdapter.Option("Wi-Fi 4", "Wi-Fi 4", "802.11n，2.4 / 5 GHz 老设备"));
+        return options;
     }
 
     private void updateFilterButtons() {

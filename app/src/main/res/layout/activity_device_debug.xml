@@ -268,6 +268,7 @@
                         android:padding="14dp">
 
                         <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/rtspUrlLayout"
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -284,6 +285,7 @@
                         </com.google.android.material.textfield.TextInputLayout>
 
                         <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/deviceNameLayout"
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -326,52 +328,66 @@
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
 
-                        <RadioGroup
-                            android:id="@+id/transportProtocolGroup"
+                        <!-- 横向可滚动：4 个协议用 wrap_content 排一行，
+                             避免 weight 均分把「UDP组播」挤到第二行导致对不齐 -->
+                        <HorizontalScrollView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
-                            android:orientation="horizontal">
+                            android:fillViewport="true"
+                            android:scrollbars="none">
 
-                            <RadioButton
-                                android:id="@+id/protocolTcp"
-                                android:layout_width="0dp"
+                            <RadioGroup
+                                android:id="@+id/transportProtocolGroup"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:buttonTint="?attr/colorPrimary"
-                                android:checked="true"
-                                android:text="TCP"
-                                android:textSize="11sp" />
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
 
-                            <RadioButton
-                                android:id="@+id/protocolUdp"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:buttonTint="?attr/colorPrimary"
-                                android:text="UDP"
-                                android:textSize="11sp" />
+                                <RadioButton
+                                    android:id="@+id/protocolTcp"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:buttonTint="?attr/colorPrimary"
+                                    android:checked="true"
+                                    android:maxLines="1"
+                                    android:text="TCP"
+                                    android:textSize="11sp" />
 
-                            <RadioButton
-                                android:id="@+id/protocolUdpMulticast"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:buttonTint="?attr/colorPrimary"
-                                android:text="UDP组播"
-                                android:textSize="11sp" />
+                                <RadioButton
+                                    android:id="@+id/protocolUdp"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:buttonTint="?attr/colorPrimary"
+                                    android:maxLines="1"
+                                    android:text="UDP"
+                                    android:textSize="11sp" />
 
-                            <RadioButton
-                                android:id="@+id/protocolHttp"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:buttonTint="?attr/colorPrimary"
-                                android:text="HTTP"
-                                android:textSize="11sp" />
+                                <RadioButton
+                                    android:id="@+id/protocolUdpMulticast"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:buttonTint="?attr/colorPrimary"
+                                    android:maxLines="1"
+                                    android:text="UDP组播"
+                                    android:textSize="11sp" />
 
-                        </RadioGroup>
+                                <RadioButton
+                                    android:id="@+id/protocolHttp"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:buttonTint="?attr/colorPrimary"
+                                    android:maxLines="1"
+                                    android:text="HTTP"
+                                    android:textSize="11sp" />
+
+                            </RadioGroup>
+
+                        </HorizontalScrollView>
 
                     </LinearLayout>
 
@@ -384,7 +400,7 @@
                     android:layout_marginTop="8dp"
                     android:orientation="horizontal">
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/rtspPlayButton"
                         style="@style/Widget.NetworkTool.Button"
                         android:layout_width="0dp"
@@ -393,12 +409,12 @@
                         android:text="播放"
                         android:textSize="13sp" />
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/rtspStopButton"
                         style="@style/Widget.NetworkTool.Button.TonalButton"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginStart="12dp"
                         android:layout_weight="1"
                         android:text="停止"
                         android:textSize="13sp" />

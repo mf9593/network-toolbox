@@ -255,10 +255,97 @@ public class ThemeManager {
     }
 
     /**
+     * 输入框跟随主题色：Material3 的 OutlinedBox 默认取主题里静态的 colorPrimary，
+     * 用户切换主题色后描边和光标还是旧颜色，所以这里按运行时主题色重刷一遍。
+     */
+    public static void applyInputTheme(com.google.android.material.textfield.TextInputLayout layout,
+                                       Context context) {
+        if (layout == null || context == null) return;
+        int accent = getAccessibleThemeColor(context);
+        int onSurface = getOnSurfaceColor(context);
+        int variant = getOnSurfaceVariantColor(context);
+        layout.setBoxStrokeColor(accent);
+        layout.setHintTextColor(ColorStateList.valueOf(variant));
+        layout.setDefaultHintTextColor(ColorStateList.valueOf(variant));
+        android.widget.EditText editText = layout.getEditText();
+        if (editText != null) {
+            editText.setTextColor(onSurface);
+            editText.setHintTextColor(variant);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                tintTextHandles(editText, accent);
+            }
+        }
+    }
+
+    /**
+     * 光标和选区把手默认取主题里静态的 colorAccent，换主题色后还是旧颜色（常见是默认青色）。
+     */
+    private static void tintTextHandles(android.widget.EditText editText,
+                                        int color) {
+        android.graphics.drawable.Drawable cursor = editText.getTextCursorDrawable();
+        if (cursor != null) {
+            cursor = cursor.mutate();
+            cursor.setTint(color);
+            editText.setTextCursorDrawable(cursor);
+        }
+        android.graphics.drawable.Drawable handle = editText.getTextSelectHandle();
+        if (handle != null) {
+            handle = handle.mutate();
+            handle.setTint(color);
+            editText.setTextSelectHandle(handle);
+        }
+        android.graphics.drawable.Drawable handleLeft = editText.getTextSelectHandleLeft();
+        if (handleLeft != null) {
+            handleLeft = handleLeft.mutate();
+            handleLeft.setTint(color);
+            editText.setTextSelectHandleLeft(handleLeft);
+        }
+        android.graphics.drawable.Drawable handleRight = editText.getTextSelectHandleRight();
+        if (handleRight != null) {
+            handleRight = handleRight.mutate();
+            handleRight.setTint(color);
+            editText.setTextSelectHandleRight(handleRight);
+        }
+    }
+
+    /**
+     * 单选 / 复选跟随主题色：默认圆环也是主题里的静态色，不重刷会一直是灰紫。
+     */
+    public static void applyChoiceTheme(android.widget.CompoundButton button, Context context) {
+        if (button == null || context == null) return;
+        button.setButtonTintList(ColorStateList.valueOf(getAccessibleThemeColor(context)));
+        button.setTextColor(getOnSurfaceColor(context));
+    }
+
+    /**
+     * TabLayout 指示器与选中文字跟随主题色
+     */
+    public static void applyTabTheme(com.google.android.material.tabs.TabLayout tabLayout,
+                                     Context context) {
+        if (tabLayout == null || context == null) return;
+        int accent = getAccessibleThemeColor(context);
+        tabLayout.setSelectedTabIndicatorColor(accent);
+        tabLayout.setTabTextColors(getOnSurfaceVariantColor(context), accent);
+    }
+
+    /**
+     * 黑色视频层上的主题色：抬亮到能在黑底上看清，否则深色主题色会糊成一片。
+     */
+    public static int getOnVideoThemeColor(Context context) {
+        int color = getAdaptiveThemeColor(context);
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        if (hsv[2] < 0.75f) {
+            hsv[2] = Math.min(1f, hsv[2] + (0.75f - hsv[2]) * 0.9f);
+            color = Color.HSVToColor(hsv);
+        }
+        return color;
+    }
+
+    /**
      * 获取柔和的主题背景色
      */
-    public static int getSoftThemeBackground(int alpha) {
-        return blendColorWithWhite(getThemeColor(), alpha);
+    public static int getSoftThemeBackground(int alpha) {        return blendColorWithWhite(getThemeColor(), alpha);
     }
 
     /**

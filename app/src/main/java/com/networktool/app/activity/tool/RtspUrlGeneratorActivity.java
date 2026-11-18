@@ -78,6 +78,10 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_rtsp_generator);
 
+        // 标题栏是透明的、页面底色走 surface，状态栏不跟着设就会露出主题默认色，
+        // 和标题栏拼成两条不同颜色的带子
+        getWindow().setStatusBarColor(ThemeManager.getSurfaceBaseColor(this));
+
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
@@ -171,7 +175,7 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         if (currentBrand == null) {
             brandValue.setText("未选择（使用通用 ONVIF 路径）");
         } else {
-            StringBuilder sb = new StringBuilder(currentBrand.name);
+            StringBuilder sb = new StringBuilder(currentBrand.displayName());
             sb.append(" · 默认端口 ").append(currentBrand.port);
             if (currentBrand.defaultUser != null) {
                 sb.append(" · 默认账号 ").append(currentBrand.defaultUser);
@@ -498,25 +502,21 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         @NonNull
         @Override
         public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            TextView view = new TextView(parent.getContext());
-            view.setLayoutParams(new RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            view.setPadding(dp(12), dp(14), dp(12), dp(14));
-            view.setTextSize(14f);
-            view.setTextColor(ThemeManager.getOnSurfaceColor(parent.getContext()));
-            view.setBackgroundResource(resolveSelectableItemBackground());
+            View view = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_rtsp_brand, parent, false);
             return new Holder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull Holder holder, int position) {
             RtspBrandCatalog.Brand brand = items.get(position);
-            StringBuilder sb = new StringBuilder(brand.name);
+            holder.name.setText(brand.displayName());
+            StringBuilder info = new StringBuilder("端口 ").append(brand.port);
             if (brand.defaultUser != null) {
-                sb.append("  ·  ").append(brand.defaultUser);
+                info.append(" · 默认账号 ").append(brand.defaultUser);
             }
-            sb.append("  ·  端口 ").append(brand.port);
-            ((TextView) holder.itemView).setText(sb.toString());
+            info.append(" · ").append(brand.streams.size()).append(" 条路径");
+            holder.info.setText(info.toString());
             holder.itemView.setOnClickListener(v -> onPick.onPick(brand));
         }
 
@@ -526,16 +526,15 @@ public class RtspUrlGeneratorActivity extends AppCompatActivity {
         }
 
         class Holder extends RecyclerView.ViewHolder {
+            final TextView name;
+            final TextView info;
+
             Holder(View itemView) {
                 super(itemView);
+                name = itemView.findViewById(R.id.brandNameText);
+                info = itemView.findViewById(R.id.brandInfoText);
             }
         }
-    }
-
-    private int resolveSelectableItemBackground() {
-        android.util.TypedValue value = new android.util.TypedValue();
-        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, value, true);
-        return value.resourceId;
     }
 
     /* ==================== 工具 ==================== */

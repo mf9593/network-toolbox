@@ -1713,7 +1713,7 @@ public class LanScanManager {
         String[][] signatures = {
                 {"hikvision", "海康威视设备"},
                 {"dahua", "大华设备"},
-                {"seetong", "视洞(Seetong)设备"},
+                {"seetong", "天视通设备"},
                 {"xmeye", "雄迈(XMEye)设备"},
                 {"tplink", "TP-LINK 设备"},
                 {"tplogin", "TP-LINK 设备"},

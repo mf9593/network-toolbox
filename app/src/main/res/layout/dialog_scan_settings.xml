@@ -144,8 +144,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="32dp"
                     android:minWidth="0dp"
+                    android:gravity="center"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:paddingStart="@dimen/space_2"
+                    android:paddingTop="0dp"
                     android:paddingEnd="@dimen/space_2"
+                    android:paddingBottom="0dp"
                     android:text="恢复默认"
                     android:textSize="12sp" />
             </LinearLayout>

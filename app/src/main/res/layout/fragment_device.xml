@@ -72,6 +72,22 @@
 
     </LinearLayout>
 
+    <!-- 扫描进度：紧跟在「SSDP 搜索… · 192.168.1.0/24」这行状态文字下方，
+         和状态读成一块；放在筛选胶囊下方会像一条分隔线，位置不对 -->
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/scanProgress"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginStart="@dimen/page_margin"
+        android:layout_marginTop="@dimen/space_1"
+        android:layout_marginEnd="@dimen/page_margin"
+        android:indeterminate="true"
+        android:visibility="gone"
+        app:indicatorColor="?attr/colorPrimary"
+        app:trackColor="?attr/colorSurfaceVariant"
+        app:trackCornerRadius="2dp"
+        app:trackThickness="4dp" />
+
     <HorizontalScrollView
         android:id="@+id/filterBar"
         android:layout_width="match_parent"
@@ -123,20 +139,6 @@
         </LinearLayout>
 
     </HorizontalScrollView>
-
-    <com.google.android.material.progressindicator.LinearProgressIndicator
-        android:id="@+id/scanProgress"
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
-        android:layout_marginStart="@dimen/page_margin"
-        android:layout_marginTop="@dimen/space_1"
-        android:layout_marginEnd="@dimen/page_margin"
-        android:indeterminate="true"
-        android:visibility="gone"
-        app:indicatorColor="?attr/colorPrimary"
-        app:trackColor="?attr/colorSurfaceVariant"
-        app:trackCornerRadius="2dp"
-        app:trackThickness="4dp" />
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/refreshLayout"

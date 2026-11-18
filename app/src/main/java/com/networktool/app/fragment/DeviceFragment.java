@@ -1040,10 +1040,10 @@ public class DeviceFragment extends Fragment {
         openHttp.setBackgroundTintList(ColorStateList.valueOf(themeColor));
         openHttp.setTextColor(contrastColor);
         openHttp.setIconTint(ColorStateList.valueOf(contrastColor));
-        ping.setTextColor(accentColor);
-        ping.setIconTint(ColorStateList.valueOf(accentColor));
-        portScan.setTextColor(accentColor);
-        portScan.setIconTint(ColorStateList.valueOf(accentColor));
+        // ping / portScan 是 TonalButton 样式（淡主题底 + 主题色文字），
+        // XML 默认背景取静态 colorSecondaryContainer 不跟动态主题色，统一走 applyTonalButton 重刷
+        ThemeManager.applyTonalButton(ping);
+        ThemeManager.applyTonalButton(portScan);
         copyIp.setTextColor(accentColor);
         copyIp.setIconTint(ColorStateList.valueOf(accentColor));
         mac.setTextColor(accentColor);

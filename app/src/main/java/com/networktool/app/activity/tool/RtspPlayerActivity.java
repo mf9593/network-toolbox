@@ -336,6 +336,8 @@ public class RtspPlayerActivity extends AppCompatActivity {
 
     private void setupInputExtras() {
         if (pasteUrlBtn != null) {
+            // TextButton 默认取主题里的 colorPrimary，那是静态值，不跟随运行时切换的主题色
+            pasteUrlBtn.setTextColor(ThemeManager.getAccessibleThemeColor(this));
             pasteUrlBtn.setOnClickListener(v -> {
                 try {
                     android.content.ClipboardManager cm =

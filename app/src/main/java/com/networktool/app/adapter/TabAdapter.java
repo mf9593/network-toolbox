@@ -69,6 +69,10 @@ public class TabAdapter extends RecyclerView.Adapter<TabAdapter.TabViewHolder> {
         } else {
             holder.itemView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         }
+
+        // 标签页图标跟随 ThemeManager 动态主题色（布局里是静态 ?attr/colorAccent，不跟主题，代码重刷一遍）
+        holder.tabIcon.setImageTintList(android.content.res.ColorStateList.valueOf(
+                ThemeManager.getAccessibleThemeColor(holder.itemView.getContext())));
         
         // 点击事件
         holder.itemView.setOnClickListener(v -> {
