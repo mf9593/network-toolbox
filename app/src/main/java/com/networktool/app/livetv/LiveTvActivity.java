@@ -63,9 +63,6 @@ public class LiveTvActivity extends AppCompatActivity implements RtspPlayer.Dele
     private static final int AUTO_SWITCH_MIN_SECONDS = 5;
     private static final String KEY_GITHUB_URL = "github_playlist_url";
     private static final String GITHUB_CACHE_NAME = "github_playlist_cache.txt";
-    /** 预置的 GitHub 列表仓库（本地不内置任何频道数据，运行时从这里拉取） */
-    private static final String DEFAULT_GITHUB_LIST =
-            "https://github.com/iptv-org/iptv/blob/master/streams/cn.m3u";
     private static final String IMPORTED_PLAYLIST_NAME = "imported_playlist.txt";
 
     private RtspPlayerView videoView;
@@ -831,9 +828,12 @@ public class LiveTvActivity extends AppCompatActivity implements RtspPlayer.Dele
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        String saved = prefs().getString(KEY_GITHUB_URL, DEFAULT_GITHUB_LIST);
+        String saved = prefs().getString(KEY_GITHUB_URL, "");
         input.setText(saved);
         input.setSelection(saved.length());
+        if (saved.isEmpty()) {
+            input.setHint("粘贴直播源链接（raw / blob / owner/repo/分支/路径）");
+        }
 
         new MaterialAlertDialogBuilder(this)
                 .setTitle("GitHub 云同步")
