@@ -80,6 +80,9 @@ app/google-services.json
 AGENTS.md
 UI_UX_审查报告_*.md
 
+# 开发日志（本地保留，不上传）
+docs/devlog/
+
 # Android 生成文件
 app/release/
 app/debug/
